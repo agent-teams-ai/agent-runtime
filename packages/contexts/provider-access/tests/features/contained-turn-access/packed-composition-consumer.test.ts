@@ -34,6 +34,12 @@ test("packed root and composition entrypoints preserve consumer type compatibili
   const nodeTypes = join(consumer, "node_modules", "@types", "node");
   mkdirSync(join(consumer, "node_modules", "@types"), { recursive: true });
   symlinkSync(join(repositoryRoot, "node_modules", "@types", "node"), nodeTypes, "dir");
+  // The tarball is unpacked without an install: link the dependency like a real consumer's install would,
+  // after proving the packed manifest declares it at the exact catalog version.
+  const packedManifest = JSON.parse(readFileSync(join(installed, "package.json"), "utf8")) as { dependencies?: Record<string, string> };
+  assert.equal(packedManifest.dependencies?.["@get-modular/resources"], "0.1.0");
+  mkdirSync(join(consumer, "node_modules", "@get-modular"), { recursive: true });
+  symlinkSync(join(packageRoot, "node_modules", "@get-modular", "resources"), join(consumer, "node_modules", "@get-modular", "resources"), "dir");
   writeFileSync(join(consumer, "package.json"), JSON.stringify({ name: "provider-access-consumer", private: true, type: "module" }));
   const fixture = join(consumer, "consumer.ts");
   writeFileSync(fixture, `

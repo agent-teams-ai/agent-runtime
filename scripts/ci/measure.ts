@@ -320,24 +320,28 @@ async function runPhase(script: string, scripts: Scripts) {
     wallMs: performance.now() - start, ...outcome, tests, unqualifiedRunners };
 }
 
+interface ProcessOutcome { code: number | null; signal: NodeJS.Signals | null }
+
 async function executePhases(scripts: Scripts, entry: string, sourceComplete: boolean,
-  record: (phase: Awaited<ReturnType<typeof runPhase>>) => Promise<void>): Promise<number | undefined> {
-  let observedFailure: number | undefined;
+  record: (phase: Awaited<ReturnType<typeof runPhase>>) => Promise<void>): Promise<ProcessOutcome | undefined> {
+  let observedFailure: ProcessOutcome | undefined;
   for (const script of phases(scripts, entry)) {
     const phase = await runPhase(script, scripts);
     await record(phase);
     const failed = phase.code !== 0 || phase.signal !== null;
-    if (failed && observedFailure === undefined) { observedFailure = phase.code || 1; }
+    if (failed && observedFailure === undefined) {
+      observedFailure = { code: phase.code, signal: phase.signal as NodeJS.Signals | null };
+    }
     if (phase.cms && !failed) {
       assertCmsComposite(phase.cms, await cmsBinding(), phase.tests, JSON.parse(await readFile(cmsContract, 'utf8')));
     }
-    assertPhaseTestExecution(phase);
-    if (failed && sourceComplete) { return observedFailure ?? 1; }
+    if (!failed) { assertPhaseTestExecution(phase); }
+    if (failed && sourceComplete) { return observedFailure; }
   }
   return observedFailure;
 }
 
-export async function measure(entry: string, output: string): Promise<number> {
+export async function measure(entry: string, output: string): Promise<ProcessOutcome> {
   const scripts = await readScripts('package.json');
   const sha = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
   assertRevision(sha, process.env.EXPECTED_REVISION ?? '');
@@ -365,12 +369,14 @@ export async function measure(entry: string, output: string): Promise<number> {
     report.phases.push(phase);
     await save();
   });
-  return observedFailure ?? (sourceComplete ? 0 : 1);
+  return observedFailure ?? { code: sourceComplete ? 0 : 1, signal: null };
 }
 
 if (process.argv[1] && resolvePath(process.argv[1]) === fileURLToPath(import.meta.url)) {
   assert.ok(process.argv[2]);
   // The helper records only selected identity fields and TAP identities/statuses,
   // never environment dumps, raw logs, auth roots or failure diagnostic payloads.
-  process.exitCode = await measure(process.argv[2], process.env.CI_EVIDENCE_DIR ?? 'tmp/root-export-evidence/phases');
+  const outcome = await measure(process.argv[2], process.env.CI_EVIDENCE_DIR ?? 'tmp/root-export-evidence/phases');
+  if (outcome.signal) { process.kill(process.pid, outcome.signal); }
+  else { process.exitCode = outcome.code ?? 1; }
 }

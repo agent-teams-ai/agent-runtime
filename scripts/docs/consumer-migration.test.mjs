@@ -142,7 +142,11 @@ test("stable31 managed bytes stay exact and the current Foundation source policy
   const currentSourcePolicyBytes = await read("architecture/foundation/source-dependencies.yaml");
   assert.equal(currentSourcePolicyBytes.split(getModularAdditions[0]).length - 1, 2);
   assert.equal(currentSourcePolicyBytes.split(getModularAdditions[1]).length - 1, 1);
-  const comparatorPolicyBytes = getModularAdditions.reduce((bytes, line) => bytes.split(line).join(""), currentSourcePolicyBytes);
+  // Get Modular train 1 (AR-2) admits resources in the Provider Access ordinary composition; reverse only this line.
+  const accessAdmission = ["    packages: ['@get-modular/resources']\n", "    packages: []\n"];
+  assert.equal(currentSourcePolicyBytes.split(accessAdmission[0]).length - 1, 1);
+  const preAccessPolicyBytes = currentSourcePolicyBytes.replace(accessAdmission[0], accessAdmission[1]);
+  const comparatorPolicyBytes = getModularAdditions.reduce((bytes, line) => bytes.split(line).join(""), preAccessPolicyBytes);
   // Reverse only the exact fixed tooling dependency; retain every historical digest.
   const comparatorAdmission = '    - "@agent-teams/ci-input-proof"\n';
   assert.equal(comparatorPolicyBytes.split(comparatorAdmission).length - 1, 1);

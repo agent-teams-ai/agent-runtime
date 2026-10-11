@@ -84,3 +84,66 @@ test('domain candidate carries exactly what the port stores', () => {
     { now: Date.now(), newId: () => crypto.randomUUID(), digest: value => JSON.stringify(value) });
   assert.deepEqual(Object.keys(grant.snapshot), ['authority', 'generation', 'accountId', 'materializationId']);
 });
+
+/** Keyed in-memory grant store; `retire` is supplied by the test so it can block or fail per binding. */
+function keyedGrants(retire: (binding: OrdinaryPaBinding, stamp: () => OrdinaryPaSnapshot) => Promise<OrdinaryPaSnapshot>) {
+  const rows = new Map<string, OrdinaryPaSnapshot>();
+  const store = {
+    async insertGrant(grant) {
+      const snapshot: OrdinaryPaSnapshot = { authority: grant.snapshot.authority, generation: grant.snapshot.generation, accountId: grant.snapshot.accountId,
+        materializationId: grant.snapshot.materializationId, retiredAt: null, disposition: null, settlementReceiptId: null,
+        requestsStarted: 0, requestsCompleted: 0, requestsFailed: 0 };
+      rows.set(grant.binding.operationId, snapshot);
+      return { kind: 'inserted', snapshot };
+    },
+    async observe(exact) { return rows.get(exact.operationId); },
+    async retire(exact) {
+      return retire(exact, () => {
+        const row = rows.get(exact.operationId)!, stamped = { ...row, retiredAt: row.retiredAt ?? new Date().toISOString() };
+        rows.set(exact.operationId, stamped); return stamped;
+      });
+    },
+    async settle() { throw new Error('unused'); },
+    async beginRequest() { throw new Error('unused'); },
+    async endRequest() { throw new Error('unused'); },
+  } satisfies OrdinaryPaGrantStore;
+  return { store, rows };
+}
+const consumeMany = (instance: ReturnType<typeof owner>, count: number) => Promise.all(Array.from({ length: count }, (_, index) =>
+  instance.consume({ ...binding, operationId: `operation-grant-${index}` }, capture().value, new AbortController().signal)));
+
+test('64 grants retire concurrently on dispose', { timeout: 10_000 }, async () => {
+  let started = 0, running = 0, maxConcurrentRetirements = 0;
+  const barrier = Promise.withResolvers<void>();
+  const { store, rows } = keyedGrants(async (_exact, stamp) => {
+    started += 1; running += 1; maxConcurrentRetirements = Math.max(maxConcurrentRetirements, running);
+    if (started === 64) { barrier.resolve(); }
+    await barrier.promise; running -= 1;
+    return stamp();
+  });
+  const instance = owner(store);
+  await consumeMany(instance, 64);
+  await instance.dispose();
+  assert.equal(maxConcurrentRetirements, 64);
+  assert.ok([...rows.values()].every(row => row.retiredAt !== null));
+});
+
+test('one failing retirement is isolated and retried alone', async () => {
+  let calls = 0, failed = false;
+  const { store, rows } = keyedGrants(async (exact, stamp) => {
+    calls += 1;
+    if (exact.operationId === 'operation-grant-7' && !failed) { failed = true; throw new Error('synthetic retire failure'); }
+    return stamp();
+  });
+  const instance = owner(store);
+  await consumeMany(instance, 64);
+  await assert.rejects(instance.dispose(), (error: unknown) => {
+    assert.ok(error instanceof AggregateError);
+    assert.equal(error.message, 'ORDINARY_PA_UNAVAILABLE');
+    assert.equal(error.errors.length, 1);
+    return true;
+  });
+  assert.equal([...rows.values()].filter(row => row.retiredAt !== null).length, 63);
+  await instance.dispose();
+  assert.equal(calls, 65);
+});

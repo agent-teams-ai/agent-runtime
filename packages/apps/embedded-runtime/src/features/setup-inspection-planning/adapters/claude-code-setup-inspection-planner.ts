@@ -22,7 +22,7 @@ export type ClaudeCodeSetupInspectionPlan =
     };
 
 export interface ClaudeCodeSetupInspectionPlanner {
-  plan(scope: TrustedClaudeCodeSetupScope): ClaudeCodeSetupInspectionPlan;
+  readonly plan: (scope: TrustedClaudeCodeSetupScope) => ClaudeCodeSetupInspectionPlan;
 }
 
 const appendPath = (root: string, suffix: string): string =>

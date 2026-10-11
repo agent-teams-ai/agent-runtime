@@ -3,7 +3,7 @@ import { execFileSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { lstat, open, readFile, readdir, readlink, realpath } from 'node:fs/promises';
 import { dirname, extname, join, relative, resolve as resolvePath, sep } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const packageName = '@agent-teams/ci-input-proof';
 const packageVersion = '0.1.0';
@@ -198,6 +198,25 @@ export function parseInstallationMetadata(bytes: Buffer): { packageManager: stri
   return { packageManager: expectedPackageManager, virtualStoreDir: expectedVirtualStoreDir };
 }
 
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) {return `[${value.map(canonicalJson).join(',')}]`;}
+  if (value !== null && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>).toSorted(([left], [right]) => left.localeCompare(right));
+    return `{${entries.map(([key, child]) => `${JSON.stringify(key)}:${canonicalJson(child)}`).join(',')}}`;
+  }
+  const serialized = JSON.stringify(value);
+  assert.ok(serialized !== undefined, 'canonical JSON value');
+  return serialized;
+}
+
+function installationStateDigest(bytes: Buffer): string {
+  const state = object(JSON.parse(bytes.toString('utf8')));
+  assert.equal(typeof state.lastValidatedTimestamp, 'number', 'installed workspace state timestamp');
+  const { lastValidatedTimestamp: volatileTimestamp, ...stable } = state;
+  assert.ok(Number.isFinite(volatileTimestamp), 'installed workspace state timestamp');
+  return sha256(canonicalJson(stable));
+}
+
 async function readInstallationMetadata(path: string): Promise<Buffer> {
   assert.ok((await lstat(path)).isFile(), 'installed metadata kind');
   const handle = await open(path, 'r');
@@ -315,13 +334,15 @@ async function installedEntries(root: string): Promise<InstalledEntry[]> {
     if (stat.isSymbolicLink()) {
       const target = await realpath(path);
       assert.ok(within(target, store) || packageRoots.some(packageRoot => target === resolvePath(root, packageRoot)), 'unqualified installed link');
-      entries.push({ path: name, kind: 'link', mode: stat.mode & 0o777, target: await readlink(path) });
+      entries.push({ path: name, kind: 'link', mode: stat.mode & 0o7777, target: await readlink(path) });
     } else if (stat.isDirectory()) {
-      entries.push({ path: name, kind: 'directory', mode: stat.mode & 0o777 });
+      entries.push({ path: name, kind: 'directory', mode: stat.mode & 0o7777 });
       for (const child of (await readdir(path)).toSorted()) {await visit(join(path, child));}
     } else {
       assert.ok(stat.isFile(), 'unqualified installed kind');
-      entries.push({ path: name, kind: 'file', mode: stat.mode & 0o777, digest: sha256(await readFile(path)) });
+      const bytes = await readFile(path);
+      entries.push({ path: name, kind: 'file', mode: stat.mode & 0o7777,
+        digest: name === '.pnpm-workspace-state-v1.json' ? installationStateDigest(bytes) : sha256(bytes) });
     }
   };
   await visit(modules);
@@ -334,10 +355,10 @@ async function packageEntries(packageDirectory: string): Promise<InstalledEntry[
     const stat = await lstat(path), name = relative(packageDirectory, path).replaceAll(sep, '/');
     if (stat.isSymbolicLink()) {throw new Error('optimizer package contains a symlink');}
     if (stat.isDirectory()) {
-      entries.push({ path: name, kind: 'directory', mode: stat.mode & 0o777 });
+      entries.push({ path: name, kind: 'directory', mode: stat.mode & 0o7777 });
       for (const child of (await readdir(path)).toSorted()) {await visit(join(path, child));}
     } else if (stat.isFile()) {
-      entries.push({ path: name, kind: 'file', mode: stat.mode & 0o777, digest: sha256(await readFile(path)) });
+      entries.push({ path: name, kind: 'file', mode: stat.mode & 0o7777, digest: sha256(await readFile(path)) });
     } else {throw new Error('optimizer package contains an unsupported kind');}
   };
   await visit(packageDirectory);
@@ -416,12 +437,14 @@ async function packageSource(root: string): Promise<{ directory: string; entries
   return { directory, entries, integrity, entrypoints };
 }
 
-async function bindInstallation(root: string): Promise<{ digest: string; optimizer: Awaited<ReturnType<typeof packageSource>> }> {
+async function bindInstallation(root: string): Promise<{ digest: string; entries: InstalledEntry[];
+  optimizer: Awaited<ReturnType<typeof packageSource>> }> {
   const rootLock = await readFile(resolvePath(root, 'pnpm-lock.yaml'));
   assert.ok(rootLock.equals(await readFile(resolvePath(root, 'node_modules/.pnpm/lock.yaml'))), 'installed lock drift');
   parseInstallationMetadata(await readInstallationMetadata(resolvePath(root, 'node_modules/.modules.yaml')));
-  const optimizer = await packageSource(root);
-  return { digest: sha256(JSON.stringify(await installedEntries(root))), optimizer };
+  installationStateDigest(await readInstallationMetadata(resolvePath(root, 'node_modules/.pnpm-workspace-state-v1.json')));
+  const optimizer = await packageSource(root), entries = await installedEntries(root);
+  return { digest: sha256(JSON.stringify(entries)), entries, optimizer };
 }
 
 export async function admitAndImportOptimizer(root = process.cwd(),
@@ -430,7 +453,12 @@ export async function admitAndImportOptimizer(root = process.cwd(),
   const optimizer = await packageSource(root);
   assert.equal(sha256(JSON.stringify(optimizer.entries)), sha256(JSON.stringify(admitted.optimizer.entries)),
     'authenticated optimizer drift immediately before import');
-  const comparator = await import('@agent-teams/ci-input-proof') as { compareLeafInventories: InventoryComparator };
+  const resolvedEntrypoint = import.meta.resolve('@agent-teams/ci-input-proof');
+  const admittedEntrypoint = pathToFileURL(await realpath(join(root, 'node_modules', packageName, optimizerEntrypoint))).href;
+  assert.equal(resolvedEntrypoint, admittedEntrypoint, 'optimizer package resolution escapes the admitted root');
+  const optimizerNamespace = await import('@agent-teams/ci-input-proof') as
+    { compareLeafInventories: InventoryComparator };
+  const comparator = optimizerNamespace;
   assert.equal(typeof comparator.compareLeafInventories, 'function', 'optimizer kernel missing');
   assert.equal((await bindInstallation(root)).digest, admitted.digest, 'installed optimizer/control source drift after import');
   return comparator.compareLeafInventories;

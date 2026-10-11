@@ -1,8 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { chmod, cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { dirname, join, relative, sep } from 'node:path';
+import { chmod, cp, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
 import test, { after } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { parse } from 'yaml';
@@ -11,6 +10,7 @@ import type { LeafInventoryComparator } from './pr-regression-inputs.ts';
 import { assertPrObligations, foundationNegativeTests, observeRegressionProcess, prObligations } from './pr-regression-command.ts';
 import type { Execution, Obligation, ObservedObligation } from './pr-regression-command.ts';
 import { validatePrFoundationRoute } from './conformance.ts';
+import { admitPublishedComparator, createRetainedSourceCheckout, fixtureOwnerEnvironment, installNodeModulesFixture, testScratch } from './pr-regression-bootstrap-fixtures.ts';
 
 const repository = fileURLToPath(new URL('../../', import.meta.url));
 const rc = 'packages/contexts/runtime-configuration/src/features/codex-configuration-inspection/adapters/outbound/codex-configuration-semantic-classifier-v1.ts';
@@ -42,74 +42,11 @@ const trusted = {
   PR_REGRESSION_FROZEN_INSTALL: 'verified',
 };
 const facts = { node: 'v24.21.0', pnpm: '11.18.0', platform: 'linux', arch: 'x64', glibc: '2.39', execArgv: [] as string[] };
-const inventoryKernel: LeafInventoryComparator = (base, head, structuralPaths) => {
-  const before = new Map(base.inputs.map(input => [input.path, input]));
-  const current = new Map(head.inputs.map(input => [input.path, input]));
-  const permitted = new Set(structuralPaths);
-  if (base.version !== 1 || head.version !== 1 || base.digestScheme !== head.digestScheme
-    || before.size !== base.inputs.length || current.size !== head.inputs.length) {
-    return { status: 'rejected', reason: 'malformed-inventory' };
-  }
-  if (before.size !== current.size) { return { status: 'rejected', reason: 'input-structure-changed' }; }
-  for (const [path, input] of before) {
-    const next = current.get(path);
-    if (!next || next.type !== input.type || next.mode !== input.mode || next.membership !== input.membership) {
-      return { status: 'rejected', reason: 'input-structure-changed' };
-    }
-  }
-  const changedContentPaths: string[] = [];
-  for (const [path, input] of before) {
-    const next = current.get(path)!;
-    if (next.content !== input.content) {
-      if (input.membership === 'closed' || !permitted.has(path)) { return { status: 'rejected', reason: 'closed-input-changed' }; }
-      changedContentPaths.push(path);
-    }
-  }
-  return { status: 'compatible-inputs', changedContentPaths: changedContentPaths.toSorted() };
-};
 let sourceTemplate: Promise<string> | undefined;
-
-async function testScratch(prefix: string): Promise<string> {
-  return mkdtemp(join(tmpdir(), prefix));
-}
 
 async function createSourceTemplate(): Promise<string> {
   const root = await testScratch('ar-pr-regressions-source-TEST-');
-  const git = (...args: string[]) => execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim();
-  const bundle = process.env.TEST_HISTORY_BUNDLE;
-  if (bundle) {
-    execFileSync('git', ['clone', '--quiet', '--no-local', bundle, root], { cwd: dirname(root) });
-  } else {
-    execFileSync('git', ['clone', '--quiet', '--shared', repository, root], { cwd: dirname(root) });
-  }
-  git('checkout', '--quiet', '-B', 'TEST-template', '47a79675fac84436e96bc6119478d740848f4f02');
-  git('merge-base', '--is-ancestor', 'ccf6d6f8dc025d6aa81ab2109a9ccc37b0dece15', 'df9260b0062dcb445c3cf75ce76f8539a2b32c03');
-  await cp(repository, root, {
-    recursive: true,
-    force: true,
-    dereference: false,
-    filter: source => {
-      const path = relative(repository, source);
-      return !path.split(sep).some(part => ['.git', '.cache', '.agents', '.aws', '.codex', 'node_modules', 'tmp'].includes(part));
-    },
-  });
-  git('add', '-A');
-  const tree = git('write-tree');
-  const revision = execFileSync('git', ['commit-tree', tree, '-p', 'HEAD'], {
-    cwd: root,
-    env: {
-      ...process.env,
-      GIT_CONFIG_NOSYSTEM: '1',
-      GIT_CONFIG_GLOBAL: '/dev/null',
-      GIT_AUTHOR_NAME: 'TEST',
-      GIT_AUTHOR_EMAIL: 'test@example.invalid',
-      GIT_COMMITTER_NAME: 'TEST',
-      GIT_COMMITTER_EMAIL: 'test@example.invalid',
-    },
-    input: 'Disposable TEST source template\n',
-    encoding: 'utf8',
-  }).trim();
-  git('reset', '--quiet', '--hard', revision);
+  await createRetainedSourceCheckout(root);
   return root;
 }
 
@@ -125,8 +62,8 @@ after(async () => {
 async function fixture(t: test.TestContext) {
   const root = await testScratch('ar-pr-regressions-TEST-');
   t.after(() => rm(root, { recursive: true, force: true }));
-  const env = { ...process.env, GIT_CONFIG_NOSYSTEM: '1', GIT_AUTHOR_NAME: 'TEST', GIT_AUTHOR_EMAIL: 'test@example.invalid',
-    GIT_COMMITTER_NAME: 'TEST', GIT_COMMITTER_EMAIL: 'test@example.invalid' };
+  const comparator = await admitPublishedComparator();
+  const env = fixtureOwnerEnvironment();
   const git = (...args: string[]) => execFileSync('git', args, { cwd: root, env, encoding: 'utf8' }).trim();
   git('clone', '--quiet', '--shared', await sourceTemplateRoot(), '.');
   const freeze = () => {
@@ -142,21 +79,22 @@ async function fixture(t: test.TestContext) {
     pull_request: { number: 211, base: { sha: base, ref: 'main', repo: { full_name: 'agent-teams-ai/agent-runtime' } },
       head: { sha: head, repo: { full_name: 'agent-teams-ai/agent-runtime', fork: false } } } });
   const plan = (head: string, overrides = {}) => classifyPrRegressions(root, { base, head, event: event(head),
-    environment: trusted, runtime: facts, installation: '1'.repeat(64), ...overrides }, inventoryKernel);
+    environment: trusted, runtime: facts, installation: '1'.repeat(64), ...overrides }, comparator);
   const body = async (path: string) => writeFile(join(root, path), `${await readFile(join(root, path), 'utf8')}\n// Disposable TEST body mutation\n`);
   return { root, base, git, freeze, plan, body, event };
 }
 
 export function registerPrRegressionTests(): void {
   registerFoundationPrExecutionTests();
-  test('the injected pure comparator relation does not grant sampling authority', () => {
+  test('the injected pure comparator relation does not grant sampling authority', async () => {
+    const comparator = await admitPublishedComparator();
     const base = { version: 1, digestScheme: 'sha256', inputs: [
       { path: 'root.ts', type: 'file', mode: '100644', membership: 'closed', content: 'a'.repeat(64) },
       { path: 'body.ts', type: 'file', mode: '100644', membership: 'structural', content: '1'.repeat(64) },
     ] } as Parameters<LeafInventoryComparator>[0];
     const head = { ...base, inputs: [base.inputs[0]!, { ...base.inputs[1]!, content: '2'.repeat(64) }] } as Parameters<LeafInventoryComparator>[0];
-    assert.deepEqual(inventoryKernel(base, head, ['body.ts']), { status: 'compatible-inputs', changedContentPaths: ['body.ts'] });
-    assert.deepEqual(inventoryKernel(base, head, []), { status: 'rejected', reason: 'closed-input-changed' });
+    assert.deepEqual(comparator(base, head, ['body.ts']), { status: 'compatible-inputs', changedContentPaths: ['body.ts'] });
+    assert.deepEqual(comparator(base, head, []), { status: 'rejected', reason: 'closed-input-changed' });
   });
   test('real immutable RC and ER body snapshots defer whole regressions with their independent closures', async t => {
     const f = await fixture(t);
@@ -314,7 +252,7 @@ export function registerPrRegressionTests(): void {
   // process. New: observe the actual standalone process and reject its failure.
   test('actual current conformance remains blocking when the CI selftests defer', async t => {
     const f = await fixture(t);
-    await symlink(join(repository, 'node_modules'), join(f.root, 'node_modules'));
+    await installNodeModulesFixture(f.root, 'linked', f.root);
     const obligation = prObligations('quick').find(item => item.id === 'ci-conformance');
     assert.deepEqual(obligation, { id: 'ci-conformance', command: 'node scripts/ci/conformance.ts' });
     assert.ok(obligation);

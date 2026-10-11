@@ -1,6 +1,7 @@
 import { intrinsicMethod } from "../adapters/provider-access-data.js";
 import { randomBytes, randomUUID } from 'node:crypto';
 import { types } from 'node:util';
+import { createScope, type CloseReport, type Scope } from '@get-modular/resources';
 import { OrdinaryPaUnavailable, type OrdinaryPaBinding, type OrdinaryPaGrant, type OrdinaryPaRetirement, type OrdinaryPaSnapshot } from '../contracts/ordinary-provider-access.js';
 import { newOrdinaryPaGrant, snapshotOrdinaryPaBinding } from '../domain/ordinary-provider-access.js';
 import type { OrdinaryPaGrantStore } from '../application/ports/outbound/ordinary-pa-grant-store.js';
@@ -34,6 +35,18 @@ function createCaptureDisposer(settledCaptures: WeakSet<OrdinaryCodexAuthCapture
   };
 }
 
+/** A child scope whose single cleanup retires the grant, so the domain retirement protocol stays in one entry. */
+function ownGrant(scopes: Scope, grant: OrdinaryPaGrant): Scope {
+  const scope = scopes.resources.child({ name: `grant:${grant.grantId}` });
+  scope.resources.use({ async [Symbol.asyncDispose]() { await grant.retire(); } }, 'retire');
+  return scope;
+}
+/** Never awaited: the child's close calls `retire()` again, which returns the cached promise. */
+const releaseGrant = (scope: Scope | undefined): void => { if (scope !== undefined) { void scope.control.close(); } };
+/** Retirements a closed grant scope still owes, as rejections for the dispose report. */
+const grantDebts = (report: CloseReport): PromiseRejectedResult[] => report.debts.map((debt): PromiseRejectedResult =>
+  ({ status: 'rejected', reason: debt.state === 'failed' ? debt.cause : new OrdinaryPaUnavailable() }));
+
 type OrdinaryPaSecretSink = (operationId: string, tokens: readonly string[]) => boolean;
 const assertSecretSink = (registerSecrets: unknown): OrdinaryPaSecretSink => {
   if (typeof registerSecrets !== 'function' || types.isAsyncFunction(registerSecrets)) { throw new OrdinaryPaUnavailable(); }
@@ -62,6 +75,7 @@ export function createOrdinaryProviderAccessOwner(ports: OrdinaryProviderAccessO
   const pendingCaptures = new Set<OrdinaryCodexAuthCapture>();
   const settledCaptures = new WeakSet<OrdinaryCodexAuthCapture>();
   const disposeCapture = createCaptureDisposer(settledCaptures);
+  const grantScopes = createScope({ name: 'pa-grants', order: 'concurrent' }); // independent peers retire concurrently on dispose
   const ownerState = { disposed: false };
   let disposal: Promise<void> | undefined;
   const check = () => { if (ownerState.disposed) { throw new OrdinaryPaUnavailable(); } };
@@ -107,7 +121,7 @@ export function createOrdinaryProviderAccessOwner(ports: OrdinaryProviderAccessO
       const retirementHasStarted = () => retirementState.started;
       let retired = false, settled = false;
       let construction: Promise<void> | undefined;
-      let attempted = false, retiring: Promise<OrdinaryPaRetirement> | undefined;
+      let attempted = false, retiring: Promise<OrdinaryPaRetirement> | undefined, grantScope: Scope | undefined;
       const retire = (): Promise<OrdinaryPaRetirement> => {
         if (retiring) { return retiring; }
         retirementState.started = true;
@@ -133,7 +147,7 @@ export function createOrdinaryProviderAccessOwner(ports: OrdinaryProviderAccessO
           });
           if (retirement.retiredAt === null) { throw new OrdinaryPaUnavailable(); }
           retired = true;
-          if (settled) {grants.delete(grant);}
+          if (settled) {grants.delete(grant); releaseGrant(grantScope);}
           return Object.freeze({ materializationId: retirement.materializationId, generation: retirement.generation, retiredAt: retirement.retiredAt });
         })().catch((error: unknown) => {retiring = undefined; throw error;}); return retiring;
       };
@@ -179,13 +193,15 @@ export function createOrdinaryProviderAccessOwner(ports: OrdinaryProviderAccessO
           });
           if ((settlement.settlementReceiptId === null || settlement.settlementReceiptId === '') || !settlement.disposition) { throw new OrdinaryPaUnavailable(); }
           settled = true;
-          if (retired) {grants.delete(grant);}
+          if (retired) {grants.delete(grant); releaseGrant(grantScope);}
           return Object.freeze({ grantId: consumed.authority.grantId, ownerReceiptId: consumed.authority.ownerReceiptId,
             settlementReceiptId: settlement.settlementReceiptId, disposition: settlement.disposition });
         },
         admitCanonicalText: text => guard.check(text),
         admitArtifactBytes: bytes => guard.artifact(bytes),
       });
+      // A closing owner never leaves a grant unowned.
+      try { grantScope = ownGrant(grantScopes, grant); } catch { await grant.retire(); throw new OrdinaryPaUnavailable(); }
       grants.add(grant);
       if (ownerState.disposed || isAborted()) {await grant.retire(); throw new OrdinaryPaUnavailable();}
       return grant;
@@ -196,9 +212,10 @@ export function createOrdinaryProviderAccessOwner(ports: OrdinaryProviderAccessO
       disposal = (async () => {
         const captures = [...new Set([...pendingCaptures, ...pendingConsumptions.keys()])];
         const results = await Promise.allSettled(captures.map(async capture => {await disposeCapture(capture); await capture.settled; await pendingConsumptions.get(capture); pendingCaptures.delete(capture);}));
-        results.push(...await Promise.allSettled([...grants].map(async grant => {await grant.retire(); grants.delete(grant);})));
+        results.push(...grantDebts(await grantScopes.control.close())); // a later dispose retries only the failed grants
         const errors = results.filter(result => result.status === 'rejected').map((result): unknown => result.reason);
         if (errors.length > 0) {throw new AggregateError(errors, 'ORDINARY_PA_UNAVAILABLE', {cause: errors[0]});}
+        grants.clear();
       })().catch((error: unknown) => {disposal = undefined; throw error;}); return disposal;
 
     },

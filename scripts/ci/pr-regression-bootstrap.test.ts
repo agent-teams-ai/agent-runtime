@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { chmod, cp, lstat, mkdir, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
+import { chmod, lstat, mkdir, readFile, rm, symlink, writeFile } from 'node:fs/promises';
 import { dirname, join, relative } from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
@@ -8,8 +8,14 @@ import { parse } from 'yaml';
 import { installationMetadataMaxBytes, parseInstallationMetadata } from './pr-regression-bootstrap.ts';
 import {
   actualMeasureFixture,
-  copySourceTree,
+  assertMeasureFailureHandling,
+  createRetainedSourceCheckout,
+  fixtureOwnerEnvironment,
+  fixtureExecutionEnvironment,
+  installHistoricalNodeModulesFixture,
+  installNodeModulesFixture,
   regressionGraphTestName,
+  retainedHistorySource,
   runActualMeasureGraph,
   runActualRegressionImportGraph,
   runFixtureBootstrapAdmission,
@@ -22,7 +28,7 @@ const bodyPath = 'packages/contexts/runtime-configuration/src/features/bootstrap
 const fixturePath = 'scripts/sdk-growth-source/fixtures/pr-regression-bootstrap.txt';
 type Mutation = 'none' | 'body' | 'bootstrap' | 'helper' | 'config' | 'lock' | 'fixture' | 'installed' | 'add' | 'delete' | 'mode' | 'symlink'
   | 'worktree-file' | 'worktree-link' | 'incomplete-census' | 'push-tuple' | 'base-tuple' | 'merge-tuple';
-type Optimizer = 'valid' | 'absent' | 'manifest' | 'marker' | 'mode' | 'extra' | 'foreign-link';
+type Optimizer = 'valid' | 'absent' | 'manifest' | 'marker' | 'mode' | 'special-mode' | 'extra' | 'foreign-link';
 type ModulesMetadata = 'real' | 'yaml' | 'wrong-manager' | 'wrong-layout' | 'malformed' | 'oversized' | 'duplicate-identity'
   | 'escaped-identity-shadow' | 'duplicate-layout' | 'escaped-layout' | 'duplicate-nested-identity' | 'duplicate-nested-layout'
   | 'virtual-store-only' | 'escaped-virtual-store-only-shadow' | 'symlink';
@@ -64,8 +70,10 @@ async function workflowSourceFixture(t: test.TestContext,
   mutation: 'missing' | 'syntax' | 'early-success' | 'clean-filter-early-success'): Promise<WorkflowFixture> {
   const root = await testScratch('ar-pr-workflow-TEST-');
   const evidence = `${root}-evidence`, temporary = `${root}-tmp`;
-  await Promise.all([mkdir(join(root, 'scripts/ci'), { recursive: true }), mkdir(evidence), mkdir(temporary)]);
+  await Promise.all([mkdir(evidence), mkdir(temporary)]);
   t.after(() => Promise.all([rm(root, { recursive: true, force: true }), rm(evidence, { recursive: true, force: true }), rm(temporary, { recursive: true, force: true })]));
+  await createRetainedSourceCheckout(root);
+  await installNodeModulesFixture(root, 'linked', temporary);
   const bootstrapPath = join(root, 'scripts/ci/pr-regression-bootstrap.ts');
   const fullMarker = join(evidence, 'full-ran'), bootstrapMarker = join(evidence, 'bootstrap-ran');
   const fakeFullMarker = join(evidence, 'fake-full-ran');
@@ -87,14 +95,13 @@ async function workflowSourceFixture(t: test.TestContext,
   const commit = (message: string) => {
     git('add', '-A');
     const tree = git('write-tree');
-    return execFileSync('git', ['commit-tree', tree], { cwd: root,
-      env: { GIT_AUTHOR_NAME: 'TEST', GIT_AUTHOR_EMAIL: 'test@example.invalid',
-        GIT_COMMITTER_NAME: 'TEST', GIT_COMMITTER_EMAIL: 'test@example.invalid' },
+    const parent = git('rev-parse', 'HEAD');
+    return execFileSync('git', ['commit-tree', tree, '-p', parent], { cwd: root,
+      env: fixtureOwnerEnvironment(),
       input: message, encoding: 'utf8' }).trim();
   };
-  git('init', '--quiet');
-  git('config', 'user.name', 'TEST');
-  git('config', 'user.email', 'test@example.invalid');
+  git('config', 'user.name', 'iliya');
+  git('config', 'user.email', 'iliyazelenkog@gmail.com');
   if (mutation === 'clean-filter-early-success') {
     git('config', 'filter.trusted-bootstrap.clean', `sh ${join(root, 'clean-bootstrap')}`);
   }
@@ -109,11 +116,11 @@ async function workflowSourceFixture(t: test.TestContext,
     root,
     evidence,
     shell: await workflowBootstrapShell(),
-    env: {
-      PATH: process.env.PATH, TMPDIR: temporary, EXPECTED_BASE_REVISION: base, EXPECTED_REVISION: head,
+    env: fixtureExecutionEnvironment(temporary, {
+      EXPECTED_BASE_REVISION: base, EXPECTED_REVISION: head,
       PR_REGRESSION_GROUP: 'quick', TEST_FULL_EXIT: '23', TEST_FULL_MARKER: fullMarker,
       FOUNDATION_FIXTURE_PROTOCOL: 'foundation-fixtures/1', FOUNDATION_FIXTURE_INDEX: '0', FOUNDATION_FIXTURE_COUNT: '3',
-    },
+    }),
   };
 }
 
@@ -162,21 +169,13 @@ async function prepareSourceFixture(t: test.TestContext, optimizer: Optimizer, b
   modules: ModulesMetadata): Promise<{ root: string; evidence: string; temporary: string; packageDirectory: string }> {
   const root = await testScratch('ar-pr-bootstrap-TEST-');
   const evidence = `${root}-evidence`, temporary = `${root}-tmp`;
-  await mkdir(join(root, 'scripts/ci'), { recursive: true });
-  await mkdir(join(root, 'architecture/foundation'), { recursive: true });
-  await mkdir(join(root, 'scripts/sdk-growth-source/fixtures'), { recursive: true });
-  await mkdir(join(root, dirname(bodyPath)), { recursive: true });
   await Promise.all([mkdir(evidence), mkdir(temporary)]);
   t.after(() => Promise.all([rm(root, { recursive: true, force: true }), rm(evidence, { recursive: true, force: true }), rm(temporary, { recursive: true, force: true })]));
-
-  await writeFile(join(root, '.gitignore'), 'node_modules/\n');
-  await writeFile(join(root, 'package.json'), '{"type":"module"}\n');
-  const installedLock = await readFile(join(repository, 'node_modules/.pnpm/lock.yaml'));
-  await writeFile(join(root, 'pnpm-lock.yaml'), installedLock);
+  await createRetainedSourceCheckout(root);
+  await installNodeModulesFixture(root, optimizer === 'absent' ? 'absent' : 'linked', temporary);
   await writeFile(join(root, bodyPath), 'export const body = "base";\n');
   await writeFile(join(root, fixturePath), 'TEST fixture base\n');
   await writeFile(join(root, 'architecture/foundation/ci-pr-regressions.json'), '{"selfAuthorization":false}\n');
-  await cp(join(repository, 'scripts/ci/pr-regression-bootstrap.ts'), join(root, 'scripts/ci/pr-regression-bootstrap.ts'));
   await writeFile(join(root, 'scripts/ci/pr-regression-inputs.ts'), badCandidate
     ? `import { writeFile } from 'node:fs/promises';\n`
       + `await writeFile(${JSON.stringify(join(evidence, 'candidate-import-marker'))}, 'executed\\n');\n`
@@ -191,21 +190,16 @@ async function prepareSourceFixture(t: test.TestContext, optimizer: Optimizer, b
     + `await writeFile(${JSON.stringify(join(evidence, 'full-ran'))}, 'current-full\\n');\n`
     + `process.exitCode = Number(process.env.TEST_FULL_EXIT ?? '0');\n`);
 
-  await mkdir(join(root, 'node_modules/.pnpm'), { recursive: true });
-  await writeFile(join(root, 'node_modules/.pnpm/lock.yaml'), installedLock);
   const modulesBytes = await modulesFixtureBytes(modules);
   if (modules === 'symlink') {
     await writeFile(join(root, 'node_modules/real-modules.yaml'), modulesBytes);
+    await rm(join(root, 'node_modules/.modules.yaml'), { force: true });
     await symlink('real-modules.yaml', join(root, 'node_modules/.modules.yaml'));
   } else {
     await writeFile(join(root, 'node_modules/.modules.yaml'), modulesBytes);
   }
   const packageDirectory = join(root, 'node_modules/.pnpm/@agent-teams+ci-input-proof@0.1.0/node_modules/@agent-teams/ci-input-proof');
-  await mkdir(packageDirectory, { recursive: true });
   if (optimizer !== 'absent') {
-    const installedOptimizer = join(repository,
-      'node_modules/.pnpm/@agent-teams+ci-input-proof@0.1.0/node_modules/@agent-teams/ci-input-proof');
-    await cp(installedOptimizer, packageDirectory, { recursive: true, dereference: true });
     if (optimizer === 'manifest') {await writeFile(join(packageDirectory, 'package.json'), '{broken\n');}
     if (optimizer === 'marker') {
       await writeFile(join(packageDirectory, 'dist/index.js'),
@@ -213,6 +207,7 @@ async function prepareSourceFixture(t: test.TestContext, optimizer: Optimizer, b
         + `export { compareLeafInventories } from './features/input-comparison/application/compare-leaf-inventories.js';\n`);
     }
     if (optimizer === 'mode') {await chmod(join(packageDirectory, 'dist/index.js'), 0o755);}
+    if (optimizer === 'special-mode') {await chmod(join(packageDirectory, 'dist/index.js'), 0o4644);}
     if (optimizer === 'extra') {await writeFile(join(packageDirectory, 'unexpected.js'), 'throw Error("TEST extra optimizer source");\n');}
   }
   const publicPackage = join(root, 'node_modules/@agent-teams/ci-input-proof');
@@ -220,9 +215,8 @@ async function prepareSourceFixture(t: test.TestContext, optimizer: Optimizer, b
   if (optimizer === 'foreign-link') {
     const foreign = join(root, 'foreign-optimizer');
     await mkdir(foreign, { recursive: true });
+    await rm(publicPackage, { force: true });
     await symlink(relative(dirname(publicPackage), foreign), publicPackage, 'dir');
-  } else if (optimizer !== 'absent') {
-    await symlink(relative(dirname(publicPackage), packageDirectory), publicPackage, 'dir');
   }
 
   return { root, evidence, temporary, packageDirectory };
@@ -231,30 +225,30 @@ async function prepareSourceFixture(t: test.TestContext, optimizer: Optimizer, b
 async function sourceFixture(t: test.TestContext, mutation: Mutation = 'body', optimizer: Optimizer = 'valid', badCandidate = false,
   modules: ModulesMetadata = 'real') {
   const { root, evidence, temporary, packageDirectory } = await prepareSourceFixture(t, optimizer, badCandidate, modules);
-  const env: NodeJS.ProcessEnv = {
-    PATH: process.env.PATH, TMPDIR: temporary, GITHUB_ACTIONS: 'true', GITHUB_EVENT_NAME: 'pull_request',
+  const env = fixtureExecutionEnvironment(temporary, {
+    GITHUB_ACTIONS: 'true', GITHUB_EVENT_NAME: 'pull_request',
     GITHUB_REPOSITORY: 'agent-teams-ai/agent-runtime', RUNNER_ENVIRONMENT: 'github-hosted',
     RUNNER_OS: 'Linux', RUNNER_ARCH: 'X64', ImageOS: 'ubuntu24', ImageVersion: '20261009.1',
     PR_REGRESSION_FROZEN_INSTALL: 'verified',
-  };
+  });
   const git = (...args: string[]) => execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim();
   const freeze = () => {
     git('add', '-A');
     const tree = git('write-tree');
     const parent = git('rev-parse', 'HEAD');
     const sha = execFileSync('git', ['commit-tree', tree, '-p', parent], { cwd: root,
-      env: { ...env, GIT_AUTHOR_NAME: 'TEST', GIT_AUTHOR_EMAIL: 'test@example.invalid', GIT_COMMITTER_NAME: 'TEST', GIT_COMMITTER_EMAIL: 'test@example.invalid' },
+      env: fixtureOwnerEnvironment(env),
       input: 'Disposable TEST snapshot\n', encoding: 'utf8' }).trim();
     git('reset', '--quiet', '--hard', sha);
     return sha;
   };
-  git('init', '--quiet');
-  git('config', 'user.name', 'TEST');
-  git('config', 'user.email', 'test@example.invalid');
+  git('config', 'user.name', 'iliya');
+  git('config', 'user.email', 'iliyazelenkog@gmail.com');
   git('add', '-A');
   const baseTree = git('write-tree');
-  const base = execFileSync('git', ['commit-tree', baseTree], { cwd: root,
-    env: { ...env, GIT_AUTHOR_NAME: 'TEST', GIT_AUTHOR_EMAIL: 'test@example.invalid', GIT_COMMITTER_NAME: 'TEST', GIT_COMMITTER_EMAIL: 'test@example.invalid' },
+  const parent = git('rev-parse', 'HEAD');
+  const base = execFileSync('git', ['commit-tree', baseTree, '-p', parent], { cwd: root,
+    env: fixtureOwnerEnvironment(env),
     input: 'Disposable TEST base\n', encoding: 'utf8' }).trim();
   git('reset', '--quiet', '--hard', base);
 
@@ -324,100 +318,84 @@ async function invoke(t: test.TestContext, mutation: Mutation = 'body', optimize
 }
 
 interface InstalledOptions { mutation?: 'body' | 'bootstrap'; optimizer?: 'valid' | 'absent' | 'malformed' | 'foreign-link';
-  badCandidate?: boolean; fullExit?: number; group?: 'quick' | 'foundation'; foundationFailure?: boolean }
+  badCandidate?: boolean; stateMutation?: 'timestamp' | 'settings'; fullExit?: number; group?: 'quick' | 'foundation'; foundationFailure?: boolean }
 
 async function installedSourceFixture(t: test.TestContext, options: InstalledOptions = {}) {
   const root = await testScratch('ar-pr-operational-TEST-');
   const evidence = `${root}-evidence`, temporary = `${root}-tmp`;
   t.after(() => Promise.all([rm(root, { recursive: true, force: true }), rm(evidence, { recursive: true, force: true }),
     rm(temporary, { recursive: true, force: true })]));
-  await copySourceTree(repository, root);
-  const installedLock = await readFile(join(repository, 'node_modules/.pnpm/lock.yaml'));
-  await writeFile(join(root, 'pnpm-lock.yaml'), installedLock);
+  await mkdir(temporary, { recursive: true });
+  await createRetainedSourceCheckout(root);
+  await installNodeModulesFixture(root, options.optimizer === 'absent' ? 'absent' : 'linked', temporary);
   await mkdir(join(root, dirname(bodyPath)), { recursive: true });
   await writeFile(join(root, bodyPath), 'export const body = "base";\n');
   if ((options.group ?? 'quick') === 'foundation') {
     await writeFoundationFixture(root, await foundationRegistrationCensus(repository),
       'contained-turn domain and application remain dependency-free core');
   }
-  await mkdir(join(root, 'node_modules/.pnpm'), { recursive: true });
-  await mkdir(join(root, 'node_modules/.bin'), { recursive: true });
-  await Promise.all([mkdir(evidence), mkdir(temporary)]);
+  await mkdir(evidence, { recursive: true });
 
   const manifestPath = join(root, 'package.json');
   const manifest = JSON.parse(await readFile(manifestPath, 'utf8')) as { scripts: Record<string, string> };
   if ((options.group ?? 'quick') === 'quick') {
     for (const name of ['lint', 'check:node-compat', 'typecheck:ci', 'test:ci']) {
-      manifest.scripts[name] = 'node scripts/ci/test-phase.mjs';
+      manifest.scripts[name] = 'node scripts/ci/test-phase.ts';
     }
     manifest.scripts['test:ci'] = 'node --test scripts/ci/contracts.test.ts';
     manifest.scripts['check:ci:quick'] = 'pnpm lint && pnpm check:node-compat && pnpm typecheck:ci && pnpm test:ci';
   } else {
     manifest.scripts['foundation:boundaries:negative'] =
       'node --test scripts/architecture/source-dependency-adapter-boundaries.test.mts scripts/docs/runtime-builtin-permissions.test.mts scripts/ci/run-ordinary-postgres.test.mts';
-    manifest.scripts['foundation:check'] = 'node scripts/ci/test-phase.mjs && pnpm foundation:boundaries:negative';
-    manifest.scripts['foundation:scaffold:check'] = 'node scripts/ci/test-phase.mjs';
+    manifest.scripts['foundation:check'] = 'node scripts/ci/test-phase.ts && pnpm foundation:boundaries:negative';
+    manifest.scripts['foundation:scaffold:check'] = 'node scripts/ci/test-phase.ts';
   }
   await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
-  await writeFile(join(root, 'scripts/ci/test-phase.mjs'),
-    `import { writeFileSync } from 'node:fs';\nwriteFileSync(${JSON.stringify(join(evidence, 'phase-ran'))}, 'phase\\\\n');\nprocess.exitCode = Number(process.env.TEST_FULL_EXIT ?? '0');\n`);
+  await writeFile(join(root, 'scripts/ci/test-phase.ts'),
+    `import { writeFileSync } from 'node:fs';\nwriteFileSync(${JSON.stringify(join(evidence, 'phase-ran'))}, 'phase\\n');\nprocess.exitCode = Number(process.env.TEST_FULL_EXIT ?? '0');\n`);
   await writeFile(join(root, 'scripts/ci/contracts.test.ts'),
     "import test from 'node:test';\ntest('operational CI selftest', () => {});\n");
   await writeFile(join(root, 'scripts/ci/conformance.ts'),
-    `import { writeFileSync } from 'node:fs';\nwriteFileSync(${JSON.stringify(join(evidence, 'conformance-ran'))}, 'conformance\\\\n');\nprocess.exitCode = Number(process.env.TEST_FULL_EXIT ?? '0');\n`);
+    `import { writeFileSync } from 'node:fs';\nwriteFileSync(${JSON.stringify(join(evidence, 'conformance-ran'))}, 'conformance\\n');\nprocess.exitCode = Number(process.env.TEST_FULL_EXIT ?? '0');\n`);
+  await installNodeModulesFixture(root, options.optimizer === 'absent' ? 'absent' : 'linked', temporary);
 
-  const optimizerSource = join(repository, 'node_modules/.pnpm/@agent-teams+ci-input-proof@0.1.0/node_modules/@agent-teams/ci-input-proof');
-  const yamlSource = await realpath(join(repository, 'node_modules/yaml')).catch(() =>
-    join(repository, 'node_modules/.pnpm/yaml@2.9.0/node_modules/yaml'));
   const optimizerStore = join(root, 'node_modules/.pnpm/@agent-teams+ci-input-proof@0.1.0/node_modules/@agent-teams/ci-input-proof');
-  const yamlStore = join(root, 'node_modules/.pnpm/yaml@2.9.0/node_modules/yaml');
-  await mkdir(join(optimizerStore, '..'), { recursive: true });
-  await mkdir(join(yamlStore, '..'), { recursive: true });
-  if (options.optimizer !== 'absent') {
-    await cp(optimizerSource, optimizerStore, { recursive: true, dereference: true });
-    if (options.optimizer === 'malformed') {
-      await writeFile(join(optimizerStore, 'dist/index.js'), 'throw Error("TEST malformed optimizer");\n');
-    }
+  if (options.optimizer === 'malformed') {
+    await writeFile(join(optimizerStore, 'dist/index.js'), 'throw Error("TEST malformed optimizer");\n');
   }
-  await cp(yamlSource, yamlStore, { recursive: true, dereference: true });
-  await writeFile(join(root, 'node_modules/.pnpm/lock.yaml'), installedLock);
-  await writeFile(join(root, 'node_modules/.modules.yaml'),
-    await readFile(process.env.TEST_PNPM_MODULES_FIXTURE ?? join(repository, 'node_modules/.modules.yaml')));
-  await writeFile(join(root, 'node_modules/.bin/tsc'), '#!/bin/sh\nprintf "Version 7.0.2\\\\n"\n');
-  await chmod(join(root, 'node_modules/.bin/tsc'), 0o755);
-  const fakeBin = join(root, 'fake-bin');
-  await mkdir(fakeBin, { recursive: true });
-  await writeFile(join(fakeBin, 'pnpm'),
-    `#!/bin/sh\nset -eu\nif [ "\${1-}" = "--version" ]; then printf '11.18.0\\n'; exit 0; fi\nif [ "\${1-}" = "exec" ] && [ "\${2-}" = "tsc" ]; then shift 2; exec ./node_modules/.bin/tsc "$@"; fi\nif [ "\${1-}" = "run" ]; then command=$(node -e 'const p=require("./package.json"); process.stdout.write(p.scripts[process.argv[1]] ?? "")' "\${2-}"); [ -n "$command" ] || exit 1; PATH="$PWD/node_modules/.bin:$PATH"; export PATH; exec sh -c "$command"; fi\nif [ "$#" -eq 1 ]; then command=$(node -e 'const p=require("./package.json"); process.stdout.write(p.scripts[process.argv[1]] ?? "")' "$1"); if [ -n "$command" ]; then exec sh -c "$command"; fi; fi\nexit 1\n`);
-  await chmod(join(fakeBin, 'pnpm'), 0o755);
   const publicOptimizer = join(root, 'node_modules/@agent-teams/ci-input-proof');
-  await mkdir(dirname(publicOptimizer), { recursive: true });
   if (options.optimizer === 'foreign-link') {
     const foreign = join(root, 'foreign-optimizer');
     await mkdir(foreign, { recursive: true });
+    await rm(publicOptimizer, { force: true });
     await symlink(relative(dirname(publicOptimizer), foreign), publicOptimizer, 'dir');
-  } else if (options.optimizer !== 'absent') {
-    await symlink(relative(dirname(publicOptimizer), optimizerStore), publicOptimizer, 'dir');
   }
-  const publicYaml = join(root, 'node_modules/yaml');
-  await symlink(relative(dirname(publicYaml), yamlStore), publicYaml, 'dir');
 
   const inputPath = join(root, 'scripts/ci/pr-regression-inputs.ts');
   if (options.badCandidate) {
     await writeFile(inputPath, `${await readFile(inputPath, 'utf8')}\n`
       + `import { writeFile as writeMarker } from 'node:fs/promises';\n`
-      + `await writeMarker(${JSON.stringify(join(evidence, 'candidate-import-marker'))}, 'executed\\\\n');\n`
+      + `await writeMarker(${JSON.stringify(join(evidence, 'candidate-import-marker'))}, 'executed\\n');\n`
       + 'throw Error("TEST import-time candidate policy");\n');
   }
+  if (options.stateMutation) {
+    const statePath = join(root, 'node_modules/.pnpm-workspace-state-v1.json');
+    await writeFile(inputPath, `${await readFile(inputPath, 'utf8')}\n`
+      + `import { readFile as readState, writeFile as writeState } from 'node:fs/promises';\n`
+      + `const statePath = ${JSON.stringify(statePath)};\n`
+      + `const state = JSON.parse(await readState(statePath, 'utf8')) as { lastValidatedTimestamp: number; settings: Record<string, unknown> };\n`
+      + (options.stateMutation === 'timestamp'
+        ? 'state.lastValidatedTimestamp += 1;\n'
+        : 'state.settings.nodeLinker = "hoisted";\n')
+      + `await writeState(statePath, JSON.stringify(state, null, 2) + '\\n');\n`);
+  }
 
-  const env: NodeJS.ProcessEnv = {
-    PATH: `${fakeBin}:${process.env.PATH ?? ''}`,
-    TMPDIR: temporary,
+  const env = fixtureExecutionEnvironment(temporary, {
     GITHUB_ACTIONS: 'true', GITHUB_EVENT_NAME: 'pull_request',
     GITHUB_REPOSITORY: 'agent-teams-ai/agent-runtime', RUNNER_ENVIRONMENT: 'github-hosted',
     RUNNER_OS: 'Linux', RUNNER_ARCH: 'X64', ImageOS: 'ubuntu24', ImageVersion: '20261009.1',
     PR_REGRESSION_FROZEN_INSTALL: 'verified',
-  };
+  });
   const git = (...args: string[]) => execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim();
   const freeze = () => {
     git('add', '-A');
@@ -425,20 +403,20 @@ async function installedSourceFixture(t: test.TestContext, options: InstalledOpt
     const parent = git('rev-parse', 'HEAD');
     const sha = execFileSync('git', ['commit-tree', tree, '-p', parent], {
       cwd: root,
-      env: { ...env, GIT_AUTHOR_NAME: 'TEST', GIT_AUTHOR_EMAIL: 'test@example.invalid', GIT_COMMITTER_NAME: 'TEST', GIT_COMMITTER_EMAIL: 'test@example.invalid' },
+      env: fixtureOwnerEnvironment(env),
       input: 'Disposable TEST operational snapshot\n', encoding: 'utf8',
     }).trim();
     git('reset', '--quiet', '--hard', sha);
     return sha;
   };
-  git('init', '--quiet');
-  git('config', 'user.name', 'TEST');
-  git('config', 'user.email', 'test@example.invalid');
+  git('config', 'user.name', 'iliya');
+  git('config', 'user.email', 'iliyazelenkog@gmail.com');
   git('add', '-A');
   const baseTree = git('write-tree');
-  const base = execFileSync('git', ['commit-tree', baseTree], {
+  const parent = git('rev-parse', 'HEAD');
+  const base = execFileSync('git', ['commit-tree', baseTree, '-p', parent], {
     cwd: root,
-    env: { ...env, GIT_AUTHOR_NAME: 'TEST', GIT_AUTHOR_EMAIL: 'test@example.invalid', GIT_COMMITTER_NAME: 'TEST', GIT_COMMITTER_EMAIL: 'test@example.invalid' },
+    env: fixtureOwnerEnvironment(env),
     input: 'Disposable TEST operational base\n', encoding: 'utf8',
   }).trim();
   git('reset', '--quiet', '--hard', base);
@@ -544,10 +522,32 @@ function registerWorkflowAndMeasureTests(): void {
       const fixture = await actualMeasureFixture(t, { optimizer });
       const graph = await runActualRegressionImportGraph(fixture);
       assert.equal(graph.status, 0, `${optimizer}: ${graph.stdout}\n${graph.stderr}`);
-      assert.match(graph.stdout, new RegExp(`^ok \\d+ - ${regressionGraphTestName}$`, 'm'),
-        `${optimizer}: actual regression import graph did not load\n${graph.stdout}\n${graph.stderr}`);
+      if (process.env.TEST_ACTUAL_REGRESSION_GRAPH === '1') {
+        assert.match(graph.stdout, new RegExp(`^ok \\d+ - ${regressionGraphTestName}$`, 'm'), optimizer);
+      }
       assert.doesNotMatch(graph.stdout, /^not ok /mu, `${optimizer}: original regression failed\n${graph.stdout}\n${graph.stderr}`);
+      if (process.env.TEST_ACTUAL_REGRESSION_GRAPH !== '1') {
+        const report = JSON.parse(await readFile(join(fixture.evidence, 'check-ci-quick.json'), 'utf8')) as {
+          entry: string;
+          phases: Array<{ script: string; code: number | null; signal: string | null;
+            commands: Array<{ command: string }>; tests: Array<{ name: string }> }>;
+        };
+        assert.equal(report.entry, 'check:ci:quick', optimizer);
+        assert.deepEqual(report.phases.map(phase => phase.script),
+          ['lint', 'check:node-compat', 'typecheck:ci', 'test:ci'], optimizer);
+        const phase = report.phases.find(candidate => candidate.script === 'test:ci');
+        assert.equal(phase?.code, 0, optimizer);
+        assert.equal(phase?.signal, null, optimizer);
+        assert.ok(phase?.commands.some(command => command.command === 'node --test scripts/ci/contracts.test.ts'), optimizer);
+        assert.ok(phase?.commands.some(command => command.command === 'node scripts/ci/conformance.ts'), optimizer);
+        assert.ok(phase?.tests.some(result => result.name === regressionGraphTestName), optimizer);
+        assert.ok(phase?.tests.some(result =>
+          result.name === 'actual pre-import recovery regression graph never loads a rejected optimizer'), optimizer);
+      }
       await assert.rejects(readFile(join(fixture.root, 'optimizer-import-marker')), optimizer);
+      const comparatorRoot = process.env.TEST_PUBLISHED_COMPARATOR_ROOT ?? repository;
+      const publishedEntry = await readFile(join(comparatorRoot, 'node_modules/@agent-teams/ci-input-proof/dist/index.js'), 'utf8');
+      assert.doesNotMatch(publishedEntry, /optimizer-import-marker/u, optimizer);
     }
   });
 
@@ -587,17 +587,12 @@ export function registerPrRegressionBootstrapTests(): void {
   test('authentic retained history closes ccf->df and passes the original package/workflow validators', async t => {
     const root = await testScratch('ar-pr-history-TEST-');
     t.after(() => Promise.all([rm(root, { recursive: true, force: true }), rm(`${root}-evidence`, { recursive: true, force: true })]));
-    const bundle = process.env.TEST_HISTORY_BUNDLE;
-    if (bundle) {
-      execFileSync('git', ['clone', '--quiet', '--no-local', bundle, root]);
-    } else {
-      execFileSync('git', ['clone', '--quiet', '--shared', repository, root]);
-    }
+    execFileSync('git', ['clone', '--quiet', '--no-local', retainedHistorySource, root]);
     const revision = '47a79675fac84436e96bc6119478d740848f4f02';
     execFileSync('git', ['checkout', '--quiet', '-B', 'TEST-history', revision], { cwd: root });
     execFileSync('git', ['merge-base', '--is-ancestor', 'ccf6d6f8dc025d6aa81ab2109a9ccc37b0dece15',
       'df9260b0062dcb445c3cf75ce76f8539a2b32c03'], { cwd: root });
-    await symlink(join(repository, 'node_modules'), join(root, 'node_modules'), 'dir');
+    await installHistoricalNodeModulesFixture(root, root);
     const result = spawnSync(process.execPath, ['scripts/ci/conformance.ts'], {
       cwd: root,
       env: { ...process.env, EXPECTED_REVISION: revision, BENCHMARK_ARM: 'production', CI_EVIDENCE_DIR: `${root}-evidence` },
@@ -616,7 +611,22 @@ export function registerPrRegressionBootstrapTests(): void {
     });
     const plan = JSON.parse(planBytes) as { plan: { mode: string } };
     assert.equal(plan.plan.mode, 'affected-pr');
-    await assert.rejects(readFile(join(run.evidence, 'check-ci-quick.json')));
+    assert.equal(fullReport, 'missing FULL report',
+      `${run.result.stdout}\n${run.result.stderr}\n${fullReport}`);
+  });
+
+  test('workspace-state validation timestamps remain stable while semantic drift stays blocking', async t => {
+    const timestamp = await invokeInstalled(t, { mutation: 'body', stateMutation: 'timestamp' });
+    assert.equal(timestamp.result.status, 0, `${timestamp.result.stdout}\n${timestamp.result.stderr}`);
+    await readFile(join(timestamp.evidence, 'pr-quick.json')).catch(error => {
+      throw new Error(`${timestamp.result.stdout}\n${timestamp.result.stderr}\n${String(error)}`);
+    });
+    await assert.rejects(readFile(join(timestamp.evidence, 'check-ci-quick.json')));
+
+    const settings = await invokeInstalled(t, { mutation: 'body', stateMutation: 'settings' });
+    assert.equal(settings.result.status, 0, `${settings.result.stdout}\n${settings.result.stderr}`);
+    await readFile(join(settings.evidence, 'check-ci-quick.json'));
+    await assert.rejects(readFile(join(settings.evidence, 'pr-quick.json')));
   });
 
   test('the frozen installed route sends optimizer/import failures and hard FULL failures through current FULL', async t => {
@@ -722,14 +732,20 @@ export function registerPrRegressionBootstrapTests(): void {
     await assert.rejects(readFile(join(policy.evidence, 'candidate-ran')));
   });
 
-  test('published optimizer mode drift rejects before comparator import', async t => {
-    const run = await invoke(t, 'none', 'mode');
-    assert.equal((await lstat(join(run.packageDirectory, 'dist/index.js'))).mode & 0o777, 0o755);
-    assert.equal(run.result.status, 0, run.result.stderr);
-    assert.equal(await readFile(join(run.evidence, 'full-ran'), 'utf8'), 'current-full\n');
-    await assert.rejects(readFile(join(run.evidence, 'candidate-ran')));
-    await assert.rejects(readFile(join(run.evidence, 'candidate-import-marker')));
-    await assert.rejects(readFile(join(run.evidence, 'optimizer-import-marker')));
+  test('published optimizer mode drift rejects before first fingerprint and comparator import', async t => {
+    for (const [optimizer, ordinaryMode, fullMode] of [
+      ['mode', 0o755, 0o755], ['special-mode', 0o644, 0o4644],
+    ] as const) {
+      const run = await invoke(t, 'none', optimizer);
+      const stat = await lstat(join(run.packageDirectory, 'dist/index.js'));
+      assert.equal(stat.mode & 0o777, ordinaryMode, optimizer);
+      assert.equal(stat.mode & 0o7777, fullMode, optimizer);
+      assert.equal(run.result.status, 0, run.result.stderr);
+      assert.equal(await readFile(join(run.evidence, 'full-ran'), 'utf8'), 'current-full\n');
+      await assert.rejects(readFile(join(run.evidence, 'candidate-ran')));
+      await assert.rejects(readFile(join(run.evidence, 'candidate-import-marker')));
+      await assert.rejects(readFile(join(run.evidence, 'optimizer-import-marker')));
+    }
   });
 
   test('additional optimizer integration observation runs only after independent admission', async t => {
@@ -760,6 +776,7 @@ export function registerPrRegressionBootstrapTests(): void {
   });
 
   test('FULL is the independent existing command and its failure remains hard', async t => {
+    await assertMeasureFailureHandling(t);
     const run = await invokeInstalled(t, { mutation: 'bootstrap', fullExit: 23 });
     assert.equal(run.result.status, 23, run.result.stderr);
     const report = JSON.parse(await readFile(join(run.evidence, 'check-ci-quick.json'), 'utf8')) as {
