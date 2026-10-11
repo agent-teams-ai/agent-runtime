@@ -142,7 +142,7 @@ const packageFiles = async (root, scope, test) => {
   for (const group of await readdir(join(root, 'packages'), {withFileTypes: true})) {
     if (!group.isDirectory()) {continue;}
     for (const pack of await readdir(join(root, 'packages', group.name), {withFileTypes: true})) {
-      if (pack.isDirectory()) {files.push(...await listFiles(join(root, 'packages', group.name, pack.name, scope), test).catch(() => []));}
+      if (pack.isDirectory()) {files.push(...await listFiles(join(root, 'packages', group.name, pack.name, scope), test).catch(error => {if (error?.code === 'ENOENT') {return [];} throw error;}));}
     }
   }
   return files;

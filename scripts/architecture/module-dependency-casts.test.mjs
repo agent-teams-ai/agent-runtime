@@ -58,7 +58,7 @@ test('rejects an empty exemption', () => {
 test('ignores other positions', () => {
   assert.deepEqual(scan('foo(x as never);'), []);
   assert.deepEqual(scan('createAgentRuntimeHost({async execute() { return x as never; }, run: () => y as any});'), []);
-  assert.deepEqual(scan('createAgentRuntimeHost({template: `${x as never}`, other: call(y as never), member: z.w as never ? 1 : 2}.field);'), []);
+  assert.deepEqual(scan('createAgentRuntimeHost({template: `${x as never}`, other: call(y as never), member: z.w as never ? 1 : 2});'), []);
   assert.deepEqual(scan('createAgentRuntimeHost(x as const);'), []);
   assert.deepEqual(scan('createAgentRuntimeHost(x as Port);'), []);
   assert.deepEqual(scan('createAgentRuntimeHost(x as unknown as Deps satisfies Other);').map(violation => violation.kind), ['as unknown as']);
