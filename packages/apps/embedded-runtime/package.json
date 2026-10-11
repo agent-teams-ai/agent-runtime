@@ -46,6 +46,8 @@
   },
   "devDependencies": {
     "@get-modular/conformance": "catalog:",
+    "@types/pg": "catalog:",
+    "oxc-parser": "catalog:",
     "pg": "catalog:"
   }
 }

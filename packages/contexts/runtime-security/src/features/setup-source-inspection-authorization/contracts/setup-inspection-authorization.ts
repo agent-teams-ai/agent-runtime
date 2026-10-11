@@ -76,8 +76,8 @@ export type AuthorizeSetupInspectionResult =
     };
 
 export interface AuthorizeSetupInspection {
-  execute(
+  readonly execute: (
     input: AuthorizeSetupInspectionInput,
     options?: { readonly signal?: AbortSignal },
-  ): Promise<AuthorizeSetupInspectionResult>;
+  ) => Promise<AuthorizeSetupInspectionResult>;
 }

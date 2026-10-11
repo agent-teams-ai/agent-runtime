@@ -47,7 +47,7 @@ test(`pending capture failure does not starve real PA owner ${boundary} retries 
     const capture: OrdinaryCodexAuthCapture = {
       settled: Promise.resolve(), capture: () => captured,
       dispose() {
-        pendingCalls[index] += 1;
+        pendingCalls[index] = (pendingCalls[index] ?? 0) + 1;
         if (index === 0 && pendingCalls[index] === 1) {throw pendingFailure;}
         rejectCapture(pendingFailure);
       },

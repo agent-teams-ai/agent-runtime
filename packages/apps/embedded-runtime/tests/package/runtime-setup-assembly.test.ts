@@ -4,11 +4,14 @@ import { assemblyFor } from "@get-modular/assembly";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import test from "node:test";
+import test, { after } from "node:test";
+import { guardHandles } from "@get-modular/conformance";
 import { createDefaultAgentRuntimeHost, AgentRuntimeHostCreationError } from "../../dist/composition.js";
 import { createRuntimeSetupAttempt } from "../../dist/composition/default-agent-runtime-host.js";
 import { bindRuntimeSetup, runtimeSetupDeclarations, runtimeSetupProfile, createRuntimeSetupFactories, type RuntimeSetupCapabilities } from "../../dist/composition/runtime-setup-assembly.js";
 import { createExactParityHost, fixtureScope, registerPassiveSetupScenarios } from "../helpers/assembly-direct-reference.ts";
+
+const handles = guardHandles();
 
 registerPassiveSetupScenarios("Assembly", () => createDefaultAgentRuntimeHost());
 
@@ -107,8 +110,12 @@ test("raw rejection prototype traps are never inspected", async () => {
   assert.equal(traps, 0);
 });
 
-for (const key of ["security", "discovery", "codexConfiguration", "claudeConfiguration", "codexPlanner", "claudePlanner", "host"] as const) {
-  test(`factory failure remains primary: ${key}`, async () => {
+// Construction order, failure attribution and release at every module of both profiles are covered by the smoke
+// tests (passive and ordinary) in ordinary-runtime-assembly.test.ts. These cases cover the Agent Runtime error projection: codexConfiguration for a leaf present in both
+// declaration lists, and host for the root, whose passive implementation id exists only in the passive list (it
+// guards the moduleId lookup in default-agent-runtime-host.ts).
+for (const key of ["codexConfiguration", "host"] as const) {
+  test(`factory failure is projected once with the module id and without the raw cause: ${key}`, async () => {
     const calls: string[] = [];
     const composition = await compileComposition({ declarations: runtimeSetupDeclarations, profile: runtimeSetupProfile });
     assert.ok(composition.ok);
@@ -832,3 +839,6 @@ test("independent oracle rejects a materialized wrong-platform planner binding",
 test("failed creation retains single-flight cleanup recovery and primary projection", {timeout: 5_000}, failedCreationRecovery);
 
 test("failed creation preserves terminal cleanup uncertainty across recovery observations", {timeout: 5_000}, terminalCreationCleanupUncertainty);
+
+// Last top-level statement: file-level after hooks run in registration order, so this check runs after every other cleanup of this file.
+after(() => handles.check());

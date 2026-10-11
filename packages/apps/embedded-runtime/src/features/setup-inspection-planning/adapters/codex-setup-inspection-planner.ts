@@ -14,7 +14,7 @@ export type CodexSetupInspectionPlan =
     };
 
 export interface CodexSetupInspectionPlanner {
-  plan(scope: TrustedCodexSetupScope): CodexSetupInspectionPlan;
+  readonly plan: (scope: TrustedCodexSetupScope) => CodexSetupInspectionPlan;
 }
 
 const isDarwinAbsolutePath = (value: string): boolean => value.startsWith("/");

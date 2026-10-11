@@ -183,6 +183,6 @@ export interface InspectClaudeCodeConfigurationResult {
 }
 
 export interface InspectClaudeCodeConfiguration {
-  execute(input: InspectClaudeCodeConfigurationInput, options?: { readonly signal?: AbortSignal }):
+  readonly execute: (input: InspectClaudeCodeConfigurationInput, options?: { readonly signal?: AbortSignal }) =>
     Promise<InspectClaudeCodeConfigurationResult>;
 }

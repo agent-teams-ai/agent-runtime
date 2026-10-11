@@ -87,8 +87,8 @@ export type AuthorizeClaudeCodeSetupInspectionResult =
     };
 
 export interface AuthorizeClaudeCodeSetupInspection {
-  execute(
+  readonly execute: (
     scope: TrustedClaudeCodeSetupInspectionScope,
     options?: { readonly signal?: AbortSignal },
-  ): Promise<AuthorizeClaudeCodeSetupInspectionResult>;
+  ) => Promise<AuthorizeClaudeCodeSetupInspectionResult>;
 }

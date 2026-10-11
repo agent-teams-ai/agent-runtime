@@ -47,8 +47,8 @@ export interface DiscoverClaudeCodeInstallationsResult {
 }
 
 export interface DiscoverClaudeCodeInstallations {
-  execute(
+  readonly execute: (
     input: DiscoverClaudeCodeInstallationsInput,
     options?: { readonly signal?: AbortSignal },
-  ): Promise<DiscoverClaudeCodeInstallationsResult>;
+  ) => Promise<DiscoverClaudeCodeInstallationsResult>;
 }

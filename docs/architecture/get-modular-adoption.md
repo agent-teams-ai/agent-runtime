@@ -387,7 +387,7 @@ ordinary top-level `runtime-macos` job remains the required check on main since
 2026-10-02. It always joins `macos-product`, which runs eight physical macos-15
 arm64 runners: three complete-file Agent Execution partitions and five whole
 package suites. Every runner cleans and builds all six packages locally before
-its assigned original test command; Embedded Runtime retains both Node test
+its assigned original test command; Embedded Runtime retains its three Node test
 processes and deliberate platform skips. The Ubuntu aggregate verifies actual
 Darwin evidence, including a non-root UID, the pinned Mac Node toolcache and
 locally emitted Mach-O arm64 filesystem helper. It accepts only successful
@@ -395,14 +395,23 @@ current unit artifacts from the same workflow run and exact source revision;
 failed, skipped or cancelled latest helper results reject earlier passes.
 Per-attempt archives retain failures. Both targets use execution receipt schema
 three; Linux retains its full package, root, typed and native obligations.
+The Embedded Runtime launcher now has three test processes; the third is the guarded
+force-exit process described in "Handle guards in tests". The disabled L0 v2 evidence
+lane still binds two processes, so restoring it must account for the third. The lane is
+not part of `pnpm check`. The third process adds one failure ("the actual launcher records
+all four stages and both full test processes in a disposable synthetic package") and
+changes the cause of three that already fail on main: "complete receipts require both
+entire manifest processes", "original argv lists and accepted authority tests are
+preserved with the journal feature regression" and "reviewed platform predicates still
+refer to exact registration sites".
 The source census rejects ignored root/experiment inputs and symlink ancestry.
 Each observed test stream binds its raw PID, cwd, argv, completed file universe,
 registration location, ancestry and ordinal to the original package source;
 Mac streams bind their captured Mac executable to the original source plan.
 Embedded Runtime's existing optional capture additionally retains each original
 `spawnSync` return PID, executable, cwd and actual runner PID. Indexed raw
-identity sidecars bind those fields, both original argv arrays and each stream's
-summary/file universe. Both streams require the same actual runner PID, and
+identity sidecars bind those fields, the three original argv arrays and each stream's
+summary/file universe. All streams require the same actual runner PID, and
 each child PID must differ from its actual command PID. Linux procfs corroboration retains exact observed
 ancestry to the actual command PID when available; every ancestor must be a
 positive safe integer, unique, exclude the child PID and fit within 16 hops.
@@ -526,10 +535,10 @@ release-age compatibility exception. Until capture and delivery, the missing
 successor report fails the manual checker. V2 binds ADR-0015,
 the historical records, current construction traces and a bounded tracked Runtime
 Setup input closure to exactly two receipts: Linux x64 and Darwin arm64, both using
-Node `v24.18.0` and pnpm `11.18.0`. The two original explicit Node test argv lists
+Node `v24.18.0` and pnpm `11.18.0`. The original explicit Node test argv lists
 are retained in the package-local `scripts/run-package-tests.mjs`; ordinary
 package checks and capture share that launcher. It runs clean, typecheck, build
-and both test processes, stopping on failure. No test subset or alternative
+and its test processes, stopping on failure. No test subset or alternative
 legacy capture path can satisfy that historical validator.
 
 Each receipt retains job/run identity, observed target and tools, start/end times,
@@ -1185,7 +1194,7 @@ the `outstandingWork` of the review, which stay as the evidence of the pin step.
 | Scoped acceptance and evidence: pins, package and archive identities, blocking commands | met for Core and Assembly 0.3.0 and resources 0.1.0 (retained archive, exact catalog, one copy) | met (resources added in AR-1c) | AR-1a, AR-1c |
 | New composition boundaries: descriptors own IDs and revisions; no hand-written compatibility; no `any`, `as never` or double casts in wiring | met | met | AR-1b |
 | Identity and namespaces, rules 1-7 | met | met | AR-1b |
-| Module packages and contracts | met for a private host-app package: descriptors and declarations live with the composition; the ordinary module factories are members of a frozen record built per Host attempt from Host constructors and bound by the root; a separate contract package is revisited in the package publication lane. Outstanding: port members of the seven ordinary contract value types (Agent Execution `ordinary-ports.ts`) are declared as methods, not function-typed properties | met for a private host-app package; the port member shape stays outstanding with the Agent Execution owner | AR-1b; port shape: Agent Execution owner |
+| Module packages and contracts | met for a private host-app package: descriptors and declarations live with the composition; the ordinary module factories are members of a frozen record built per Host attempt from Host constructors and bound by the root; a separate contract package is revisited in the package publication lane. Contract value types declare their members as function-typed properties, enforced by the `typescript/method-signature-style` override in `.oxlintrc.json` for exactly the declaring files (Agent Execution `ordinary-ports.ts` and the setup value types behind the Codex and Claude Code setup view dependencies). Outstanding: the `OrdinaryTurn` value type is deferred because converting it changes the public contained-turn `ContainedTurnFeatureApi`, and contained-turn is not developed further | met for a private host-app package; the deferred `OrdinaryTurn` value type stays outstanding with the Agent Execution owner | AR-1b, agent-runtime #226; `OrdinaryTurn` value type: Agent Execution owner |
 | Module packages list Get Modular packages only as peers | not applicable | not applicable while Agent Runtime packages are private and export no Get Modular modules; revisit in the package publication lane | none |
 | Dynamic instances (templates, inputs) | not applicable | not applicable: no prepared assembly serves more than one run; compile, bind and prepare run once per Host attempt | none |
 | Module resource scopes, author rules 1-13 | met for the security, Provider Access and Codex owners; rule 7 holds: the Provider Access retirement protocol (broker close, rendering, capture and guard disposal, store retire) stays inside one cleanup | met for the security, Provider Access and Codex owners; rule 7 holds: the Provider Access retirement protocol (broker close, rendering, capture and guard disposal, store retire) stays inside one cleanup | AR-1c, AR-2 |
@@ -1194,10 +1203,57 @@ the `outstandingWork` of the review, which stay as the evidence of the pin step.
 | Host rule: one deadline at the root (escalate, then abandon) | outstanding | outstanding by decision of 2026-10-04: release of the resource owners keeps today's behavior without a deadline; added when an owner's release can block without its own bound, or on owner request; prepared values grace 5000 ms, abandon 5000 ms | none yet |
 | Host rule: `order: "concurrent"` only for independent peers | met: Provider Access grants | met: Provider Access grants | AR-2 |
 | Errors identified by code | met (no Get Modular error is compared with `instanceof`) | met | AR-1c, AR-2 |
-| Testing 1 and 2: named module factories, typed fakes | factories met for the ordinary feature; fakes this train touches are typed, but package test files are not type-checked yet; remaining work tracked in issue #189 | factories met for the ordinary feature; fakes this train touches are typed, but package test files are not type-checked yet; remaining work tracked in issue #189 | AR-1b, AR-1c; rest per #189 |
-| Testing 3: contract suites | outstanding | outstanding; covered by issue #189 brief 07 after AR-2 (planning decision 2026-10-04): one suite for `agent-runtime/ordinary/store`, owned by the ordinary feature, run against an in-memory fake and the PostgreSQL store, moved unchanged into STORE-2-core as its compatibility suite (never copied or imported from embedded-runtime); every other contract recorded as "no second implementation" | #189 brief 07 |
+| Testing 1 and 2: named module factories, typed fakes | met for passive-setup and ordinary module tests: type-checked through the root include; an AST check rejects type-erasing casts on dependency records at the factory call and one const step; records built inside fixtures are covered by type-checking only | met for passive-setup and ordinary module tests: type-checked through the root include; an AST check rejects type-erasing casts on dependency records at the factory call and one const step; records built inside fixtures are covered by type-checking only | AR-1b, AR-1c, issue #189 |
+| Testing 3: contract suites | met for `agent-runtime/ordinary/store` (owner fake and PostgreSQL store). Rule 3 applies to contracts with a second behavioural implementation; the other ordinary contracts have only single-scenario stubs inside one test file and are recorded as no second implementation (decided during planning on 2026-10-04). Each library card (LIB-PROCESS, LIB-CODEX-1, STORE-2-core) adds a suite with its first owner fake | met for `agent-runtime/ordinary/store` (owner fake and PostgreSQL store). Rule 3 applies to contracts with a second behavioural implementation; the other ordinary contracts have only single-scenario stubs inside one test file and are recorded as no second implementation (decided during planning on 2026-10-04). Each library card (LIB-PROCESS, LIB-CODEX-1, STORE-2-core) adds a suite with its first owner fake | issue #189 |
 | Testing 4: `isolate` | met for one scoped owner module (provider) | met for one scoped owner module | AR-1c |
 | Testing 5: roots as functions of Assembly, one `smoke` per root | met for the passive and ordinary profiles | met for the passive and ordinary profiles | AR-1b, AR-1c |
 | Testing 6: independent binding oracle | met: literal compiled-plan oracle | met | AR-1b |
-| Testing 7 and 8: `guardHandles`, close every scope, no sleeps | 8 met for new tests; 7 not adopted in this train, tracked in issue #189 | 8 met for new tests; 7 not adopted in this train, tracked in issue #189 | AR-1c; 7 per #189 |
+| Testing 7 and 8: `guardHandles`, close every scope, no sleeps | 7 met for the Embedded Runtime guarded process and Filesystem Custody; Agent Execution, Provider Access and Runtime Security adopt with LIB-PROCESS, LIB-CODEX-1 and STORE-2-core; 8 met for new tests | 7 met for the Embedded Runtime guarded process and Filesystem Custody; Agent Execution, Provider Access and Runtime Security adopt with LIB-PROCESS, LIB-CODEX-1 and STORE-2-core; 8 met for new tests | AR-1c; 7 by issue #189 |
 | Optional dynamic Host lifecycle candidate | not adopted | not adopted | none |
+
+### Module test enforcement
+
+The test files that build Get Modular modules of the passive-setup and ordinary compositions are listed one by one in
+the root `tsconfig.json` `include`, so `pnpm typecheck` compares every fake with its contract. A module dependency
+record is the `dependencies` value of an `isolate` call, the first argument of a module entry point, or an expression
+checked with `satisfies FactoryDependencies<...>` or declared with that type. The adoption gate
+(`pnpm test:get-modular-adoption`) runs `scripts/architecture/module-dependency-casts.mjs` and fails on `as never`,
+`as any`, `as unknown as`, `as any as`, `as never as`, `<never>` and `<any>` on such a record. A cast that feeds a
+deliberately invalid input stays when the line of the cast or the line above carries `// hostile-input: <reason>`. The
+list of entry points is `MODULE_ENTRY_POINTS` in that script; the check fails on a name that no longer exists, so add the
+factory of a new module there. Contained-turn test files are out of this scope.
+
+The check reads a dependency record at the factory call and through one `const` step. It does not follow records that a
+fixture builds and a test passes on as `f.dependencies` (for example `ordinary-core.test.ts` and
+`ordinary-host-ownership.fixture.ts`); type-checking those files through the root `include` is what covers them.
+
+## Handle guards in tests
+
+Testing norm 7 is applied per test file. A file in a guarded process counts
+handles before it opens any and checks them as its last top-level statement:
+
+```ts
+import test, { after } from "node:test";
+import { guardHandles } from "@get-modular/conformance";
+// ...other imports...
+
+const handles = guardHandles();
+
+// ...tests...
+
+after(() => handles.check());
+```
+
+`node:test` runs file-level `after` hooks in registration order, so the guard is
+written in the file and not in an `--import` preload, which would run before the
+file's own cleanup and report false leaks.
+
+`--test-force-exit` is added only to a test process in which every file checks its
+handles last: it makes a leak fail with `conformance.handles.leaked` and ends the
+process instead of hanging, but it would hide a leak in an unguarded file. Two
+coverage tests enforce the rule: `handle-guard-coverage.test.ts` in Embedded
+Runtime for the third launcher process, and the same file in Filesystem Custody
+for its whole `test` command. A leak a guard finds is fixed, not allowed.
+Agent Execution, Provider Access and Runtime Security run hundreds of contained-turn
+files in one command each, so they adopt guards together with LIB-PROCESS,
+LIB-CODEX-1 and STORE-2-core.

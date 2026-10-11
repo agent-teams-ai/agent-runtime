@@ -1,18 +1,22 @@
 import assert from "node:assert/strict";
-import test from "node:test";
-import {mkdtemp, realpath, mkdir, readdir, rm} from "node:fs/promises";
+import test, { after } from "node:test";
+import {mkdtemp, realpath, mkdir, readdir, readFile, rm} from "node:fs/promises";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
+import {parseSync} from "oxc-parser";
 import {Pool} from "pg";
 import {compileComposition} from "@get-modular/core";
 import {assemblyFor} from "@get-modular/assembly";
-import {isolate, smoke} from "@get-modular/conformance";
+import {guardHandles, isolate, smoke} from "@get-modular/conformance";
 import {createScope, type Resources} from "@get-modular/resources";
 import {createAgentRuntimeHost} from "../../dist/composition.js";
 import {runtimeOrdinarySetupDeclarations, runtimeOrdinarySetupProfile, runtimeSetupDeclarations, runtimeSetupProfile, bindRuntimeSetup, composeRuntimeSetup, createRuntimeSetupFactories, type RuntimeSetupCapabilities} from "../../dist/composition/runtime-setup-assembly.js";
 import type {AgentRuntimeHost} from "../../dist/composition/agent-runtime-host.js";
 import {createOrdinaryModuleFactories, ordinaryProviderDeclaration, ordinaryRuntimeDeclarations, type OrdinaryRuntimeCapabilities, type OrdinaryRuntimeFactories} from "../../dist/composition/ordinary-runtime-assembly.js";
 import {copyObservation} from "../../dist/composition/contained-turn-runtime-validation.js";
+
+// Count handles before this file opens any.
+const handles = guardHandles();
 
 test("ordinary active graph has independent exact seven-port parity and passive profile remains separate", async () => {
   const expected = {"operation-store": "agent-runtime/ordinary/store/postgres", security: "agent-runtime/ordinary/security/postgres", "provider-access": "agent-runtime/ordinary/provider-access/postgres", workspace: "agent-runtime/ordinary/workspace/node", artifacts: "agent-runtime/ordinary/artifacts/node", process: "agent-runtime/ordinary/process/node", provider: "agent-runtime/ordinary/provider/codex"};
@@ -98,7 +102,7 @@ test("module identities stay in the product namespace", () => {
 test("public ordinary construction and disposal never capture auth or start provider and borrow pool", async t => {
   const root = await mkdtemp(join(await realpath(tmpdir()), "ordinary-public-TEST-"));
   t.after(() => rm(root, {recursive: true, force: true}));
-  const dirs = Object.fromEntries(["auth", "private", "evidence", "source", "workspace", "artifact"].map(name => [name, join(root, name)]));
+  const dirs = {auth: join(root, "auth"), private: join(root, "private"), evidence: join(root, "evidence"), source: join(root, "source"), workspace: join(root, "workspace"), artifact: join(root, "artifact")};
   for (const path of Object.values(dirs)) {await mkdir(path, {mode: 0o700});}
   const pool = new Pool(); let migrations = 0; let ended = 0;
   t.mock.method(pool, "query", async () => {migrations += 1; return {rows: [], rowCount: 0};});
@@ -188,6 +192,7 @@ test("materialized ordinary root injects the provider owner's launch capability 
     const invalid = await compileComposition({declarations: runtimeOrdinarySetupDeclarations, profile: mismatched});
     assert.equal(invalid.ok, false); assert.equal(counts.calls, 0);
     const composition = await compileComposition({declarations: runtimeOrdinarySetupDeclarations, profile: runtimeOrdinarySetupProfile});
+    if (!composition.ok) {assert.fail(JSON.stringify(composition));}
     const preparation = await api.prepare({composition, factories: bound.factories, roots: bound.roots});
     assert.equal(preparation.status, "prepared");
     if (preparation.status !== "prepared") {assert.fail(JSON.stringify(preparation));}
@@ -196,7 +201,7 @@ test("materialized ordinary root injects the provider owner's launch capability 
     if (result.status !== "succeeded") {assert.fail(JSON.stringify(result));}
     const expected = {"agent-runtime/ordinary/store": ports.store, "agent-runtime/ordinary/security": ports.security, "agent-runtime/ordinary/provider-access": ports.access, "agent-runtime/ordinary/workspace": ports.workspace, "agent-runtime/ordinary/artifacts": ports.artifacts, "agent-runtime/ordinary/process": ports.process, "agent-runtime/ordinary/provider": ports.provider, "agent-runtime/ordinary/prepare-launch": prepareLaunch};
     for (const [capability, value] of Object.entries(expected)) {
-      const entry = result.created.find(item => Object.hasOwn(item.capabilities, capability));
+      const entry: {readonly capabilities: object} | undefined = result.created.find(item => Object.hasOwn(item.capabilities, capability));
       assert.ok(entry); assert.equal(Reflect.get(entry.capabilities, capability), value, capability);
     }
     assert.equal(counts.calls, 7);
@@ -244,3 +249,38 @@ test("smoke: the passive composition root releases every attempt under injected 
   assert.deepEqual(steps.filter(step => step.problem !== undefined), []);
   for (const host of hosts) { await host.dispose(); }
 });
+
+function factoryTypeReferences(source: string): string[] {
+  const {program, errors} = parseSync("ordinary-runtime-assembly.ts", source);
+  assert.equal(errors.length, 0);
+  const declaration = program.body.map(node => node.type === "ExportNamedDeclaration" ? node.declaration : node)
+    .find(node => node?.type === "TSInterfaceDeclaration" && node.id.name === "OrdinaryRuntimeFactories");
+  assert.ok(declaration?.type === "TSInterfaceDeclaration", "OrdinaryRuntimeFactories interface");
+  const references: string[] = [];
+  const visit = (node: unknown): void => {
+    if (node === null || typeof node !== "object") { return; }
+    if (Array.isArray(node)) { node.forEach(visit); return; }
+    const record = node as Record<string, unknown>;
+    if (record["type"] === "TSTypeReference") { references.push(String((record["typeName"] as {name?: unknown}).name)); }
+    if (record["type"] === "TSImportType") { references.push("import()"); }
+    for (const [key, value] of Object.entries(record)) { if (key !== "parent") { visit(value); } }
+  };
+  visit(declaration.body);
+  return [...new Set(references)].toSorted();
+}
+
+test("ordinary Host factory types are read from the contract descriptors", async () => {
+  // Hand-written value types drift from the contracts; only descriptor-derived types are allowed here.
+  const path = new URL("../../src/features/ordinary-session-runtime/composition/ordinary-runtime-assembly.ts", import.meta.url);
+  const source = await readFile(path, "utf8");
+  assert.deepEqual(factoryTypeReferences(source), ["Promise", "Resources", "ValueOf"]);
+  const derived = "workspace(): Promise<ValueOf<typeof OrdinaryWorkspace>>;";
+  assert.ok(source.includes(derived));
+  const inlineImport = source.replace(derived, 'workspace(): Promise<import("@agent-teams/agent-execution/composition").OrdinaryTurnDependencies["workspace"]>;');
+  assert.ok(factoryTypeReferences(inlineImport).includes("import()"), "an inline type import must be rejected");
+  const handWritten = source.replace(derived, 'workspace(): Promise<OrdinaryTurnDependencies["workspace"]>;');
+  assert.ok(factoryTypeReferences(handWritten).includes("OrdinaryTurnDependencies"), "a hand-written type must be rejected");
+});
+
+// Last top-level statement: file-level after hooks run in registration order, so this check runs after every other cleanup of this file.
+after(() => handles.check());

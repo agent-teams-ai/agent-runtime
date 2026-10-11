@@ -1,11 +1,15 @@
 import { createAgentRuntimeHost } from "../../dist/composition/agent-runtime-host.js";
 import assert from "node:assert/strict";
-import test from "node:test";
+import test, { after } from "node:test";
+import { guardHandles } from "@get-modular/conformance";
 
 import {
   createClaudeCodeSetupInspectionPlanner,
   createCodexSetupInspectionPlanner,
 } from "../../dist/composition.js";
+
+// Count handles before this file opens any.
+const handles = guardHandles();
 
 const unavailable = (): never => {
   throw new Error("unsupported capability must not be invoked");
@@ -70,6 +74,7 @@ test("rejects missing, partial, malformed, and unknown capability bindings synch
   ];
 
   for (const dependencies of invalidDependencies) {
+    // hostile-input: each record is malformed on purpose; the Host must refuse it
     assert.throws(() => createAgentRuntimeHost(dependencies as never), TypeError);
   }
 });
@@ -105,6 +110,7 @@ test("snapshots the optional contained-turn capability and its methods exactly o
     },
   });
 
+  // hostile-input: accessor-backed record that changes on a second read; the Host must snapshot it once
   const host = createAgentRuntimeHost(dependencies as never);
   t.after(() => host.dispose());
   assert.equal(bundleReads, 1);
@@ -141,6 +147,7 @@ test("snapshots accessor-backed capability bundles and binding methods exactly o
     },
   });
 
+  // hostile-input: accessor-backed record that changes on a second read; the Host must snapshot it once
   const host = createAgentRuntimeHost(dependencies as never);
   t.after(() => host.dispose());
   const access = host.bindAccess({
@@ -189,3 +196,6 @@ test("captured planner method retains its receiver after caller mutation", async
   }
   assert.equal(planner.calls, 2);
 });
+
+// Last top-level statement: file-level after hooks run in registration order, so this check runs after every other cleanup of this file.
+after(() => handles.check());

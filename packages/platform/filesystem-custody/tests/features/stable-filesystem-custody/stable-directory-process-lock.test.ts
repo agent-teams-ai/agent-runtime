@@ -4,12 +4,16 @@ import { once } from "node:events";
 import { mkdtemp, open, realpath, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import test from "node:test";
+import test, { after } from "node:test";
+import { guardHandles } from "@get-modular/conformance";
 import { fileURLToPath } from "node:url";
 
 import { withStableDirectoryProcessLock } from "../../../dist/features/stable-filesystem-custody/adapters/outbound/filesystem/stable-directory-process-lock.js";
 import { stableDirectoryMutationCapability } from "../../../dist/features/stable-filesystem-custody/adapters/outbound/filesystem/stable-directory-capability.js";
 import { publishStableDirectoryNoReplace } from "../../../dist/features/stable-filesystem-custody/adapters/outbound/filesystem/stable-directory-publication.js";
+
+// Count handles before this file opens any.
+const handles = guardHandles();
 
 const supported = process.platform === "linux" || process.platform === "darwin";
 const nativeTest = supported ? test : test.skip;
@@ -135,3 +139,6 @@ test("Darwin publication rejects invalid descriptors independently of process lo
     sourceDirectory: { fd: -1 }, sourceName: "source",
   }), /arguments are invalid/u);
 });
+
+// Last top-level statement: file-level after hooks run in registration order, so this check runs after every other cleanup of this file.
+after(() => handles.check());

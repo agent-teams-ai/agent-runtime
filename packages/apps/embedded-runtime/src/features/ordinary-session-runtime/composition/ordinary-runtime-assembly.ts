@@ -1,4 +1,4 @@
-import {declareModule, defineContract, type CapabilitiesOf, type ModuleFactory} from "@get-modular/assembly";
+import {declareModule, defineContract, type CapabilitiesOf, type Contract, type ModuleFactory} from "@get-modular/assembly";
 import {required} from "@get-modular/core";
 import type {ModuleContext, Resources} from "@get-modular/resources";
 import {createOrdinaryTurnFeature, type OrdinaryTurnDependencies, type OrdinaryProcessPort, type OrdinaryLaunchRecipe} from "@agent-teams/agent-execution/composition";
@@ -44,14 +44,16 @@ export const ordinaryRuntimeBindings = [
   {consumerImplementationId: "agent-runtime/ordinary/turn/default", slotId: "process", providerImplementationIds: ["agent-runtime/ordinary/process/node"]},
   {consumerImplementationId: "agent-runtime/ordinary/turn/default", slotId: "provider", providerImplementationIds: ["agent-runtime/ordinary/provider/codex"]},
 ] as const;
+/** The value a contract carries, read from its descriptor so the Host factories follow a changed contract. */
+type ValueOf<T extends Contract<string, unknown, number>> = T extends Contract<string, infer V, number> ? V : never;
 export interface OrdinaryRuntimeFactories {
-  operationStore(): Promise<OrdinaryTurnDependencies["operationStore"]>;
-  security(resources: Resources): Promise<{readonly port: OrdinaryTurnDependencies["security"]; readonly registerSecrets: RegisterSecrets}>;
-  providerAccess(registerSecrets: RegisterSecrets, resources: Resources): Promise<OrdinaryTurnDependencies["providerAccess"]>;
-  workspace(): Promise<OrdinaryTurnDependencies["workspace"]>;
-  artifacts(): Promise<OrdinaryTurnDependencies["artifacts"]>;
-  process(prepareLaunch: OrdinaryLaunchRecipe): Promise<OrdinaryProcessPort>;
-  provider(resources: Resources): Promise<{readonly provider: OrdinaryTurnDependencies["provider"]; readonly prepareLaunch: OrdinaryLaunchRecipe}>;
+  operationStore(): Promise<ValueOf<typeof OrdinaryStore>>;
+  security(resources: Resources): Promise<{readonly port: ValueOf<typeof OrdinarySecurity>; readonly registerSecrets: ValueOf<typeof OrdinaryRegisterSecrets>}>;
+  providerAccess(registerSecrets: ValueOf<typeof OrdinaryRegisterSecrets>, resources: Resources): Promise<ValueOf<typeof OrdinaryProviderAccess>>;
+  workspace(): Promise<ValueOf<typeof OrdinaryWorkspace>>;
+  artifacts(): Promise<ValueOf<typeof OrdinaryArtifacts>>;
+  process(prepareLaunch: ValueOf<typeof OrdinaryPrepareLaunch>): Promise<ValueOf<typeof OrdinaryProcess>>;
+  provider(resources: Resources): Promise<{readonly provider: ValueOf<typeof OrdinaryProvider>; readonly prepareLaunch: ValueOf<typeof OrdinaryPrepareLaunch>}>;
 }
 interface OrdinaryTurnModuleCapabilities extends CapabilitiesOf<typeof OrdinaryStore | typeof OrdinarySecurity | typeof OrdinaryProviderAccess | typeof OrdinaryWorkspace | typeof OrdinaryArtifacts | typeof OrdinaryProcess | typeof OrdinaryProvider | typeof OrdinaryTurn> {}
 const createTurnModule: ModuleFactory<OrdinaryTurnModuleCapabilities, typeof ordinaryTurnDeclaration, OrdinaryFeature> = async dependencies => {
