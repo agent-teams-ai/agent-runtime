@@ -15,11 +15,7 @@ const handles = guardHandles();
 
 registerPassiveSetupScenarios("Assembly", () => createDefaultAgentRuntimeHost());
 
-const deferred = <T>() => {
-  let resolve!: (value: T) => void; let reject!: (cause: unknown) => void;
-  const promise = new Promise<T>((_resolve, _reject) => { resolve = _resolve; reject = _reject; });
-  return { promise, resolve, reject };
-};
+const deferred = <T>() => Promise.withResolvers<T>();
 
 test("already cancelled bootstrap performs zero product work", async () => {
   const controller = new AbortController();
@@ -34,7 +30,8 @@ test("already cancelled bootstrap performs zero product work", async () => {
 
 test("hostile genuine signal accessor at preflight rejects safely without product work", async () => {
   const controller = new AbortController();
-  let reasonReads = 0; let calls = 0;
+  let reasonReads = 0;
+  let calls = 0;
   const getterCause = { secret: "test-fixture-literal" };
   Object.defineProperty(controller.signal, "aborted", { get() { throw getterCause; } });
   Object.defineProperty(controller.signal, "reason", { get() { reasonReads += 1; throw "TEST-reason-secret"; } });
