@@ -103,9 +103,6 @@ test(
   assert.deepEqual(first, second);
   assert.ok(isDeeplyFrozen(first));
   assert.equal(first.status, "partial");
-  if (first.status === "denied" || first.status === "unsupported") {
-    return;
-  }
   assert.equal(first.installations.length, 1);
   assert.equal(first.installations[0]?.aliases.length, 2);
   assert.deepEqual(first.settings, [
@@ -201,9 +198,6 @@ test(
 
   const result = await access.codexSetup.inspect({ nativeProfile: "invalid profile" });
   assert.equal(result.status, "partial");
-  if (result.status === "denied" || result.status === "unsupported") {
-    return;
-  }
   assert.deepEqual(
     result.diagnostics.map(item => item.code),
     ["config_parse_failed", "native_profile_invalid"],
