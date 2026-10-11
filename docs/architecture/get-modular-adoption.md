@@ -387,7 +387,7 @@ ordinary top-level `runtime-macos` job remains the required check on main since
 2026-10-02. It always joins `macos-product`, which runs eight physical macos-15
 arm64 runners: three complete-file Agent Execution partitions and five whole
 package suites. Every runner cleans and builds all six packages locally before
-its assigned original test command; Embedded Runtime retains both Node test
+its assigned original test command; Embedded Runtime retains its three Node test
 processes and deliberate platform skips. The Ubuntu aggregate verifies actual
 Darwin evidence, including a non-root UID, the pinned Mac Node toolcache and
 locally emitted Mach-O arm64 filesystem helper. It accepts only successful
@@ -395,14 +395,23 @@ current unit artifacts from the same workflow run and exact source revision;
 failed, skipped or cancelled latest helper results reject earlier passes.
 Per-attempt archives retain failures. Both targets use execution receipt schema
 three; Linux retains its full package, root, typed and native obligations.
+The Embedded Runtime launcher now has three test processes; the third is the guarded
+force-exit process described in "Handle guards in tests". The disabled L0 v2 evidence
+lane still binds two processes, so restoring it must account for the third. Four of its
+tests fail because of that and stay failing until the lane is restored (it is not part of
+`pnpm check`): "complete receipts require both entire manifest processes", "original argv
+lists and accepted authority tests are preserved with the journal feature regression",
+"reviewed platform predicates still refer to exact registration sites" and "the actual
+launcher records all four stages and both full test processes in a disposable synthetic
+package".
 The source census rejects ignored root/experiment inputs and symlink ancestry.
 Each observed test stream binds its raw PID, cwd, argv, completed file universe,
 registration location, ancestry and ordinal to the original package source;
 Mac streams bind their captured Mac executable to the original source plan.
 Embedded Runtime's existing optional capture additionally retains each original
 `spawnSync` return PID, executable, cwd and actual runner PID. Indexed raw
-identity sidecars bind those fields, both original argv arrays and each stream's
-summary/file universe. Both streams require the same actual runner PID, and
+identity sidecars bind those fields, the three original argv arrays and each stream's
+summary/file universe. All streams require the same actual runner PID, and
 each child PID must differ from its actual command PID. Linux procfs corroboration retains exact observed
 ancestry to the actual command PID when available; every ancestor must be a
 positive safe integer, unique, exclude the child PID and fit within 16 hops.
@@ -526,13 +535,10 @@ release-age compatibility exception. Until capture and delivery, the missing
 successor report fails the manual checker. V2 binds ADR-0015,
 the historical records, current construction traces and a bounded tracked Runtime
 Setup input closure to exactly two receipts: Linux x64 and Darwin arm64, both using
-Node `v24.18.0` and pnpm `11.18.0`. The two original explicit Node test argv lists
+Node `v24.18.0` and pnpm `11.18.0`. The original explicit Node test argv lists
 are retained in the package-local `scripts/run-package-tests.mjs`; ordinary
 package checks and capture share that launcher. It runs clean, typecheck, build
-and its test processes, stopping on failure. The launcher now has three test
-processes (the third is the guarded force-exit process described in "Handle
-guards in tests"); restoring the disabled L0 v2 evidence lane must account for
-the third. No test subset or alternative
+and its test processes, stopping on failure. No test subset or alternative
 legacy capture path can satisfy that historical validator.
 
 Each receipt retains job/run identity, observed target and tools, start/end times,
@@ -1202,7 +1208,7 @@ the `outstandingWork` of the review, which stay as the evidence of the pin step.
 | Testing 4: `isolate` | met for one scoped owner module (provider) | met for one scoped owner module | AR-1c |
 | Testing 5: roots as functions of Assembly, one `smoke` per root | met for the passive and ordinary profiles | met for the passive and ordinary profiles | AR-1b, AR-1c |
 | Testing 6: independent binding oracle | met: literal compiled-plan oracle | met | AR-1b |
-| Testing 7 and 8: `guardHandles`, close every scope, no sleeps | 7 met for the Embedded Runtime guarded process and Filesystem Custody; Agent Execution, Provider Access and Runtime Security adopt with the library packages of the program plan; 8 met for new tests | 7 met for the Embedded Runtime guarded process and Filesystem Custody; Agent Execution, Provider Access and Runtime Security adopt with the library packages of the program plan; 8 met for new tests | AR-1c; 7 by issue #189 |
+| Testing 7 and 8: `guardHandles`, close every scope, no sleeps | 7 met for the Embedded Runtime guarded process and Filesystem Custody; Agent Execution, Provider Access and Runtime Security adopt with LIB-PROCESS, LIB-CODEX-1 and STORE-2-core; 8 met for new tests | 7 met for the Embedded Runtime guarded process and Filesystem Custody; Agent Execution, Provider Access and Runtime Security adopt with LIB-PROCESS, LIB-CODEX-1 and STORE-2-core; 8 met for new tests | AR-1c; 7 by issue #189 |
 | Optional dynamic Host lifecycle candidate | not adopted | not adopted | none |
 
 ### Module test enforcement
@@ -1249,5 +1255,5 @@ coverage tests enforce the rule: `handle-guard-coverage.test.ts` in Embedded
 Runtime for the third launcher process, and the same file in Filesystem Custody
 for its whole `test` command. A leak a guard finds is fixed, not allowed.
 Agent Execution, Provider Access and Runtime Security run hundreds of contained-turn
-files in one command each, so they adopt guards together with the library packages
-of the program plan.
+files in one command each, so they adopt guards together with LIB-PROCESS,
+LIB-CODEX-1 and STORE-2-core.
