@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import test, { after } from "node:test";
+import { guardHandles } from "@get-modular/conformance";
 
 import {
   copyTrustedClaudeCodeSetupScope,
@@ -7,6 +8,9 @@ import {
   copyTrustedContainedTurnScope,
   TRUSTED_RUNTIME_ACCESS_SCOPE_LIMITS,
 } from "../../../dist/composition/trusted-runtime-access-scope.js";
+
+// Count handles before this file opens any.
+const handles = guardHandles();
 
 const values = (length: number, prefix: string): string[] =>
   Array.from({ length }, (_, index) => `/${prefix}-${index}`);
@@ -297,3 +301,6 @@ test("rejects a collection whose length mutates between precheck and copy", () =
   claude.pathEntries = withMutatingLength(claude.pathEntries);
   assert.equal(copyTrustedClaudeCodeSetupScope(claude), undefined);
 });
+
+// Last top-level statement: file-level after hooks run in registration order, so this check runs after every other cleanup of this file.
+after(() => handles.check());

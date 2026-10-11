@@ -1,11 +1,15 @@
 import assert from "node:assert/strict";
 import { access, readFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
-import test from "node:test";
+import test, { after } from "node:test";
+import { guardHandles } from "@get-modular/conformance";
 import { fileURLToPath } from "node:url";
 
 import { createBuildClaudeCodeSetupView } from "../../dist/composition/claude-code-setup-inspection-planner.js";
 import { createNodeOpaqueReferenceDigest } from "../../dist/composition/opaque-reference-digest.js";
+
+// Count handles before this file opens any.
+const handles = guardHandles();
 
 const referenceDigest = createNodeOpaqueReferenceDigest();
 
@@ -362,3 +366,6 @@ test("applies the public diagnostic budget after deterministic normalization", a
   assert.deepEqual(first.diagnostics, first.diagnostics.toSorted((left, right) =>
     `${left.code}:${left.safeRef ?? ""}`.localeCompare(`${right.code}:${right.safeRef ?? ""}`)));
 });
+
+// Last top-level statement: file-level after hooks run in registration order, so this check runs after every other cleanup of this file.
+after(() => handles.check());
