@@ -123,7 +123,7 @@ export async function readProductSource(root: string, tracked: readonly string[]
   const embeddedLiteral = /export const testProcesses = (\[[\s\S]*?\n\]);/u.exec(embeddedSource);
   assert.ok(embeddedLiteral, 'explicit original Embedded Runtime process inventory required');
   const embeddedArgv = array(JSON.parse(embeddedLiteral[1]!)).map(argv => { assert.ok(array(argv).every(v => typeof v === 'string')); return argv as string[]; });
-  assert.equal(embeddedArgv.length, 2);
+  assert.equal(embeddedArgv.length, 3);
   const fullFiles: string[] = [];
   for (const pattern of aePatterns) {
     const matches: string[] = [];
@@ -171,7 +171,7 @@ export async function readProductSource(root: string, tracked: readonly string[]
       const literal = /export const testProcesses = (\[[\s\S]*?\n\]);/u.exec(source)?.[1];
       assert.ok(literal, 'explicit ER process source required');
       const parsed: unknown = JSON.parse(literal);
-      assert.ok(Array.isArray(parsed) && parsed.length === 2 && parsed.every(args => Array.isArray(args) && args.every(arg => typeof arg === 'string')));
+      assert.ok(Array.isArray(parsed) && parsed.length === 3 && parsed.every(args => Array.isArray(args) && args.every(arg => typeof arg === 'string')));
       processes = (parsed as string[][]).map(args => ['--test-reporter=./scripts/adoption-test-reporter.mjs', ...args]);
     } else {
       const args = runners[id as PackageId].split(' ');
@@ -286,14 +286,14 @@ function assertReceiptPlatform(report: Record<string, unknown>, expected: Expect
 function assertEmbeddedProcesses(report: Record<string, unknown>, observation: Record<string, unknown>, id: PackageId): void {
   if (id === 'embedded-runtime') {
     const children = array(report.embeddedProcesses).map(object), streams = array(observation.streams).map(object);
-    assert.equal(children.length, 2, 'both actual Embedded Runtime exits required');
+    assert.equal(children.length, 3, 'all actual Embedded Runtime exits required');
     assert.deepEqual(children, streams.map(stream => stream.original), 'original ER stream custody drift');
   } else { assert.equal(report.embeddedProcesses, null); }
 }
 function assertTestObservation(observation: Record<string, unknown>, context: { id: PackageId; index: number; selected: string[]; root: string }): void {
   const { id, index, selected, root } = context;
   const summaries = array(observation.summaries).map(object);
-  assert.equal(summaries.length, id === 'embedded-runtime' ? 2 : 1, 'actual process summaries missing');
+  assert.equal(summaries.length, id === 'embedded-runtime' ? 3 : 1, 'actual process summaries missing');
   for (const summary of summaries) {
     for (const key of ['tests', 'passed', 'failed', 'cancelled', 'skipped', 'todo']) {
     assert.ok(Number.isSafeInteger(summary[key]) && Number(summary[key]) >= 0, 'invalid summary count');

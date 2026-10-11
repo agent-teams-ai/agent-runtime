@@ -141,7 +141,8 @@ test("stable31 managed bytes stay exact and the current Foundation source policy
   const getModularAdditions = ["    - '@get-modular/resources'\n", "    - '@get-modular/conformance'\n"];
   const currentSourcePolicyBytes = await read("architecture/foundation/source-dependencies.yaml");
   assert.equal(currentSourcePolicyBytes.split(getModularAdditions[0]).length - 1, 2);
-  assert.equal(currentSourcePolicyBytes.split(getModularAdditions[1]).length - 1, 1);
+  // Conformance is admitted twice: for Embedded Runtime tests (AR-1c) and for Filesystem Custody tests (issue #189 handle guards).
+  assert.equal(currentSourcePolicyBytes.split(getModularAdditions[1]).length - 1, 2);
   // Get Modular train 1 (AR-2) admits resources in the Provider Access ordinary composition; reverse only this line.
   const accessAdmission = ["    packages: ['@get-modular/resources']\n", "    packages: []\n"];
   assert.equal(currentSourcePolicyBytes.split(accessAdmission[0]).length - 1, 1);

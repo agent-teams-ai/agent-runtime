@@ -10,11 +10,11 @@ const object = (value: unknown): Record<string, unknown> => {
 };
 
 interface Plan { executable: string; argv: string[]; cwd: string }
-// Fixed two-stream CI capture. Linux procfs corroborates live children when
+// Fixed three-stream CI capture. Linux procfs corroborates live children when
 // observed; spawnSync return metadata retains short children on either platform.
 // Capture identity is not OS executable attestation or artifact authentication.
 export function observeEmbeddedProcesses(plans: readonly Plan[], capture: string, commandPid: number): () => Promise<void> {
-  assert.equal(plans.length, 2);
+  assert.equal(plans.length, 3);
   assert.ok(Number.isSafeInteger(commandPid) && commandPid > 0);
   const identities = new Map<number, string>();
   const state: { stopped: boolean; failure: unknown } = { stopped: false, failure: null };
@@ -49,7 +49,7 @@ export function observeEmbeddedProcesses(plans: readonly Plan[], capture: string
     state.stopped = true; await running;
     if (state.failure !== null) { throw state.failure; }
     const records: unknown = JSON.parse(await readFile(join(capture, 'processes.json'), 'utf8'));
-    assert.ok(Array.isArray(records) && records.length === 2, 'two original spawn returns required');
+    assert.ok(Array.isArray(records) && records.length === 3, 'three original spawn returns required');
     const pids = new Set<number>();
     for (const [index, original] of records.entries()) {
       const record = original as Record<string, unknown>, plan = plans[index]!;
