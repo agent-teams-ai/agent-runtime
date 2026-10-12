@@ -21,9 +21,9 @@ git clone https://github.com/agent-teams-ai/agent-runtime.git   # full history, 
 cd agent-runtime
 git log -1 --format='%H %cd'
 git diff --stat aca6cbe7..origin/main -- scripts/ci scripts/docs architecture package.json pnpm-workspace.yaml .github/workflows 'packages/*/*/package.json'
-cat .node-version         # 24.21.0 on 2026-10-11; open #232 moves it to 26.11.1
-node --version            # must equal .node-version
-node -p "require('./package.json').packageManager"   # pnpm@11.18.0 on 2026-10-11
+node --version            # must print v26.11.1
+cat .node-version         # 26.11.1 (active default after #232)
+node -p "require('./package.json').packageManager"   # pnpm@11.18.0
 grep -n 'df9260b0' scripts/ci/conformance.ts scripts/ci/full-contract.json
 grep -n "fixed six roots" scripts/ci/package-execution.ts
 gh api repos/agent-teams-ai/agent-runtime/rules/branches/main --jq '.[] | select(.type=="required_status_checks") | .parameters.required_status_checks[].context'
@@ -43,7 +43,7 @@ Also check, per card:
 - every `file:line` the card cites still points at the same code;
 - for ACCESS-AUTH-FILE and ACCESS-REFRESH: the latest stable `openai/codex` release (`gh release list -R openai/codex --exclude-pre-releases --limit 3`) and whether these files changed between the pinned helper tag `rust-v0.153.4` (`ORDINARY_CODEX_AUTH_BINARY_SHA256`) and the latest stable release: `codex-rs/login/src/auth/storage.rs` (`AuthDotJson`, `save`), `codex-rs/login/src/token_data.rs`, `codex-rs/login/src/auth/manager.rs` (`refresh_token`, `should_refresh_proactively` and its constants), `codex-rs/app-server/src/request_processors/account_processor.rs` and `codex-rs/app-server/src/models_refresh_worker.rs`.
 
-If the default `node` on PATH differs from `.node-version`, put the bin directory of the pinned version first on PATH for every command (never switch the system Node); shell state may not persist between commands, so prefix each one.
+The owner migration of 2026-10-11 selects Node 26.11.1 as the active default. Put its bin directory first on PATH for every command (never switch the system Node); shell state may not persist between commands, so prefix each one. Invoke the retained Node 24 Corepack JavaScript with the selected Node executable and use a job-owned pnpm shim. Keep Node 24.21.0 as an explicit compatibility lane.
 
 ## 2. Goal
 
@@ -104,7 +104,7 @@ ISSUE-189-SYNC is done (decision 48).
 ## 6. Environment and commands
 
 - **Clone fresh** from `origin/main` for every pull request, with full history: `test:ci` reads `df9260b0` and `ccf6d6f8`. Branch names `<type>/<topic>`, for example `docs/ordinary-decision-records`; never `codex/...`.
-- **agent-runtime toolchain:** Node from `.node-version` (24.21.0 on 2026-10-11; open #232 moves it to 26.11.1; `engines` is `>=24.21.0 <25 || >=26.10.0 <27` with `engine-strict`), pnpm from `packageManager` (`corepack enable && corepack install --global pnpm@<version>`, then `pnpm install --frozen-lockfile`). Node 24.18 fails `pnpm install`. Never run `n install` or `n <version>`: it switches the system Node; use the versions directory of the pinned version.
+- **agent-runtime toolchain:** Node 26.11.1 is the active default (`.node-version`; `engines` is `>=24.21.0 <25 || >=26.10.0 <27` with `engine-strict`), with Node 24.21.0 retained as an explicit compatibility lane. Use pnpm 11.18.0 through the retained Node 24 Corepack JavaScript invoked by the selected Node executable and a job-owned pnpm shim, then run `pnpm install --frozen-lockfile`; do not install pnpm globally. Historical evidence remains that Node 24.18 fails `pnpm install`. Never run `n install` or `n <version>`: it switches the system Node; use the versions directory of the pinned version.
 - **Other repositories:** Engineering Foundation, modularity-host-TEST and get-modular use pnpm 11.20.0; `agent-teams-ai/.github` uses pnpm 11.18.0. Read each repository's `AGENTS.md`, checks and required contexts before the first change there.
 - **agent-runtime checks, in this order, on the final head:**
   1. `pnpm check:changed` while working;
@@ -118,7 +118,7 @@ ISSUE-189-SYNC is done (decision 48).
 
 ## 7. Gotchas
 
-1. **CI contracts (plan section 2.3 item 1).** `scripts/ci/conformance.ts` compares root `package.json` metadata, the leaf command inventory and the source policy with the baseline `df9260b0`, asserts `.node-version`, freezes the platform digests that existed at `73c771f2` and hard-codes the `foundation` and `docs` pull request obligations; `scripts/docs/consumer-migration.test.mjs:136-210` authenticates the source policy through a chain of reversal steps; the product fanout accepts exactly six packages with exact `test` scripts (`scripts/ci/package-execution.ts`, `scripts/ci/product-fanout-contract.ts`, `scripts/ci/product-workflow-contract.ts`, matrices in `ci-product.yml` and `ci-darwin-packages.yml`). A new package, a new source-policy root or entrypoint, a changed package `test` script, a root dependency or a new `check` command fails required checks until CI-CONTRACT-1 lands.
+1. **CI contracts (plan section 2.3 item 1).** `scripts/ci/conformance.ts` compares root `package.json` metadata, the leaf command inventory and the source policy with the baseline `df9260b0`, asserts `.node-version` at `26.11.1`, pins platform digests in `scripts/ci/platform-contract.json`, authenticates the `73c771f2` PostgreSQL obligations through the exact Node bootstrap reversal and hard-codes the `foundation` and `docs` pull request obligations; `scripts/docs/consumer-migration.test.mjs:136-210` authenticates the source policy through a chain of reversal steps; the product fanout accepts exactly six packages with exact `test` scripts (`scripts/ci/package-execution.ts`, `scripts/ci/product-fanout-contract.ts`, `scripts/ci/product-workflow-contract.ts`, matrices in `ci-product.yml` and `ci-darwin-packages.yml`). A new package, a new source-policy root or entrypoint, a changed package `test` script, a root dependency or a new `check` command fails required checks until CI-CONTRACT-1 lands.
 2. **Source policy edits:** after any change to `architecture/foundation/source-dependencies.yaml`, add a reversal step for exactly the added lines at the top of the chain in `scripts/docs/consumer-migration.test.mjs:136-150` (pattern: the `comparatorAdmission` and `namespaceAdditions` steps), unless CI-CONTRACT-1 replaced the chain. Recheck after every rebase.
 3. **Registries a new or moved source file touches:** the source policy (roots are directories, entrypoints are per file), `architecture/get-modular/consumer-profile.json` census edges (the check prints actual against expected; there is no write mode), `architecture/feature-module-standard/ordinary-scope.json`. A new package also needs `packageRoots`, a boundary, `architecture/foundation/quality-source-coverage.yaml` `compilerProjects`, the Feature Module Standard profile and the product fanout entries. Editing `architecture/feature-module-standard/candidate-profile.json` changes `fms.sha256` in `consumer-profile.json`.
 4. **Workflow pins:** job definitions of `postgres-durability`, `runtime-macos` and `macos-product` and the bytes of `ci-darwin-packages.yml` are digest-pinned in `scripts/ci/platform-contract.json`; `postgres-durability` is also frozen to its `73c771f2` value by `scripts/ci/conformance.ts:305-306`; `scripts/ci/nightly-contract.ts:34-37` requires reused jobs to match the current `platform-contract.json`.

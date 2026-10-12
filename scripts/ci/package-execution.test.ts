@@ -247,9 +247,9 @@ test('eight literal shards and explicit platform contract reject unknown, array,
   assert.throws(() => partitionExecutionFiles(['a', 'b', 'c'], 3), /index/);
   const linux = { platform: 'linux', arch: 'x64', uid: 1001, runnerOS: 'Linux', runnerArch: 'X64', execPath: process.execPath };
   validatePlatform('linux-x64', linux);
-  const mac = { platform: 'darwin', arch: 'arm64', uid: 501, runnerOS: 'macOS', runnerArch: 'ARM64', execPath: '/Users/runner/hostedtoolcache/node/24.21.0/arm64/bin/node' };
+  const mac = { platform: 'darwin', arch: 'arm64', uid: 501, runnerOS: 'macOS', runnerArch: 'ARM64', execPath: '/Users/runner/hostedtoolcache/node/26.11.1/arm64/bin/node' };
   validatePlatform('darwin-arm64', mac);
-  for (const bad of [linux, { ...mac, uid: 0 }, { ...mac, arch: 'x64' }, { ...mac, runnerOS: 'Linux' }, { ...mac, runnerArch: 'X64' }, { ...mac, execPath: process.execPath }, { ...mac, execPath: mac.execPath.replace('24.21.0', '24.18.0') }]) {
+  for (const bad of [linux, { ...mac, uid: 0 }, { ...mac, arch: 'x64' }, { ...mac, runnerOS: 'Linux' }, { ...mac, runnerArch: 'X64' }, { ...mac, execPath: process.execPath }, { ...mac, execPath: mac.execPath.replace('26.11.1', '24.18.0') }]) {
     assert.throws(() => validatePlatform('darwin-arm64', bad));
   }
   assert.throws(() => validatePlatform('linux-x64', mac));

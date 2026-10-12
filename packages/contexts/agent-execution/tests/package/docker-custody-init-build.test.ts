@@ -84,7 +84,7 @@ test("installed pinned Bun builds identical real init bytes in fresh contexts an
     assert.equal(manifest.tool.version, "1.3.11");
     assert.match(manifest.source.revision, /^[0-9a-f]{40}$/u);
     assert.equal(manifest.image.platform, "linux/amd64");
-    assert.equal(manifest.image.base, "node@sha256:6f7b03f7c2c8e2e784dcf9295400527b9b1270fd37b7e9a7285cf83b6951452d");
+    assert.equal(manifest.image.base, "node@sha256:86f07bc9c5dce4578cf37e5a418b7bfc7f817cda25cde66e2b66e95ed86c4567");
     assert.deepEqual(readFileSync(join(output, "Dockerfile")), readFileSync(new URL("../../scripts/docker-custody-init/Dockerfile", import.meta.url)));
     const refusal = spawnSync(process.execPath, ["--no-addons", "--no-global-search-paths", join(output, "ar-custody-init.mjs")], {
       cwd, env: {}, encoding: "utf8", timeout: 5000, maxBuffer: 4096,

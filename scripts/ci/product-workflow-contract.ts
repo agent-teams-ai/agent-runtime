@@ -11,7 +11,7 @@ const upload = 'actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
 const download = 'actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c';
 const revisionGuard = 'set -euo pipefail\n[[ "$EXPECTED_REVISION" =~ ^[a-f0-9]{40}$ ]]\ntest "$(git rev-parse HEAD)" = "$EXPECTED_REVISION"\n';
 const retainedHistory = 'set -euo pipefail\nobject=8e5e859d10981e1623d0617e933afc68a9e8770c\nif ! git cat-file -e "$object^{commit}"; then\n  git fetch --no-tags origin "$object"\nfi\ntest "$(git rev-parse "$object^{commit}")" = "$object"\ngit fsck --connectivity-only --no-reflogs "$object"\n';
-const enablePnpm = 'corepack enable\ncorepack install --global pnpm@11.18.0\n';
+const enablePnpm = "selectedNode=\"$(node -p 'process.execPath')\"\ncorepackJs=\"$RUNNER_TOOL_CACHE/node/24.21.0/$(node -p 'process.arch')/lib/node_modules/corepack/dist/corepack.js\"\ntest -f \"$corepackJs\"\nexport COREPACK_HOME=\"$RUNNER_TEMP/node-toolchain/corepack\"\nmkdir -p \"$RUNNER_TEMP/node-toolchain/bin\" \"$COREPACK_HOME\"\nprintf '#!/bin/sh\\nexec \"%s\" \"%s\" pnpm \"$@\"\\n' \"$selectedNode\" \"$corepackJs\" > \"$RUNNER_TEMP/node-toolchain/bin/pnpm\"\nchmod 755 \"$RUNNER_TEMP/node-toolchain/bin/pnpm\"\nprintf '%s\\n' \"$RUNNER_TEMP/node-toolchain/bin\" >> \"$GITHUB_PATH\"\nprintf 'COREPACK_HOME=%s\\n' \"$COREPACK_HOME\" >> \"$GITHUB_ENV\"\n\"$selectedNode\" \"$corepackJs\" pnpm --version\n";
 const rootEvidenceBinding = "set -euo pipefail\nprintf 'CI_EVIDENCE_DIR=%s/ci-product-root\\n' \"$RUNNER_TEMP\" >> \"$GITHUB_ENV\"\n";
 const packageEvidenceBinding = "set -euo pipefail\nprintf 'CI_EVIDENCE_DIR=%s/ci-product-shard\\n' \"$RUNNER_TEMP\" >> \"$GITHUB_ENV\"\n";
 const aggregateEvidenceBinding = "set -euo pipefail\nprintf 'CI_PACKAGE_REPORT_DIR=%s/ci-product-reports/packages\\n' \"$RUNNER_TEMP\" >> \"$GITHUB_ENV\"\nprintf 'CI_ROOT_REPORT_DIR=%s/ci-product-reports/root\\n' \"$RUNNER_TEMP\" >> \"$GITHUB_ENV\"\n";
@@ -61,10 +61,12 @@ export function assertProductWorkflow(value: unknown): void {
     const guard = String(guardStep.run);
     assert.equal(guardStep.shell, 'bash');
     assert.equal(guard, revisionGuard);
-    assert.deepEqual(steps.find(step => step.uses === setup)?.with, { 'node-version-file': '.node-version' });
+    assert.deepEqual(steps.find(step => step.uses === setup && object(step.with)['node-version-file'] === '.node-version')?.with, { 'node-version-file': '.node-version' });
+    assert.deepEqual(steps.filter(step => step.uses === setup).map(step => step.with), [
+      { 'node-version': '24.21.0', 'package-manager-cache': false }, { 'node-version-file': '.node-version' } ]);
     assert.equal(historyStep.shell, 'bash'); assert.equal(historyStep.run, retainedHistory);
     assert.equal(steps.filter(step => step.uses === checkout).length, 1);
-    assert.equal(steps.filter(step => step.uses === setup).length, 1);
+    assert.equal(steps.filter(step => step.uses === setup).length, 2);
     assert.equal(steps.filter(step => step.uses === upload).length, name === 'root' ? 2 : 0);
     assert.equal(steps.filter(step => step.uses === download).length, name === 'aggregate' ? 2 : 0);
     const runs = steps.filter(step => step.run !== undefined).map(step => step.run);
@@ -72,11 +74,11 @@ export function assertProductWorkflow(value: unknown): void {
     assert.ok(runs.includes(enablePnpm));
     assertProductSteps(steps);
     const sequence = steps.map(step => step.uses ?? step.run);
-    const rootSequence = [checkout, revisionGuard, retainedHistory, setup, 'node scripts/ci/gate.ts revision', enablePnpm,
+    const rootSequence = [checkout, revisionGuard, retainedHistory, setup, setup, 'node scripts/ci/gate.ts revision', enablePnpm,
       'pnpm install --frozen-lockfile', rootEvidenceBinding, 'node scripts/ci/product-fanout-contract.ts custody-start',
       "pnpm --filter './packages/**' -r run clean", 'pnpm product:build', ...phaseEntries.map(entry => `node scripts/ci/measure.ts ${entry}`),
       'node scripts/ci/product-fanout-contract.ts custody-end', upload, upload];
-    const aggregateSequence = [checkout, revisionGuard, retainedHistory, setup, 'node scripts/ci/product-fanout-contract.ts results', enablePnpm,
+    const aggregateSequence = [checkout, revisionGuard, retainedHistory, setup, setup, 'node scripts/ci/product-fanout-contract.ts results', enablePnpm,
       'pnpm install --frozen-lockfile', aggregateEvidenceBinding, download, download, 'node scripts/ci/product-fanout-contract.ts evidence'];
     assert.deepEqual(sequence, name === 'root' ? rootSequence : aggregateSequence);
 
@@ -129,6 +131,7 @@ export function assertShardWorkflow(value: unknown): void {
   assert.deepEqual(steps, [
     { uses: checkout, with: { ref: '${{ inputs.revision }}', 'persist-credentials': false, 'fetch-depth': 0 } },
     { shell: 'bash', run: revisionGuard }, { shell: 'bash', run: retainedHistory },
+    { uses: setup, with: { 'node-version': '24.21.0', 'package-manager-cache': false } },
     { uses: setup, with: { 'node-version-file': '.node-version' } },
     { run: 'node scripts/ci/gate.ts revision' }, { run: enablePnpm }, { run: 'pnpm install --frozen-lockfile' },
     { shell: 'bash', run: packageEvidenceBinding },
@@ -150,6 +153,7 @@ const gitOwner = { GIT_AUTHOR_NAME: 'iliya', GIT_AUTHOR_EMAIL: 'iliyazelenkog@gm
 function custodySteps(revision: string, guardCommand: string): Record<string, unknown>[] {
   return [ { uses: checkout, with: { ref: revision, 'persist-credentials': false, 'fetch-depth': 0 } },
     { shell: 'bash', run: revisionGuard }, { shell: 'bash', run: retainedHistory },
+    { uses: setup, with: { 'node-version': '24.21.0', 'package-manager-cache': false } },
     { uses: setup, with: { 'node-version-file': '.node-version' } }, { run: guardCommand },
     { run: enablePnpm }, { run: 'pnpm install --frozen-lockfile' } ];
 }
@@ -215,7 +219,7 @@ export function validatePlatform(target: ExecutionTarget, observed: PlatformObse
   assert.equal(observed.runnerArch, mac ? 'ARM64' : 'X64', 'runner architecture mismatch');
   if (mac) {
     assert.ok(Number.isSafeInteger(observed.uid) && Number(observed.uid) > 0, 'Mac tests require non-root UID');
-    assert.match(observed.execPath, /^\/Users\/runner\/hostedtoolcache\/node\/24\.21\.0\/arm64\/bin\/node$/u, 'pinned Mac toolcache Node required');
+    assert.match(observed.execPath, /^\/Users\/runner\/hostedtoolcache\/node\/26\.11\.1\/arm64\/bin\/node$/u, 'pinned Mac toolcache Node required');
   }
 }
 export function workflowIdentity(env: NodeJS.ProcessEnv): WorkflowIdentity {

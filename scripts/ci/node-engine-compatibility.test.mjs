@@ -6,9 +6,9 @@ import {join} from "node:path";
 import test from "node:test";
 import {auditNodeEngineCompatibility, packageManifests, satisfiesNodeRange} from "./audit-node-engine-compatibility.mjs";
 
-test("qualified Node versions accept production 24 and Node 26 while skipping 25", () => {
+test("qualified Node versions accept default 26 and compatibility 24 while skipping 25", () => {
   const range = ">=24.21.0 <25 || >=26.10.0 <27";
-  for (const target of ["24.21.0", "24.22.0", "26.10.0", "26.14.2"]) {
+  for (const target of ["24.21.0", "24.22.0", "26.10.0", "26.11.1", "26.14.2"]) {
     assert.equal(satisfiesNodeRange(range, target), true, target);
   }
   for (const target of ["24.18.0", "24.20.9", "25.0.0", "26.9.9", "27.0.0"]) {
@@ -20,8 +20,8 @@ test("published engine ranges catch a dependency that rejects Node 26", () => {
   const lockfile = `packages:\n\n  'example@1.0.0':\n    engines: {node: '>=24.18.0 <25'}\n`;
   const result = auditNodeEngineCompatibility([], lockfile);
   assert.deepEqual(result.find(({target}) => target === "24.21.0"), {target: "24.21.0", blockers: []});
-  assert.deepEqual(result.find(({target}) => target === "26.10.0"), {
-    target: "26.10.0",
+  assert.deepEqual(result.find(({target}) => target === "26.11.1"), {
+    target: "26.11.1",
     blockers: [{name: "example@1.0.0", range: ">=24.18.0 <25"}],
   });
 });
@@ -137,12 +137,12 @@ test("preinstall audit admits the current default floor and reports a dependency
   writeFileSync(manifest, JSON.stringify({name: "current-floor", engines: {node: ">=24.21.0 <25 || >=26.10.0 <27"}}));
   const compatible = auditNodeEngineCompatibility([manifest], "packages:\n");
   assert.deepEqual(compatible, [
-    {target: "24.21.0", blockers: []}, {target: "26.10.0", blockers: []},
+    {target: "24.21.0", blockers: []}, {target: "26.11.1", blockers: []},
   ]);
   const blocked = auditNodeEngineCompatibility([manifest],
     "packages:\n  dependency@1.0.0:\n    engines: {node: '>=24.22.0 <25 || >=26.10.0 <27'}\n");
   assert.deepEqual(blocked, [
     {target: "24.21.0", blockers: [{name: "dependency@1.0.0", range: ">=24.22.0 <25 || >=26.10.0 <27"}]},
-    {target: "26.10.0", blockers: []},
+    {target: "26.11.1", blockers: []},
   ]);
 });

@@ -239,6 +239,7 @@ test("stable31 managed bytes stay exact and the current Foundation source policy
   assert.equal(manifest.scripts["docs:qualification"], "pnpm docs:qualification:typecheck && pnpm docs:qualification:serial && pnpm docs:qualification:portable");
   assert.equal(manifest.scripts["docs:qualification:typecheck"], "tsc --project tsconfig.docs-qualification.json --noEmit --pretty false");
   assert.equal(manifest.scripts["docs:qualification:serial"], "node --test --test-concurrency=1 scripts/docs/docs-protocol-adoption.test.mjs scripts/docs/consumer-migration.test.mjs scripts/docs/managed-target-contract.test.mjs scripts/docs/managed-installed-target.test.mjs scripts/docs/portable-authoring-policy.test.mts");
+  assert.equal(manifest.scripts["docs:qualification:legacy"], "node scripts/docs/run-legacy-managed-target-test.mts");
   for (const file of portableFiles) {
     const entry = await read(file);
     assert.match(entry, /test\("portable authoring preserves runtime-/u);

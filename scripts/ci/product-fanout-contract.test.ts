@@ -30,7 +30,7 @@ async function fixture() {
   };
   await put('package.json', JSON.stringify({ scripts }));
   for (const path of ['pnpm-lock.yaml', 'pnpm-workspace.yaml', 'tsconfig.json']) { await put(path, 'TEST'); }
-  await put('.node-version', '24.21.0');
+  await put('.node-version', '26.11.1');
   await put('.github/workflows/ci-product.yml', '# disposable fixture');
   await put('scripts/ci/package-execution.ts', await readFile(new URL('./package-execution.ts', import.meta.url), 'utf8'));
   await put('scripts/ci/product-workflow-contract.ts', await readFile(new URL('./product-workflow-contract.ts', import.meta.url), 'utf8'));
@@ -106,7 +106,7 @@ async function packageReports(root: string, expected: ExpectedEvidence, requeste
     assert.equal(commandExit(commands[2]!, id === 'embedded-runtime' ? 3 : 1, undefined, plans, Object.keys(expected.inputs).map(file => join(root, file))), 0, `producer ${shard}`);
     receipts.push({ schemaVersion: 3, target: 'linux-x64', workflow: expected.workflow, nativeBuild: null, embeddedProcesses: id === 'embedded-runtime' ? JSON.parse(await readFile(join(capture, 'processes.json'), 'utf8')) : null, requestedShard: shard, packageName: `@agent-teams/${id}`,
       sourceSha: expected.sha, sourceTree: expected.inputTree, checkoutRoot: root, selection,
-      platform: 'linux', arch: 'x64', uid: process.getuid?.() ?? null, node: 'v24.21.0', execPath: process.execPath, pnpm: '11.18.0',
+      platform: 'linux', arch: 'x64', uid: process.getuid?.() ?? null, node: 'v26.11.1', execPath: process.execPath, pnpm: '11.18.0',
       runnerImage: { os: null, version: null, runnerOS: 'Linux', runnerArch: 'X64' }, runnerHash: expected.inputs['scripts/ci/package-execution.ts']!,
       before: { ...expected.manifests }, after: { ...expected.manifests }, sourceBefore: { ...expected.inputs }, sourceAfter: { ...expected.inputs },
       commands, exitCode: 0, failure: null, coverage: 'actual disposable TEST processes; fixture source identity, not current product suite' });
@@ -116,7 +116,7 @@ async function packageReports(root: string, expected: ExpectedEvidence, requeste
 function phaseReports(expected: ExpectedEvidence) {
   const names = [['typecheck', 'test'], ['lint:typed'], ['quality:native']];
   return phaseEntries.map((entry, i) => ({ entry, sha: expected.sha, inputTree: expected.inputTree, platform: 'linux',
-    node: 'v24.21.0', pnpm: '11.18.0', arm: 'production', runnerImage: { arch: 'X64' }, digests: { ...expected.measureDigests },
+    node: 'v26.11.1', pnpm: '11.18.0', arm: 'production', runnerImage: { arch: 'X64' }, digests: { ...expected.measureDigests },
     inventory: expected.inventories[i], phases: names[i]?.map(script => ({ script, code: 0, signal: null,
       commands: expected.inventories[i]?.filter(command => command.script === script), tests: [phaseEvent()] })) }));
 }
@@ -124,7 +124,7 @@ function phaseReports(expected: ExpectedEvidence) {
 // Mac metadata exercise rejecting contracts. They never qualify Mac execution.
 function macDecoderFixture(receipts: PackageReceipt[], expected: ExpectedEvidence): { receipts: PackageReceipt[]; expected: ExpectedEvidence } {
   const result = structuredClone(receipts);
-  const execPath = '/Users/runner/hostedtoolcache/node/24.21.0/arm64/bin/node';
+  const execPath = '/Users/runner/hostedtoolcache/node/26.11.1/arm64/bin/node';
   for (const report of result) {
     report.target = 'darwin-arm64'; report.platform = 'darwin'; report.arch = 'arm64'; report.uid = 501; report.execPath = execPath;
     report.coverage = 'synthetic Mac decoder metadata; actual tests ran on disposable Linux TEST; no Mac qualification';
@@ -143,7 +143,7 @@ function macDecoderFixture(receipts: PackageReceipt[], expected: ExpectedEvidenc
     if (report.embeddedProcesses) { report.embeddedProcesses = report.commands[2]!.observation.streams.map(stream => stream.original!); }
     const output = join(report.checkoutRoot, 'packages/platform/filesystem-custody/dist/rename-no-replace.node');
     const sdk = '/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk';
-    const headers = '/Users/runner/hostedtoolcache/node/24.21.0/arm64/include/node';
+    const headers = '/Users/runner/hostedtoolcache/node/26.11.1/arm64/include/node';
     const specs: Record<string, [string, string[], string]> = {
       compilerDriver: ['/usr/bin/xcrun', ['--find', 'cc'], '/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang'],
       driverTrace: ['cc', ['-###', '-O2', '-Wall', '-Wextra', '-Werror', '-fPIC', '-bundle', '-undefined', 'dynamic_lookup', '-lsandbox', `-I${headers}`, 'native/rename-no-replace.c', '-o', 'dist/rename-no-replace.node'], ''],

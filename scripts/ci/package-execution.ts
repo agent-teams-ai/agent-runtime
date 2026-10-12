@@ -383,14 +383,14 @@ export async function executePackage(root: string, id: unknown, revision: string
     validatePlatform(target, { platform: process.platform, arch: process.arch, uid: report.uid,
       runnerOS: report.runnerImage.runnerOS, runnerArch: report.runnerImage.runnerArch, execPath: process.execPath });
     report.workflow = workflowIdentity(process.env);
-    assert.equal(process.version, 'v24.21.0', 'pinned Node required'); assert.ok(!process.env.NODE_OPTIONS, 'caller Node options unsupported');
+    assert.equal(process.version, 'v26.11.1', 'pinned Node required'); assert.ok(!process.env.NODE_OPTIONS, 'caller Node options unsupported');
     verifySource(root, revision);
     report.sourceTree = git(root, 'rev-parse', 'HEAD^{tree}');
     report.pnpm = execFileSync('pnpm', ['--version'], { cwd: root, encoding: 'utf8' }).trim();
     assert.equal(report.pnpm, '11.18.0', 'pinned pnpm required');
     report.before = await snapshotScripts(root); report.sourceBefore = await snapshotSource(root);
     report.selection = await executionSelection(root, shard);
-    assert.equal((await readFile(join(root, '.node-version'), 'utf8')).trim(), '24.21.0', 'Node file drift');
+    assert.equal((await readFile(join(root, '.node-version'), 'utf8')).trim(), '26.11.1', 'Node file drift');
     const env = { ...process.env }; delete env.NODE_TEST_CONTEXT;
     const testEnv = { ...env, NODE_OPTIONS: `--test-reporter=${self}` };
     const plans = await packageStreamPlans(root, shard, report.selection);
@@ -473,7 +473,7 @@ export async function executeReference(root: string, revision: string, output: s
   try {
     assert.equal(process.env.EXECUTION_TARGET, 'darwin-arm64');
     validatePlatform('darwin-arm64', { ...report, runnerOS: report.runnerImage.runnerOS, runnerArch: report.runnerImage.runnerArch });
-    assert.equal(process.version, 'v24.21.0'); assert.ok(!process.env.NODE_OPTIONS);
+    assert.equal(process.version, 'v26.11.1'); assert.ok(!process.env.NODE_OPTIONS);
     report.workflow = workflowIdentity(process.env); verifySource(root, revision);
     report.sourceTree = git(root, 'rev-parse', 'HEAD^{tree}');
     report.pnpm = execFileSync('pnpm', ['--version'], { cwd: root, encoding: 'utf8' }).trim(); assert.equal(report.pnpm, '11.18.0');

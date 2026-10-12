@@ -49,7 +49,7 @@ export function supportedPrEnvironment(env: NodeJS.ProcessEnv, facts: RuntimeFac
     /^(?:NODE_OPTIONS|NODE_PATH|NODE_TEST_|NAPI_RS_|OXC_|LD_|DYLD_|TS_NODE_|TSX_|AGENT_TEAMS_|FOUNDATION_FIXTURE_|GIT_(?:OBJECT|ALTERNATE|REPLACE|SHALLOW|INDEX|WORK_TREE|DIR|CONFIG_COUNT|CONFIG_PARAMETERS)|PNPM_(?:HOME|PACKAGE|SUPPORTED)|npm_config_(?:node_options|node_linker|virtual_store|ignore_scripts|force|verify_store|platform|arch|libc|userconfig|globalconfig)|pnpm_config_(?:node_options|node_linker|virtual_store|platform|arch|libc))/iu.test(key));
   // These selftest inputs distinguish empty strings from absence (?? / undefined).
   const fixtureOverride = Object.keys(env).some(key => /^(?:CI_ER_|AE_ADOPTION_|CI_FOCUSED_EVIDENCE_DIR|FIXTURE_OWNER)/u.test(key));
-  return !override && !fixtureOverride && facts.execArgv.length === 0 && facts.node === 'v24.21.0' && facts.pnpm === '11.18.0'
+  return !override && !fixtureOverride && facts.execArgv.length === 0 && facts.node === 'v26.11.1' && facts.pnpm === '11.18.0'
     && facts.platform === 'linux' && facts.arch === 'x64' && facts.glibc === '2.39'
     && Object.entries(expected).every(([key, value]) => env[key] === value)
     && /^\d{8}\.\d+(?:\.\d+)?$/u.test(env.ImageVersion ?? '');
