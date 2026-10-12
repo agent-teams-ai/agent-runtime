@@ -4,6 +4,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 
 const expectedNodeVersion = "v24.21.0";
 const executableEnvironmentKey = "LEGACY_TEST_NODE_EXECUTABLE";
+const executableFallbackEnvironmentKey = "NODE24_TEST_EXECUTABLE";
 const childEnvironmentKey = "DOCS_LEGACY_MANAGED_TARGET_CHILD";
 const childEnvironmentValue = "run-on-node-24.21.0";
 const legacyTestFile = fileURLToPath(new URL("./managed-installed-target.test.mjs", import.meta.url));
@@ -17,9 +18,9 @@ function errorMessage(error: unknown): string {
 }
 
 export async function runLegacyManagedTargetTest(): Promise<number> {
-  const executable = process.env[executableEnvironmentKey];
+  const executable = process.env[executableEnvironmentKey] ?? process.env[executableFallbackEnvironmentKey];
   if (executable === undefined || executable === "") {
-    throw new Error(`${executableEnvironmentKey} must name the disposable Node ${expectedNodeVersion.slice(1)} executable`);
+    throw new Error(`${executableEnvironmentKey} or ${executableFallbackEnvironmentKey} must name the disposable Node ${expectedNodeVersion.slice(1)} executable`);
   }
 
   let observedVersion: string;
@@ -33,7 +34,7 @@ export async function runLegacyManagedTargetTest(): Promise<number> {
       windowsHide: true,
     }).trim();
   } catch (error) {
-    throw new Error(`cannot execute legacy TEST Node ${executable}: ${errorMessage(error)}`);
+    throw new Error(`cannot execute legacy TEST Node ${executable}: ${errorMessage(error)}`, { cause: error });
   }
   if (observedVersion !== expectedNodeVersion) {
     throw new Error(`legacy TEST Node must be exactly ${expectedNodeVersion}; observed ${observedVersion || "<empty>"}`);
@@ -60,7 +61,7 @@ export async function runLegacyManagedTargetTest(): Promise<number> {
       child.once("error", reject);
     });
   } catch (error) {
-    throw new Error(`cannot execute legacy TEST Node: ${errorMessage(error)}`);
+    throw new Error(`cannot execute legacy TEST Node: ${errorMessage(error)}`, { cause: error });
   } finally {
     for (const [signal, listener] of listeners) { process.removeListener(signal, listener); }
   }
