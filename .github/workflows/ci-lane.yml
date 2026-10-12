@@ -67,6 +67,13 @@ jobs:
           node-version: 24.21.0
           package-manager-cache: false
 
+      - name: Preserve exact Node 24 TEST executable
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(node -p 'process.version')" = v24.21.0
+          printf 'NODE24_TEST_EXECUTABLE=%s\n' "$(node -p 'process.execPath')" >> "$GITHUB_ENV"
+
       - name: Setup Node.js
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
@@ -136,6 +143,7 @@ jobs:
           EXPECTED_REVISION: ${{ inputs.revision }}
           BENCHMARK_ARM: ${{ inputs.arm }}
           CI_EVIDENCE_DIR: ${{ runner.temp }}/ci-evidence
+          LEGACY_TEST_NODE_EXECUTABLE: ${{ env.NODE24_TEST_EXECUTABLE }}
         run: node scripts/ci/measure.ts check:ci:docs
       - name: check:ci:product:packages
         if: ${{ !inputs.regressions && (inputs.script == 'check' || inputs.script == 'check:ci:product') }}

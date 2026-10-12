@@ -63,6 +63,10 @@ test("keeps semantic governance and separate qualification in every full reposit
     manifest.scripts["docs:governance"],
     "node --test scripts/docs/verify-frozen-document-bytes.test.mjs"
   );
+  assert.equal(
+    manifest.scripts["docs:qualification:legacy"],
+    "node scripts/docs/run-legacy-managed-target-test.mts"
+  );
   assert.deepEqual(routedScripts(manifest.scripts, "docs:protocol:check"), [
     "pnpm docs:check", "pnpm docs:governance",
   ]);
