@@ -89,7 +89,7 @@ const grantSettlementFailed = async (
  * claim. A read/replay/lost acknowledgement never manufactures start
  * authority; only the store's known `claimed` response can carry it.
  */
-// the ordered owner outcomes are intentionally fail-closed.
+// oxlint-disable-next-line complexity -- the ordered owner outcomes are intentionally fail-closed.
 export const claimContainedTurnWithConsumedGrants = async (
   dependencies: ContainedTurnKernelDependencies,
   operation: ContainedTurnKernelOperation,

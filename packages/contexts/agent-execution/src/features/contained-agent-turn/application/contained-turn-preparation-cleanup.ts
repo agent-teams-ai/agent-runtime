@@ -55,7 +55,7 @@ export type RetireContainedTurnPreparationOutcome =
  * atomically makes claim impossible and returns the one permit accepted by
  * custody and both grant owners. Unknown outcomes remain preparation debt.
  */
-// each argument is an independent authority binding.
+// oxlint-disable-next-line max-params -- each argument is an independent authority binding.
 export const retireAndCleanupContainedTurnPreparation = async (
   dependencies: ContainedTurnKernelDependencies,
   operation: ContainedTurnKernelOperation,

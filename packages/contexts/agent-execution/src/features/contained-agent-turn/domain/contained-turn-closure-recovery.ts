@@ -43,6 +43,7 @@ export type ContainedTurnClosureRecovery =
   };
 export type ContainedTurnPendingClosure = Extract<ContainedTurnClosureRecovery, { readonly kind: "required" }>;
 // The score counts closed-stage binding alternatives and null normalization, not control flow.
+// oxlint-disable-next-line complexity
 const closureRequestValue = (
   operation: ContainedTurnKernelOperation,
   stage: ContainedTurnClosureStage,
@@ -105,6 +106,7 @@ type NoWorkspaceFactFields = { readonly [Key in keyof ContainedTurnNoWorkspaceCl
 export function containedTurnNoWorkspaceClosureFact(operation: ContainedTurnKernelOperation): ContainedTurnNoWorkspaceClosureFact | undefined;
 export function containedTurnNoWorkspaceClosureFact(operation: ContainedTurnNoWorkspaceOperation): NoWorkspaceFactFields | undefined;
 // The count is the exact conjunction of independently proved no-start obligations.
+// oxlint-disable-next-line complexity
 export function containedTurnNoWorkspaceClosureFact(
   operation: ContainedTurnNoWorkspaceOperation,
 ): NoWorkspaceFactFields | undefined {

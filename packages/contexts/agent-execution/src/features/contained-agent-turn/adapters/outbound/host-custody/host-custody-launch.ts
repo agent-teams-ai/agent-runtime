@@ -339,7 +339,7 @@ const assertQualifiedPrivateFilesystemObjects = (
   }
 };
 
-// exact path, ancestry, inode, and qualified-alias guards remain one verification.
+// oxlint-disable-next-line complexity -- exact path, ancestry, inode, and qualified-alias guards remain one verification.
 export const verifyPrivateLaunchPaths = async (
   plan: HostCustodyLaunchPlan,
   workspaceRef: string,

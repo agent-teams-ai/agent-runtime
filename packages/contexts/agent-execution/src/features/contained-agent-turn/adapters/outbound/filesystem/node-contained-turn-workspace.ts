@@ -244,14 +244,14 @@ export interface NodeContainedTurnWorkspaceOwnerBackend {
   readonly workspace: NodeContainedTurnWorkspace;
 }
 
-// owner backend keeps the shared custody initialization and retention bindings together
+// oxlint-disable-next-line max-lines-per-function -- owner backend keeps the shared custody initialization and retention bindings together
 const createNodeContainedTurnWorkspaceBackend = (
   options: NodeContainedTurnWorkspaceOptions,
   retention: Pick<WorkspaceCapabilityRetention, "retain">,
   initializeNative?: (context: WorkspaceContext) => Promise<SelectedNativeWorkspaceBackend>,
 ): Promise<NodeContainedTurnWorkspaceOwnerBackend> => guardContainedTurnFilesystemOperation(
   "workspace_initialize",
-  // one shared legacy/owner custody engine
+  // oxlint-disable-next-line max-lines-per-function -- one shared legacy/owner custody engine
   async () => {
   const bound = await bindContainedTurnRootSet({
     canonicalProjectRoot: options.canonicalProjectRoot,

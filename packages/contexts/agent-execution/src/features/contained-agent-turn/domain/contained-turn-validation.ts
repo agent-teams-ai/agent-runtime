@@ -51,6 +51,7 @@ type IdentityKeys = "commandId" | "operationId" | "effectId" | "workspaceId" | "
 export type ContainedTurnIdentityValidatedOperation = Omit<ProofRecordsOperation, IdentityKeys> & Pick<ContainedTurnKernelOperation, IdentityKeys>; export type ContainedTurnProofValidatedOperation = Omit<ContainedTurnIdentityValidatedOperation, "proofs"> & Pick<ContainedTurnKernelOperation, "proofs">; export type ContainedTurnOutputValidatedOperation = Omit<ContainedTurnProofValidatedOperation, "output"> & Pick<ContainedTurnKernelOperation, "output">;
 
 // The count exhaustively validates every disjoint identity axis and evidence source.
+// oxlint-disable-next-line complexity
 function validateIdentities(operation: ProofRecordsOperation): asserts operation is ContainedTurnIdentityValidatedOperation {
   const primary: unknown[] = [operation.commandId, operation.operationId, operation.effectId];
   if (operation.workspaceId !== undefined) {primary.push(operation.workspaceId);}
@@ -266,6 +267,7 @@ const validateAuthorityBindings = (candidate: ContainedTurnOperationCollections 
 };
 
 // The count is the frozen orthogonal execution-axis invariant matrix, not lifecycle branching.
+// oxlint-disable-next-line complexity
 const validateExecutionAxes = (candidate: ContainedTurnOutputValidatedOperation): void => {
   if (candidate.effect.kind === "resolved") {
     invariant(
@@ -436,6 +438,7 @@ function validateOperationAuthority(candidate: ContainedTurnOperationCollections
 }
 
 // Complexity here is the explicit conjunction of orthogonal, fail-closed invariant families.
+// oxlint-disable-next-line complexity
 function validateCurrentOperation(candidate: unknown): asserts candidate is ContainedTurnKernelOperation {
   validateContainedTurnOperationShape(candidate);
   validateContainedTurnOperationCollections(candidate);

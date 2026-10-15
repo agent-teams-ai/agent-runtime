@@ -90,7 +90,7 @@ const providerAccessMatches = (
   && value.routeGeneration === String(receipt.bindingRevision)
   && value.credentialGeneration === String(receipt.credentialGeneration);
 
-// exact signed proof binding is intentionally one closed conjunction
+// oxlint-disable-next-line complexity -- exact signed proof binding is intentionally one closed conjunction
 export const verifiedProvisional = (input: Readonly<{
   decision: HostHttpProvisionalDecision; verifier: HostHttpVerifierV2; expectedKey: HostHttpSigningKey;
   ports: HttpEgressBrokerPorts; authorizationRequestId: string; request: HostHttpRequestProjection;
@@ -120,7 +120,7 @@ export const verifiedProvisional = (input: Readonly<{
     && !decision.policy.revoked && ports.guard.snapshot().state === "active";
 };
 
-// exact signed proof binding is intentionally one closed conjunction
+// oxlint-disable-next-line complexity -- exact signed proof binding is intentionally one closed conjunction
 export const verifiedGrant = (input: Readonly<{
   grant: HostHttpGrant; provisional: HostHttpProvisionalDecision; verifier: HostHttpVerifierV2;
   expectedKey: HostHttpSigningKey; ports: HttpEgressBrokerPorts; request: HostHttpRequestProjection;
