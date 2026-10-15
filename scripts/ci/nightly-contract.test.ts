@@ -18,8 +18,8 @@ const jobs = (workflow: Record<string, unknown>) => object(workflow.jobs);
 const job = (workflow: Record<string, unknown>, name: string) => object(jobs(workflow)[name]);
 // Literal independent obligations from reviewed main; never derive them from the helper.
 const platform = {
-  'postgres-durability': '75cb192e996ff0cc6b298c1ac79f6fa358d3905e5ca0454d8870b2c39918e787',
-  'runtime-macos': '1f295a3930d3a21f91c0e018177b5242db5b87d941aca75a22cc90608dedceca',
+  'postgres-durability': '720e6a6fee56fc80a9e90d652987ae17350062c134738757690ed945f4b8d172',
+  'runtime-macos': 'b96d464b23368e77f371c4d8410282fb69fb41fb04c3ebda2b316e2556b37ed2',
   'macos-product': '9560a3636efbb93c3d5313b0958cfd2eb1c364a837e2339f697a60c9c3b08e17',
 };
 const validate = ({ nightly, runtime }: Fixture) => validateNightlyWorkflow(nightly, runtime, platform);
@@ -39,7 +39,21 @@ export function registerNightlyContractTests(): void {
     const current = jobs((await fixture()).runtime);
     const rootCheckpoint = object(object(parse(execFileSync('git', ['show',
       'f97c9b79b73d37edcc85216fed975ce4f52e5268:.github/workflows/ci.yml'], { encoding: 'utf8' }))).jobs);
-    assert.deepEqual(unowned(current), unowned(rootCheckpoint), 'all accepted managed-runner Linux/PR/Foundation jobs remain exact');
+    // Restore only the independently specified Node bootstrap successor before
+    // comparing the original Linux/PR/Foundation obligations at their checkpoint.
+    const restored = structuredClone(current);
+    const postgres = object(restored['postgres-durability']);
+    const postgresSteps = postgres.steps as Array<Record<string, unknown>>;
+    assert.deepEqual(postgresSteps.filter(step => step.name === 'Setup Node 24 Corepack source'), [{
+      name: 'Setup Node 24 Corepack source', uses: 'actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38',
+      with: { 'node-version': '24.21.0', 'package-manager-cache': false },
+    }]);
+    assert.deepEqual(postgresSteps.find(step => step.name === 'Enable pinned pnpm'), {
+      name: 'Enable pinned pnpm', run: "selectedNode=\"$(node -p 'process.execPath')\"\ncorepackJs=\"$RUNNER_TOOL_CACHE/node/24.21.0/$(node -p 'process.arch')/lib/node_modules/corepack/dist/corepack.js\"\ntest -f \"$corepackJs\"\nexport COREPACK_HOME=\"$RUNNER_TEMP/node-toolchain/corepack\"\nmkdir -p \"$RUNNER_TEMP/node-toolchain/bin\" \"$COREPACK_HOME\"\nprintf '#!/bin/sh\\nexec \"%s\" \"%s\" pnpm \"$@\"\\n' \"$selectedNode\" \"$corepackJs\" > \"$RUNNER_TEMP/node-toolchain/bin/pnpm\"\nchmod 755 \"$RUNNER_TEMP/node-toolchain/bin/pnpm\"\nprintf '%s\\n' \"$RUNNER_TEMP/node-toolchain/bin\" >> \"$GITHUB_PATH\"\nprintf 'COREPACK_HOME=%s\\n' \"$COREPACK_HOME\" >> \"$GITHUB_ENV\"\n\"$selectedNode\" \"$corepackJs\" pnpm --version\n",
+    });
+    postgres.steps = postgresSteps.filter(step => step.name !== 'Setup Node 24 Corepack source').map(step =>
+      step.name === 'Enable pinned pnpm' ? { ...step, run: 'corepack enable\ncorepack install --global pnpm@11.18.0\n' } : step);
+    assert.deepEqual(unowned(restored), unowned(rootCheckpoint), 'all accepted managed-runner Linux/PR/Foundation obligations remain exact');
     const root = await mkdtemp(join(tmpdir(), 'mac-predecessor-TEST-')); t.after(() => rm(root, {recursive:true,force:true}));
     await mkdir(join(root, 'scripts/ci'), {recursive:true});
     await writeFile(join(root, '.git'), `gitdir: ${join(process.cwd(), '.git')}\n`);

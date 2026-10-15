@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import test, { after } from "node:test";
+import { guardHandles } from "@get-modular/conformance";
 
 import {
   AgentRuntimeHostDisposalIncompleteError,
@@ -7,6 +8,9 @@ import {
 } from "../../dist/composition/agent-runtime-host-disposal.js";
 import type { ContainedTurnAccessAuthority } from "../../dist/composition/contained-turn-access-authority.js";
 import type { AuthorityBoundContainedTurnCapability } from "../../dist/composition/contained-turn-authority-capability.js";
+
+// Count handles before this file opens any.
+const handles = guardHandles();
 
 const authority = () => ({
   authorityRevision: "runtime-access-authority:disposal-test",
@@ -124,3 +128,6 @@ test("a retry after the wait deadline joins the running ordinary drain", { timeo
   await retry;
   assert.equal(calls, 1);
 });
+
+// Last top-level statement: file-level after hooks run in registration order, so this check runs after every other cleanup of this file.
+after(() => handles.check());

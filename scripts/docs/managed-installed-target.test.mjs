@@ -15,10 +15,11 @@ import { readRetainedTargetCapture } from "./managed-target-captures.mjs";
 const repository = new URL("../../", import.meta.url);
 const digest = bytes => `sha256:${createHash("sha256").update(bytes).digest("hex")}`;
 const read = path => readFile(new URL(path, repository));
+const legacyChildEnvironment = process.env.DOCS_LEGACY_MANAGED_TARGET_CHILD === "run-on-node-24.21.0";
 
 // This fresh synthetic target exercises installed contracts only. It never grants
 // central Cohort authority, restores historical state, or changes consumer status.
-test("installed managed target bootstrap, receipt and refusals remain TEST-only", async () => {
+const runSyntheticLegacyTest = async () => {
   const allocation = await realpath(await mkdtemp(join(tmpdir(), "TEST-runtime-managed-")));
   const consumerRoot = join(allocation, "target");
   const retainedRoot = join(allocation, "retained");
@@ -74,10 +75,12 @@ test("installed managed target bootstrap, receipt and refusals remain TEST-only"
     assert.equal(receipt.cohort.schemaVersion, 2);
     assert.equal(receipt.schemas.managedState, 2);
     await retain("bootstrap-receipt.json", { authority: "TEST-only", receipt });
-    for (const path of [".node-version", "pnpm-lock.yaml", "package.json", "architecture/foundation/docs-protocol.yaml"]) {
+    for (const path of ["pnpm-lock.yaml", "package.json", "architecture/foundation/docs-protocol.yaml"]) {
       await mkdir(dirname(join(consumerRoot, path)), { recursive: true });
       await cp(new URL(path, repository), join(consumerRoot, path));
     }
+    await writeFile(join(consumerRoot, ".node-version"), "24.21.0\n");
+    assert.equal((await readFile(join(consumerRoot, ".node-version"))).toString(), "24.21.0\n");
     await writeFile(join(consumerRoot, "architecture/foundation/docs-consumer-integration.json"), `${JSON.stringify(profile, null, 2)}\n`);
     const plan = await planNodeConsumerIntegration({ consumerRoot, to: cohort.cohortId });
     await retain("plan.json", plan);
@@ -126,4 +129,14 @@ test("installed managed target bootstrap, receipt and refusals remain TEST-only"
     }
     await rm(allocation, { recursive: true, force: true });
   }
-});
+};
+
+if (!legacyChildEnvironment) {
+  const { runLegacyManagedTargetTest } = await import("./run-legacy-managed-target-test.mts");
+  test("synthetic TEST-only installed managed target runs through the Node 24.21.0 launcher", async () => {
+    assert.equal(await runLegacyManagedTargetTest(), 0);
+  });
+} else {
+  assert.equal(process.versions.node, "24.21.0", "legacy synthetic TEST child must use Node 24.21.0");
+  test("synthetic TEST-only installed managed target bootstrap, receipt and refusals", runSyntheticLegacyTest);
+}

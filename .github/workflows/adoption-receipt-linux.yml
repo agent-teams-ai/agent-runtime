@@ -187,6 +187,12 @@ jobs:
             fb2932fb8b846cc9c92ace7aa208df1d8bd93c5e \
             ff82eb593bad665937bae5ffdf10593f4179387d
 
+      - name: Setup Node 24 Corepack source
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24.21.0
+          package-manager-cache: false
+
       - name: Setup Node.js
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
@@ -194,8 +200,16 @@ jobs:
 
       - name: Enable pinned pnpm
         run: |
-          corepack enable
-          corepack install --global pnpm@11.18.0
+          selectedNode="$(node -p 'process.execPath')"
+          corepackJs="$RUNNER_TOOL_CACHE/node/24.21.0/$(node -p 'process.arch')/lib/node_modules/corepack/dist/corepack.js"
+          test -f "$corepackJs"
+          export COREPACK_HOME="$RUNNER_TEMP/node-toolchain/corepack"
+          mkdir -p "$RUNNER_TEMP/node-toolchain/bin" "$COREPACK_HOME"
+          printf '#!/bin/sh\nexec "%s" "%s" pnpm "$@"\n' "$selectedNode" "$corepackJs" > "$RUNNER_TEMP/node-toolchain/bin/pnpm"
+          chmod 755 "$RUNNER_TEMP/node-toolchain/bin/pnpm"
+          printf '%s\n' "$RUNNER_TEMP/node-toolchain/bin" >> "$GITHUB_PATH"
+          printf 'COREPACK_HOME=%s\n' "$COREPACK_HOME" >> "$GITHUB_ENV"
+          "$selectedNode" "$corepackJs" pnpm --version
 
       - name: Verify capture target and tools
         env:
@@ -204,7 +218,7 @@ jobs:
           node --input-type=module <<'NODE'
           import assert from 'node:assert/strict';
           assert.equal(`${process.platform}-${process.arch}`, process.env.CAPTURE_TARGET);
-          assert.equal(process.version, 'v24.21.0');
+          assert.equal(process.version, 'v26.11.1');
           NODE
           test "$(pnpm --version)" = "11.18.0"
 

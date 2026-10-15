@@ -1,4 +1,4 @@
-name: Node 26 Compatibility
+name: Node Default and Compatibility
 
 on:
   pull_request:
@@ -17,7 +17,11 @@ concurrency:
 
 jobs:
   qualify:
-    name: install-build-runtime (Node 26.10.0)
+    name: install-build-runtime (Node ${{ matrix.node }})
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [26.11.1, 24.21.0]
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     steps:
@@ -33,18 +37,32 @@ jobs:
           EXPECTED_REVISION: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
         run: test "$(git rev-parse HEAD)" = "$EXPECTED_REVISION"
 
+      - name: Setup Node 24 Corepack source
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24.21.0
+          package-manager-cache: false
+
       - name: Setup qualified Node.js
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
-          node-version: 26.10.0
+          node-version: ${{ matrix.node }}
 
       - name: Audit dependency Node engines
         run: node scripts/ci/audit-node-engine-compatibility.mjs --check
 
       - name: Enable pinned pnpm
         run: |
-          corepack enable
-          corepack install --global pnpm@11.18.0
+          selectedNode="$(node -p 'process.execPath')"
+          corepackJs="$RUNNER_TOOL_CACHE/node/24.21.0/$(node -p 'process.arch')/lib/node_modules/corepack/dist/corepack.js"
+          test -f "$corepackJs"
+          export COREPACK_HOME="$RUNNER_TEMP/node-toolchain/corepack"
+          mkdir -p "$RUNNER_TEMP/node-toolchain/bin" "$COREPACK_HOME"
+          printf '#!/bin/sh\nexec "%s" "%s" pnpm "$@"\n' "$selectedNode" "$corepackJs" > "$RUNNER_TEMP/node-toolchain/bin/pnpm"
+          chmod 755 "$RUNNER_TEMP/node-toolchain/bin/pnpm"
+          printf '%s\n' "$RUNNER_TEMP/node-toolchain/bin" >> "$GITHUB_PATH"
+          printf 'COREPACK_HOME=%s\n' "$COREPACK_HOME" >> "$GITHUB_ENV"
+          "$selectedNode" "$corepackJs" pnpm --version
 
       - name: Install dependencies strictly
         run: pnpm install --frozen-lockfile --engine-strict --strict-peer-dependencies

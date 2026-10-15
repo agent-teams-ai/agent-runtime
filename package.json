@@ -24,6 +24,7 @@
     "docs:new": "agent-teams-docs new --consumer . --profile architecture/foundation/docs-protocol.yaml",
     "docs:protocol:check": "pnpm docs:check && pnpm docs:governance",
     "docs:qualification": "pnpm docs:qualification:typecheck && pnpm docs:qualification:serial && pnpm docs:qualification:portable",
+    "docs:qualification:legacy": "node scripts/docs/run-legacy-managed-target-test.mts",
     "docs:recover": "agent-teams-docs recover --consumer . --profile architecture/foundation/docs-protocol.yaml",
     "foundation:assert-dev-only": "agent-teams-foundation assert-dev-only",
     "foundation:assert-registry": "agent-teams-foundation assert-registry",

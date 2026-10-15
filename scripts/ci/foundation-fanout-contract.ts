@@ -68,6 +68,7 @@ const foundationContract = {
           "shell": "bash",
           "run": "set -euo pipefail\n[[ \"$EXPECTED_REVISION\" =~ ^[a-f0-9]{40}$ ]]\n[[ \"$ARTIFACT_PREFIX\" =~ ^[a-z][a-z0-9-]{0,60}$ ]]\ntest \"$(git rev-parse HEAD)\" = \"$EXPECTED_REVISION\"\nobject=8e5e859d10981e1623d0617e933afc68a9e8770c\nif ! git cat-file -e \"$object^{commit}\"; then\n  git fetch --no-tags origin \"$object\"\nfi\ntest \"$(git rev-parse \"$object^{commit}\")\" = \"$object\"\ngit fsck --connectivity-only --no-reflogs \"$object\"\n"
         },
+        {"name": "Setup Node 24 Corepack source", "uses": "actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38", "with": {"node-version": "24.21.0", "package-manager-cache": false}},
         {
           "name": "Setup pinned Node",
           "uses": "actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38",
@@ -77,7 +78,7 @@ const foundationContract = {
         },
         {
           "name": "Enable pinned pnpm",
-          "run": "corepack enable\ncorepack install --global pnpm@11.18.0\n"
+          "run": "selectedNode=\"$(node -p 'process.execPath')\"\ncorepackJs=\"$RUNNER_TOOL_CACHE/node/24.21.0/$(node -p 'process.arch')/lib/node_modules/corepack/dist/corepack.js\"\ntest -f \"$corepackJs\"\nexport COREPACK_HOME=\"$RUNNER_TEMP/node-toolchain/corepack\"\nmkdir -p \"$RUNNER_TEMP/node-toolchain/bin\" \"$COREPACK_HOME\"\nprintf '#!/bin/sh\\nexec \"%s\" \"%s\" pnpm \"$@\"\\n' \"$selectedNode\" \"$corepackJs\" > \"$RUNNER_TEMP/node-toolchain/bin/pnpm\"\nchmod 755 \"$RUNNER_TEMP/node-toolchain/bin/pnpm\"\nprintf '%s\\n' \"$RUNNER_TEMP/node-toolchain/bin\" >> \"$GITHUB_PATH\"\nprintf 'COREPACK_HOME=%s\\n' \"$COREPACK_HOME\" >> \"$GITHUB_ENV\"\n\"$selectedNode\" \"$corepackJs\" pnpm --version\n"
         },
         {
           "name": "Frozen install",
@@ -145,6 +146,7 @@ const foundationContract = {
           "shell": "bash",
           "run": "set -euo pipefail\n[[ \"$EXPECTED_REVISION\" =~ ^[a-f0-9]{40}$ ]]\n[[ \"$ARTIFACT_PREFIX\" =~ ^[a-z][a-z0-9-]{0,60}$ ]]\ntest \"$(git rev-parse HEAD)\" = \"$EXPECTED_REVISION\"\nobject=8e5e859d10981e1623d0617e933afc68a9e8770c\nif ! git cat-file -e \"$object^{commit}\"; then\n  git fetch --no-tags origin \"$object\"\nfi\ntest \"$(git rev-parse \"$object^{commit}\")\" = \"$object\"\ngit fsck --connectivity-only --no-reflogs \"$object\"\n"
         },
+        {"name": "Setup Node 24 Corepack source", "uses": "actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38", "with": {"node-version": "24.21.0", "package-manager-cache": false}},
         {
           "name": "Setup pinned Node for aggregate environment",
           "uses": "actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38",
@@ -154,7 +156,7 @@ const foundationContract = {
         },
         {
           "name": "Enable pinned pnpm for aggregate environment",
-          "run": "corepack enable\ncorepack install --global pnpm@11.18.0\n"
+          "run": "selectedNode=\"$(node -p 'process.execPath')\"\ncorepackJs=\"$RUNNER_TOOL_CACHE/node/24.21.0/$(node -p 'process.arch')/lib/node_modules/corepack/dist/corepack.js\"\ntest -f \"$corepackJs\"\nexport COREPACK_HOME=\"$RUNNER_TEMP/node-toolchain/corepack\"\nmkdir -p \"$RUNNER_TEMP/node-toolchain/bin\" \"$COREPACK_HOME\"\nprintf '#!/bin/sh\\nexec \"%s\" \"%s\" pnpm \"$@\"\\n' \"$selectedNode\" \"$corepackJs\" > \"$RUNNER_TEMP/node-toolchain/bin/pnpm\"\nchmod 755 \"$RUNNER_TEMP/node-toolchain/bin/pnpm\"\nprintf '%s\\n' \"$RUNNER_TEMP/node-toolchain/bin\" >> \"$GITHUB_PATH\"\nprintf 'COREPACK_HOME=%s\\n' \"$COREPACK_HOME\" >> \"$GITHUB_ENV\"\n\"$selectedNode\" \"$corepackJs\" pnpm --version\n"
         },
         {
           "name": "Frozen install for aggregate environment",
@@ -232,6 +234,7 @@ const shardContract = {
           "shell": "bash",
           "run": "set -euo pipefail\n[[ \"$EXPECTED_REVISION\" =~ ^[a-f0-9]{40}$ ]]\n[[ \"$ARTIFACT_PREFIX\" =~ ^[a-z][a-z0-9-]{0,60}$ ]]\n[[ \"$FOUNDATION_FIXTURE_INDEX\" =~ ^[012]$ ]]\ntest \"$(git rev-parse HEAD)\" = \"$EXPECTED_REVISION\"\nobject=8e5e859d10981e1623d0617e933afc68a9e8770c\nif ! git cat-file -e \"$object^{commit}\"; then\n  git fetch --no-tags origin \"$object\"\nfi\ntest \"$(git rev-parse \"$object^{commit}\")\" = \"$object\"\ngit fsck --connectivity-only --no-reflogs \"$object\"\n"
         },
+        {"name": "Setup Node 24 Corepack source", "uses": "actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38", "with": {"node-version": "24.21.0", "package-manager-cache": false}},
         {
           "name": "Setup pinned Node",
           "uses": "actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38",
@@ -241,7 +244,7 @@ const shardContract = {
         },
         {
           "name": "Enable pinned pnpm",
-          "run": "corepack enable\ncorepack install --global pnpm@11.18.0\n"
+          "run": "selectedNode=\"$(node -p 'process.execPath')\"\ncorepackJs=\"$RUNNER_TOOL_CACHE/node/24.21.0/$(node -p 'process.arch')/lib/node_modules/corepack/dist/corepack.js\"\ntest -f \"$corepackJs\"\nexport COREPACK_HOME=\"$RUNNER_TEMP/node-toolchain/corepack\"\nmkdir -p \"$RUNNER_TEMP/node-toolchain/bin\" \"$COREPACK_HOME\"\nprintf '#!/bin/sh\\nexec \"%s\" \"%s\" pnpm \"$@\"\\n' \"$selectedNode\" \"$corepackJs\" > \"$RUNNER_TEMP/node-toolchain/bin/pnpm\"\nchmod 755 \"$RUNNER_TEMP/node-toolchain/bin/pnpm\"\nprintf '%s\\n' \"$RUNNER_TEMP/node-toolchain/bin\" >> \"$GITHUB_PATH\"\nprintf 'COREPACK_HOME=%s\\n' \"$COREPACK_HOME\" >> \"$GITHUB_ENV\"\n\"$selectedNode\" \"$corepackJs\" pnpm --version\n"
         },
         {
           "name": "Frozen install",

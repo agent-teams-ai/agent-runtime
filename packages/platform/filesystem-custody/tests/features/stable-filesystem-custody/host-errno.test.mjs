@@ -4,7 +4,11 @@ import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import test from "node:test";
+import test, { after } from "node:test";
+import { guardHandles } from "@get-modular/conformance";
+
+// Count handles before this file opens any.
+const handles = guardHandles();
 
 test("OS errno mapper uses platform constants and never libuv synthetic numbers", () => {
   const root = mkdtempSync(join(tmpdir(), "ar-host-errno-"));
@@ -62,3 +66,6 @@ return 0;
     assert.equal(result.status, 0, result.stderr);
   } finally { rmSync(root, { recursive: true, force: true }); }
 });
+
+// Last top-level statement: file-level after hooks run in registration order, so this check runs after every other cleanup of this file.
+after(() => handles.check());

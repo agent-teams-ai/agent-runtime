@@ -20,6 +20,7 @@ export const prSamplingRoute = "${{ github.event_name == 'pull_request' && githu
 export const prBaseRevision = "${{ github.event.pull_request.base.sha || '' }}";
 const checkoutAction = 'actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803';
 const nodeAction = 'actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38';
+const pinnedPnpmBootstrap = "selectedNode=\"$(node -p 'process.execPath')\"\ncorepackJs=\"$RUNNER_TOOL_CACHE/node/24.21.0/$(node -p 'process.arch')/lib/node_modules/corepack/dist/corepack.js\"\ntest -f \"$corepackJs\"\nexport COREPACK_HOME=\"$RUNNER_TEMP/node-toolchain/corepack\"\nmkdir -p \"$RUNNER_TEMP/node-toolchain/bin\" \"$COREPACK_HOME\"\nprintf '#!/bin/sh\\nexec \"%s\" \"%s\" pnpm \"$@\"\\n' \"$selectedNode\" \"$corepackJs\" > \"$RUNNER_TEMP/node-toolchain/bin/pnpm\"\nchmod 755 \"$RUNNER_TEMP/node-toolchain/bin/pnpm\"\nprintf '%s\\n' \"$RUNNER_TEMP/node-toolchain/bin\" >> \"$GITHUB_PATH\"\nprintf 'COREPACK_HOME=%s\\n' \"$COREPACK_HOME\" >> \"$GITHUB_ENV\"\n\"$selectedNode\" \"$corepackJs\" pnpm --version\n";
 export function object(value: unknown): Record<string, unknown> {
   assert.ok(value !== null && typeof value === 'object' && !Array.isArray(value));
   return value as Record<string, unknown>;
@@ -160,7 +161,7 @@ function validateReusableLane(reusable: unknown): void {
   assert.ok(commands.some(step => step.uses === nodeAction && object(step.with)['node-version-file'] === '.node-version'));
   const install = commands.findIndex(step => step.run === 'pnpm install --frozen-lockfile');
   assert.ok(install > verify && execution.every(step => commands.indexOf(step) > install), 'frozen install before full commands');
-  assert.ok(commands.some(step => step.run === 'corepack enable\ncorepack install --global pnpm@11.18.0\n'));
+  assert.ok(commands.some(step => step.run === pinnedPnpmBootstrap));
   const inputs = object(object(object(lane.on).workflow_call).inputs);
   assert.deepEqual(inputs.regressions, { type: 'boolean', default: false }, 'reusable default remains FULL');
   assert.deepEqual(inputs['base-revision'], { type: 'string', default: '' });
@@ -254,7 +255,7 @@ export async function authenticatePlatformPredecessor(root: string): Promise<voi
 export async function conformance(root: string): Promise<void> {
   const read = (path: string) => readFile(resolve(root, path), 'utf8');
   const scripts = await readScripts(resolve(root, 'package.json'));
-  assert.equal((await read('.node-version')).trim(), '24.21.0');
+  assert.equal((await read('.node-version')).trim(), '26.11.1');
   validateBenchmark(parse(await read('.github/workflows/ci-benchmark.yml')));
   type Snapshot = { baseCommit: string; packageSha256: string; sourcePolicySha256: string };
   const baseline: Snapshot & { predecessor: Snapshot; scripts: Scripts; inventory: unknown } = JSON.parse(await read('scripts/ci/full-contract.json'));
@@ -303,8 +304,21 @@ export async function conformance(root: string): Promise<void> {
   const platform: Record<string, string> = JSON.parse(await read('scripts/ci/platform-contract.json'));
   assert.equal(createHash('sha256').update(await read('scripts/ci/platform-contract.predecessor.json')).digest('hex'), platform['scripts/ci/platform-contract.predecessor.json'], 'retained platform evidence bytes');
   const oldPlatform: Record<string, string> = JSON.parse(execFileSync('git', ['show', '73c771f254858db430d01d13c3cb433ef18b757d:scripts/ci/platform-contract.json'], { cwd: root, encoding: 'utf8' }));
-  for (const [key, value] of Object.entries(oldPlatform)) { if (key !== 'runtime-macos') { assert.equal(platform[key], value, 'unrelated platform contract preserved'); } }
+  for (const [key, value] of Object.entries(oldPlatform)) { if (!['runtime-macos', 'postgres-durability', '.github/workflows/node-26-compatibility.yml', 'scripts/ci/audit-node-engine-compatibility.mjs', 'scripts/ci/node-engine-compatibility.test.mjs', 'scripts/ci/node-runtime-compatibility.test.mjs'].includes(key)) { assert.equal(platform[key], value, 'unrelated platform contract preserved'); } }
   const runtime: unknown = parse(await read('.github/workflows/ci.yml'));
+  // The Node migration changes bootstrap only; retain the original PostgreSQL
+  // job contract after reversing those exact toolchain steps.
+  const postgres = structuredClone(object(object(runtime).jobs)['postgres-durability']) as Record<string, unknown>;
+  const postgresSteps = steps(postgres.steps);
+  const corepackSources = postgresSteps.filter(step => step.name === 'Setup Node 24 Corepack source');
+  assert.deepEqual(corepackSources, [{ name: 'Setup Node 24 Corepack source', uses: nodeAction,
+    with: { 'node-version': '24.21.0', 'package-manager-cache': false } }], 'exact Corepack source step');
+  const pnpmBootstrap = postgresSteps.find(step => step.name === 'Enable pinned pnpm');
+  assert.ok(pnpmBootstrap);
+  assert.deepEqual(pnpmBootstrap, { name: 'Enable pinned pnpm', run: pinnedPnpmBootstrap }, 'exact selected-Node pnpm bootstrap');
+  postgres.steps = postgresSteps.filter(step => step.name !== 'Setup Node 24 Corepack source').map(step =>
+    step.name === 'Enable pinned pnpm' ? { ...step, run: 'corepack enable\ncorepack install --global pnpm@11.18.0\n' } : step);
+  assert.equal(digest(postgres), oldPlatform['postgres-durability'], 'PostgreSQL obligations preserved across Node bootstrap migration');
   validateWorkflow(runtime, parse(await read('.github/workflows/ci-lane.yml')), platform);
   validateFoundationWorkflows(parse(await read('.github/workflows/ci-foundation.yml')),
     parse(await read('.github/workflows/ci-foundation-shard.yml')));

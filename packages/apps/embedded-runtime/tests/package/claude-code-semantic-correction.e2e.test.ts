@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import test from "node:test";
+import test, { after } from "node:test";
+import { guardHandles } from "@get-modular/conformance";
 
 import {
   createNodeExecutableFileObserver,
@@ -25,6 +26,9 @@ import {
   createCodexSetupInspectionPlanner,
 } from "../../dist/composition.js";
 import { createAgentRuntimeHost } from "./helpers/create-agent-runtime-host.ts";
+
+// Count handles before this file opens any.
+const handles = guardHandles();
 
 export const semanticCorrectionProofsRegistered = true;
 
@@ -303,3 +307,6 @@ test("settles symmetric owner failures and reports them in stable sibling order"
     /symmetric discovery failure/u,
   );
 });
+
+// Last top-level statement: file-level after hooks run in registration order, so this check runs after every other cleanup of this file.
+after(() => handles.check());

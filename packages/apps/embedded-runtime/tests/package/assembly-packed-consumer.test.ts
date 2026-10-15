@@ -1,12 +1,17 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
+import type { Dirent } from "node:fs";
 import { mkdtemp, mkdir, readFile, readdir, realpath, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve, sep } from "node:path";
-import test from "node:test";
+import test, { after } from "node:test";
+import { guardHandles } from "@get-modular/conformance";
 import { fileURLToPath } from "node:url";
 import { gunzipSync } from "node:zlib";
+
+// Count handles before this file opens any.
+const handles = guardHandles();
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../..");
 const packagePaths = [
@@ -98,12 +103,12 @@ const consumePackedArchives = async (root: string, dependencies: Record<string, 
   // Only remaining declared dependencies require registry retrieval.
   run("pnpm", ["install", "--ignore-scripts", "--config.node-linker=hoisted"], consumer);
   const installedConsumer = await realpath(consumer);
-  const packedDeclarationMentionsPg = async (packageName) => {
+  const packedDeclarationMentionsPg = async (packageName: string) => {
     const installed = await realpath(join(consumer, "node_modules", packageName));
     const queue = [join(installed, "dist")];
     while (queue.length > 0) {
-      const directory = queue.pop();
-      let entries;
+      const directory = queue.pop()!; // The loop condition guarantees an entry.
+      let entries: Dirent[];
       try {
         entries = await readdir(directory, { withFileTypes: true });
       } catch (error) {
@@ -304,3 +309,6 @@ for (const name of gmPins.map(pin => pin.name)) {
     assert.deepEqual(await readdir(root), [], "rejection must precede archive staging, install and behavior");
   });
 }
+
+// Last top-level statement: file-level after hooks run in registration order, so this check runs after every other cleanup of this file.
+after(() => handles.check());

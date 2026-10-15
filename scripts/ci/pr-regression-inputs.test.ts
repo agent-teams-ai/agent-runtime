@@ -42,7 +42,7 @@ const trusted = {
   RUNNER_ENVIRONMENT: 'github-hosted', RUNNER_OS: 'Linux', RUNNER_ARCH: 'X64', ImageOS: 'ubuntu24', ImageVersion: '20261004.1',
   PR_REGRESSION_FROZEN_INSTALL: 'verified',
 };
-const facts = { node: 'v24.21.0', pnpm: '11.18.0', platform: 'linux', arch: 'x64', glibc: '2.39', execArgv: [] as string[] };
+const facts = { node: 'v26.11.1', pnpm: '11.18.0', platform: 'linux', arch: 'x64', glibc: '2.39', execArgv: [] as string[] };
 let sourceTemplate: Promise<string> | undefined;
 
 async function createSourceTemplate(): Promise<string> {

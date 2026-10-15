@@ -322,7 +322,7 @@ async function validateEvent(root: string, env: NodeJS.ProcessEnv, base: string,
   const override = Object.entries(env).some(([key, value]) => Boolean(value) &&
     /^(?:NODE_OPTIONS|NODE_PATH|NODE_TEST_|NAPI_RS_|OXC_|LD_|DYLD_|TS_NODE_|TSX_|AGENT_TEAMS_|FOUNDATION_FIXTURE_|GIT_(?:OBJECT|ALTERNATE|REPLACE|SHALLOW|INDEX|WORK_TREE|DIR|CONFIG_COUNT|CONFIG_PARAMETERS)|PNPM_(?:HOME|PACKAGE|SUPPORTED)|npm_config_(?:node_options|node_linker|virtual_store|ignore_scripts|force|verify_store|platform|arch|libc|userconfig|globalconfig)|pnpm_config_(?:node_options|node_linker|virtual_store|platform|arch|libc))/iu.test(key));
   const fixtureOverride = Object.keys(env).some(key => /^(?:CI_ER_|AE_ADOPTION_|CI_FOCUSED_EVIDENCE_DIR|FIXTURE_OWNER)/u.test(key));
-  assert.ok(!override && !fixtureOverride && process.execArgv.length === 0 && process.version === 'v24.21.0'
+  assert.ok(!override && !fixtureOverride && process.execArgv.length === 0 && process.version === 'v26.11.1'
     && process.platform === 'linux' && process.arch === 'x64' && /^\d{8}\.\d+(?:\.\d+)?$/u.test(env.ImageVersion ?? '')
     && Object.entries(expected).every(([key, value]) => env[key] === value), 'unsupported runner/environment');
   assert.match(base, /^[a-f0-9]{40}$/u); assert.match(head, /^[a-f0-9]{40}$/u); assert.notEqual(base, head);

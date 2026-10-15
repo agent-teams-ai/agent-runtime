@@ -30,7 +30,7 @@ async function fixture() {
   };
   await put('package.json', JSON.stringify({ scripts }));
   for (const path of ['pnpm-lock.yaml', 'pnpm-workspace.yaml', 'tsconfig.json']) { await put(path, 'TEST'); }
-  await put('.node-version', '24.21.0');
+  await put('.node-version', '26.11.1');
   await put('.github/workflows/ci-product.yml', '# disposable fixture');
   await put('scripts/ci/package-execution.ts', await readFile(new URL('./package-execution.ts', import.meta.url), 'utf8'));
   await put('scripts/ci/product-workflow-contract.ts', await readFile(new URL('./product-workflow-contract.ts', import.meta.url), 'utf8'));
@@ -53,17 +53,18 @@ async function fixture() {
       await put(`${base}/native/rename-no-replace.c`, '// synthetic TEST native source identity');
     }
     if (id !== 'agent-execution' && id !== 'embedded-runtime') {
-      for (const pattern of originalPackages.find(p => p.root === base)!.test.split(' ').slice(3)) {
+      for (const pattern of originalPackages.find(p => p.root === base)!.test.split(' ').slice(3).filter(arg => !arg.startsWith('--'))) {
         const file = pattern.replaceAll('*', 'example');
         await put(`${base}/${file}`, "import test from 'node:test'; test('first identity', () => {}); test('second identity', () => {}); for (const name of ['repeat', 'repeat']) { test(name, () => {}); } test('skip', {skip:true}, () => {});\n");
       }
     }
     if (id === 'embedded-runtime') {
       await put(`${base}/tests/second.test.ts`, "import test from 'node:test'; test('second actual process', () => {});");
+      await put(`${base}/tests/third.test.ts`, "import test from 'node:test'; test('third actual process', () => {});");
       await put(`${base}/scripts/adoption-test-reporter.mjs`, await readFile(new URL('../../packages/apps/embedded-runtime/scripts/adoption-test-reporter.mjs', import.meta.url), 'utf8'));
       const runner = await readFile(new URL('../../packages/apps/embedded-runtime/scripts/run-package-tests.mjs', import.meta.url), 'utf8');
       await put(`${base}/scripts/run-package-tests.mjs`, runner.replace(/export const testProcesses = (\[[\s\S]*?\n\]);/u,
-        'export const testProcesses = [\n  ["--test", "--test-concurrency=1", "tests/example.test.ts"],\n  ["--experimental-test-module-mocks", "--test", "tests/second.test.ts"]\n];'));
+        'export const testProcesses = [\n  ["--test", "--test-concurrency=1", "tests/example.test.ts"],\n  ["--experimental-test-module-mocks", "--test", "tests/second.test.ts"],\n  ["--test", "--test-concurrency=1", "--test-force-exit", "tests/third.test.ts"]\n];'));
 
     }
   }
@@ -102,10 +103,10 @@ async function packageReports(root: string, expected: ExpectedEvidence, requeste
         join(root, packageRoots[id]), env, join(logs, `${shard}-2`))
       : await runCommand('pnpm', ['--filter', `@agent-teams/${id}`, 'run', 'test'], root,
         id === 'embedded-runtime' ? embeddedEnv : { ...env, NODE_OPTIONS: `--test-reporter=${reporter}` }, join(logs, `${shard}-2`)));
-    assert.equal(commandExit(commands[2]!, id === 'embedded-runtime' ? 2 : 1, undefined, plans, Object.keys(expected.inputs).map(file => join(root, file))), 0, `producer ${shard}`);
+    assert.equal(commandExit(commands[2]!, id === 'embedded-runtime' ? 3 : 1, undefined, plans, Object.keys(expected.inputs).map(file => join(root, file))), 0, `producer ${shard}`);
     receipts.push({ schemaVersion: 3, target: 'linux-x64', workflow: expected.workflow, nativeBuild: null, embeddedProcesses: id === 'embedded-runtime' ? JSON.parse(await readFile(join(capture, 'processes.json'), 'utf8')) : null, requestedShard: shard, packageName: `@agent-teams/${id}`,
       sourceSha: expected.sha, sourceTree: expected.inputTree, checkoutRoot: root, selection,
-      platform: 'linux', arch: 'x64', uid: process.getuid?.() ?? null, node: 'v24.21.0', execPath: process.execPath, pnpm: '11.18.0',
+      platform: 'linux', arch: 'x64', uid: process.getuid?.() ?? null, node: 'v26.11.1', execPath: process.execPath, pnpm: '11.18.0',
       runnerImage: { os: null, version: null, runnerOS: 'Linux', runnerArch: 'X64' }, runnerHash: expected.inputs['scripts/ci/package-execution.ts']!,
       before: { ...expected.manifests }, after: { ...expected.manifests }, sourceBefore: { ...expected.inputs }, sourceAfter: { ...expected.inputs },
       commands, exitCode: 0, failure: null, coverage: 'actual disposable TEST processes; fixture source identity, not current product suite' });
@@ -115,7 +116,7 @@ async function packageReports(root: string, expected: ExpectedEvidence, requeste
 function phaseReports(expected: ExpectedEvidence) {
   const names = [['typecheck', 'test'], ['lint:typed'], ['quality:native']];
   return phaseEntries.map((entry, i) => ({ entry, sha: expected.sha, inputTree: expected.inputTree, platform: 'linux',
-    node: 'v24.21.0', pnpm: '11.18.0', arm: 'production', runnerImage: { arch: 'X64' }, digests: { ...expected.measureDigests },
+    node: 'v26.11.1', pnpm: '11.18.0', arm: 'production', runnerImage: { arch: 'X64' }, digests: { ...expected.measureDigests },
     inventory: expected.inventories[i], phases: names[i]?.map(script => ({ script, code: 0, signal: null,
       commands: expected.inventories[i]?.filter(command => command.script === script), tests: [phaseEvent()] })) }));
 }
@@ -123,7 +124,7 @@ function phaseReports(expected: ExpectedEvidence) {
 // Mac metadata exercise rejecting contracts. They never qualify Mac execution.
 function macDecoderFixture(receipts: PackageReceipt[], expected: ExpectedEvidence): { receipts: PackageReceipt[]; expected: ExpectedEvidence } {
   const result = structuredClone(receipts);
-  const execPath = '/Users/runner/hostedtoolcache/node/24.21.0/arm64/bin/node';
+  const execPath = '/Users/runner/hostedtoolcache/node/26.11.1/arm64/bin/node';
   for (const report of result) {
     report.target = 'darwin-arm64'; report.platform = 'darwin'; report.arch = 'arm64'; report.uid = 501; report.execPath = execPath;
     report.coverage = 'synthetic Mac decoder metadata; actual tests ran on disposable Linux TEST; no Mac qualification';
@@ -142,7 +143,7 @@ function macDecoderFixture(receipts: PackageReceipt[], expected: ExpectedEvidenc
     if (report.embeddedProcesses) { report.embeddedProcesses = report.commands[2]!.observation.streams.map(stream => stream.original!); }
     const output = join(report.checkoutRoot, 'packages/platform/filesystem-custody/dist/rename-no-replace.node');
     const sdk = '/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk';
-    const headers = '/Users/runner/hostedtoolcache/node/24.21.0/arm64/include/node';
+    const headers = '/Users/runner/hostedtoolcache/node/26.11.1/arm64/include/node';
     const specs: Record<string, [string, string[], string]> = {
       compilerDriver: ['/usr/bin/xcrun', ['--find', 'cc'], '/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang'],
       driverTrace: ['cc', ['-###', '-O2', '-Wall', '-Wextra', '-Werror', '-fPIC', '-bundle', '-undefined', 'dynamic_lookup', '-lsandbox', `-I${headers}`, 'native/rename-no-replace.c', '-o', 'dist/rename-no-replace.node'], ''],
@@ -173,7 +174,7 @@ test('source-derived full coverage preserves all eight runners and old root/type
   assertFanoutEvidence(expected, packages.toReversed(), phases.toReversed());
   if (process.env.CI_FOCUSED_EVIDENCE_DIR) { await writeFile(join(process.env.CI_FOCUSED_EVIDENCE_DIR, 'synthetic-fanout-processes.json'), JSON.stringify({ scope: 'actual disposable TEST commands; no product qualification', expected, packages, phases }, null, 2)); }
   const embedded = packages.find(report => report.packageName === '@agent-teams/embedded-runtime')!;
-  assert.equal(embedded.commands[2]!.observation.summaries.length, 2);
+  assert.equal(embedded.commands[2]!.observation.summaries.length, 3);
   assert.ok(embedded.commands[2]!.observation.events.some(event => event.title === 'second actual process' && event.name === undefined));
   assert.deepEqual(packages.slice(0, 3).flatMap(report => report.selection?.files ?? []).toSorted(), expected.universe);
   const reject = async (name: string, change: (p: PackageReceipt[], r: ReturnType<typeof phaseReports>) => void) => {
@@ -196,11 +197,11 @@ test('source-derived full coverage preserves all eight runners and old root/type
     const observation = p[6]!.commands[2]!.observation;
     const first = observation.events.filter(e => String(e.suite).endsWith('/tests/example.test.ts')); assert.ok(first.length);
     observation.events = [...first, ...structuredClone(first)]; observation.summaries[1] = structuredClone(observation.summaries[0]!);
-    assert.equal(commandExit(p[6]!.commands[2]!, 2), 1);
+    assert.equal(commandExit(p[6]!.commands[2]!, 3), 1);
   });
   await reject('ER duplicate process envelope', p => {
     const observation = p[6]!.commands[2]!.observation; observation.streams[1] = structuredClone(observation.streams[0]!);
-    assert.equal(commandExit(p[6]!.commands[2]!, 2), 1);
+    assert.equal(commandExit(p[6]!.commands[2]!, 3), 1);
   });
   await reject('missing matrix report', p => p.pop());
   await reject('duplicate package report', p => { p[7] = p[6]!; });

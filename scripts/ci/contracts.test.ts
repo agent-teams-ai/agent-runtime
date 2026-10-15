@@ -482,7 +482,7 @@ test('paired evidence rejects missing phases, missing test identities, new skips
     const commands = commandInventory(scripts, entry).filter(command => entry !== 'check:ci:architecture' || command.script !== 'test:consumer-modules');
     const inventory = commandInventory(scripts, entry);
     return { entry, sha: '1'.repeat(40), workflowSha: '1'.repeat(40), inputTree: '2'.repeat(40),
-      node: 'v24.21.0', pnpm: '11.18.0', runnerOS: 'Linux', cachePolicy: 'none',
+      node: 'v26.11.1', pnpm: '11.18.0', runnerOS: 'Linux', cachePolicy: 'none',
       runnerImage: { os: 'ubuntu24', version: 'explicit receipt unit fixture', arch: 'X64' },
       toolchain: Object.fromEntries(toolchainKeys(entry).map(key => [key,
         key === 'rustc' ? 'rustc 1.97.1 (explicit unit fixture)' : key === 'cargo' ? 'cargo 1.97.1 (explicit unit fixture)' : 'explicit compiler unit fixture'])),

@@ -68,8 +68,20 @@ establish integration evidence; they do not qualify a live provider campaign.
 The required `postgres-durability` CI job invokes
 `scripts/ci/ordinary-postgres-disposable.sh` from the repository root. It creates
 one fresh socket-only PostgreSQL cluster and runs the ordinary Agent Execution,
-Runtime Security and Provider Access suites through
+Runtime Security and Provider Access suites, and the operation store contract suite, through
 `scripts/ci/run-ordinary-postgres.mjs`. The mandatory runner rejects missing or
 non-disposable configuration, skipped/TODO tests and an incomplete required
 suite. The generic package test command can still omit PostgreSQL locally.
 This database evidence does not qualify a live provider or containment target.
+
+## Operation store contract suite
+
+`agent-runtime/ordinary/store` has a contract suite, created with `contractSuite`
+in `tests/features/ordinary-session-runtime/support/ordinary-store-suite.ts`
+from the port-level cases in `support/ordinary-store-cases.ts`. The owner fake
+(`support/in-memory-ordinary-store.ts`) passes it in the package tests
+(`ordinary-store-contract.test.ts`) and the PostgreSQL store passes it in the
+`postgres-durability` gate (`ordinary-store-contract.postgres.test.ts`). The
+cases module imports only the store port types, so STORE-2-core moves it
+unchanged into the private storage compatibility package and Embedded Runtime
+then imports it from there; it is never copied.

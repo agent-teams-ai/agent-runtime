@@ -55,6 +55,6 @@ assert.equal(probes.revision.stdout.trim(), report.expectedRevision); assert.equ
 assert.match(report.runId ?? '', /^[1-9][0-9]*$/u); assert.match(report.runAttempt ?? '', /^[1-9][0-9]*$/u);
 assert.ok(['success', 'failure', 'cancelled', 'skipped'].includes(report.productOutcome ?? ''), 'actual product outcome required');
 assert.equal(report.platform, 'darwin'); assert.equal(report.arch, 'arm64'); assert.ok(Number(report.uid) > 0);
-assert.equal(report.node, 'v24.21.0'); assert.equal(probes.pnpm.stdout.trim(), '11.18.0');
+assert.equal(report.node, 'v26.11.1'); assert.equal(probes.pnpm.stdout.trim(), '11.18.0');
 for (const probe of Object.values(probes)) { assert.equal(probe.exitCode, 0, `${probe.executable} ${probe.argv.join(' ')}`); assert.equal(probe.signal, null); }
 assertNamespaceNativeQualification(report.productOutcome, native);

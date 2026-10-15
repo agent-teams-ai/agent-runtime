@@ -268,10 +268,12 @@ leaf commands and their multiplicity to preserve its complete inventory.
 
 The exact root development dependency and regenerated frozen registry lock
 select 1.7.2 after the official stable31 migration. The tooling floor
-is Node 24.21.0, selected by `.node-version` and the root manifest; required
-CI already consumes that file. Product package engines retain their Node 24
-family. Node 26 is not activated. Historical platform and cohort receipts keep
-their original toolchain and source identities.
+remains Node 24.21.0 in the root engine range, with Node 26.11.1 now
+selected as the active default by `.node-version`; required CI consumes that
+file. The explicit Node 24.21.0 compatibility lane and bounded package engine
+ranges remain supported. Node 26 invokes Node 24 Corepack JavaScript through
+the selected Node executable with a job-owned pnpm shim. Historical platform
+and cohort receipts keep their original toolchain and source identities.
 
 The public execution-backed command protects three important existing Node test
 identities in the existing CMS pin entry file. Its contract alone protects only selected

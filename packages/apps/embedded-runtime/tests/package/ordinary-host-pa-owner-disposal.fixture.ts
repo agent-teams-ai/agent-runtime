@@ -52,7 +52,7 @@ export async function ordinaryHostProviderOwnerRetry(boundary: 'retirement' | 'c
     const capture: OrdinaryCodexAuthCapture = {
       settled: Promise.resolve(), capture: () => captured,
       dispose() {
-        pendingCalls[index] += 1;
+        pendingCalls[index] = (pendingCalls[index] ?? 0) + 1;
         if (index === 0 && pendingCalls[index] === 1) {throw pendingFailure;}
         rejectCapture(pendingFailure);
       },

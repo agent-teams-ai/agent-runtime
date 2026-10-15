@@ -10,11 +10,12 @@ const names = [
   "disposable PostgreSQL ordinary namespace: concurrent accept and claim, durable restart and scope isolation",
   "ordinary security durable consumed identity, unknown-commit readback, settlement and no persisted secrets",
   "ordinary PA PostgreSQL grants, counters, retirement and original rendering authority",
+  "ordinary operation store contract suite against PostgreSQL",
 ];
 const summary = {type: "test:summary", data: {success: true, counts: {failed: 0, cancelled: 0, skipped: 0, todo: 0}}};
 const invoke = (mutate = events => events) => runOrdinaryPostgres({environment, write() {},
   runTests(options) {
-    assert.equal(options.files.length, 3);
+    assert.equal(options.files.length, 4);
     assert.equal(options.concurrency, 1);
     assert.equal(options.isolation, "process");
     assert.deepEqual(options.env, environment);
