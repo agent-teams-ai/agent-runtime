@@ -7,8 +7,11 @@
 # the same 19 directives. Per-file caps in .oxlintrc.json cannot replace them yet,
 # because the type-aware quality gate (lint:typed) refuses relaxed limits for
 # production files. Before 2027-01-13, move these 19 findings into the
-# shrink-only findings baseline of Engineering Foundation 1.8.0 (it must cover
-# both lint gates) and delete the directives and waivers; do not renew again.
+# shrink-only findings baseline planned for Engineering Foundation 1.8.0 (step
+# N3a of the get-modular 0.5.0 module DX train; it must cover both lint gates)
+# and delete the directives and waivers; do not renew again. If that baseline is
+# not available by then, the owner decides between removing contained-turn and
+# refactoring these functions. Tracked in the architecture program plan.
 schemaVersion: 1
 governedRoots:
   - experiments
