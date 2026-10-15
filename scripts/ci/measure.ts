@@ -22,6 +22,36 @@ export type NodeSummary = Pick<Extract<TestEvent, { type: 'test:summary' }>['dat
 export type InputAdmission = { path: string; status: 'available'; digest: string }
   | { path: string; status: 'unavailable'; reason: 'missing' | 'unreadable' };
 
+const trustedNodeReporterOptions = 'CI_TRUSTED_NODE_REPORTER_OPTIONS';
+const reporterPath = fileURLToPath(import.meta.url);
+const reporterOption = `--test-reporter=${reporterPath}`;
+
+function clearTrustedNodeReporterOptions(environment: NodeJS.ProcessEnv): void {
+  const configured = environment[trustedNodeReporterOptions]?.trim();
+  delete environment[trustedNodeReporterOptions];
+  if (!configured || !environment.NODE_OPTIONS) { return; }
+  const configuredWords = configured.split(/\s+/u).filter(Boolean);
+  const trustedConfiguration = configuredWords[0] === reporterOption
+    && configuredWords.length >= 2
+    && configuredWords.slice(1).every(word => word === '--test-reporter-destination=stdout');
+  if (!trustedConfiguration) { return; }
+  const words = environment.NODE_OPTIONS.split(/\s+/u).filter(Boolean);
+  const cleaned: string[] = [];
+  for (let index = 0; index < words.length; index += 1) {
+    const word = words[index]!;
+    const startsTrusted = word === configuredWords[0]
+      && configuredWords.every((part, offset) => words[index + offset] === part);
+    if (startsTrusted) {
+      index += configuredWords.length - 1;
+      continue;
+    }
+    cleaned.push(word);
+  }
+  if (cleaned.length > 0) { environment.NODE_OPTIONS = cleaned.join(' '); } else { delete environment.NODE_OPTIONS; }
+}
+
+clearTrustedNodeReporterOptions(process.env);
+
 export function isExecutedTestLeaf(result: TestResult): boolean {
   return result.kind === 'test' && result.status === 'passed' && result.bodyless === false;
 }
@@ -338,9 +368,11 @@ function nodeTestReporterRoute(command: string): NodeTestReporterRoute | undefin
 
 export function authoritativeNodeEventEnvironment(commands: readonly Command[],
   environment: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
+  const isolated = { ...environment };
+  clearTrustedNodeReporterOptions(isolated);
   const routes = commands.map(command => nodeTestReporterRoute(command.command)).filter(route => route !== undefined);
-  if (routes.length === 0) { return { ...environment }; }
-  assert.ok(!/(?:^|\s)--test-reporter(?:=|\s)/u.test(environment.NODE_OPTIONS ?? ''),
+  if (routes.length === 0) { return isolated; }
+  assert.ok(!/(?:^|\s)--test-reporter(?:=|\s)/u.test(isolated.NODE_OPTIONS ?? ''),
     'inherited Node reporter options are unsupported');
   const unpaired = routes.filter(route => route.destinations === 0 && route.reporters > 0);
   if (unpaired.length > 0) {
@@ -348,25 +380,40 @@ export function authoritativeNodeEventEnvironment(commands: readonly Command[],
       'mixed explicit Node reporter graphs are unsupported');
   }
   const destinations = unpaired.length > 0 ? unpaired[0]!.reporters + 1 : 1;
-  const options = [`--test-reporter=${fileURLToPath(import.meta.url)}`,
+  const options = [reporterOption,
     ...Array.from({ length: destinations }, () => '--test-reporter-destination=stdout')].join(' ');
-  return { ...environment, NODE_OPTIONS: `${environment.NODE_OPTIONS ?? ''} ${options}`.trim() };
+  return { ...isolated, NODE_OPTIONS: `${isolated.NODE_OPTIONS ?? ''} ${options}`.trim(),
+    [trustedNodeReporterOptions]: options };
 }
 
 export function assertPhaseTestExecution(phase: { script: string; commands: readonly Command[];
   tests: readonly TestResult[]; unqualifiedRunners: readonly string[] }): void {
+  // Empty command inventories are opaque diagnostic controls, not reusable
+  // production execution receipts; their ordinary text stays bodyless-unknown.
+  if (phase.commands.length === 0) {
+    assert.ok(phase.tests.length > 0, `${phase.script} emitted empty opaque diagnostic control`);
+    assert.ok(phase.tests.every(result => result.status !== 'failed' && result.status !== 'cancelled'
+      && result.bodyless !== true), `${phase.script} emitted invalid opaque diagnostic control`);
+    const identities = phase.tests.map(result => JSON.stringify([result.suite, result.ancestry, result.name, result.kind]));
+    assert.equal(new Set(identities).size, identities.length, `${phase.script} emitted duplicate opaque diagnostic identity`);
+    assert.ok(phase.tests.some(result => result.status === 'passed'),
+      `${phase.script} emitted no passed opaque diagnostic control`);
+    return;
+  }
   const nodeTests = phase.commands.filter(command => nodeTestReporterRoute(command.command) !== undefined);
+  const authoritative = nodeTests.length > 0 || phase.script === 'quality:native';
   if (nodeTests.length > 0 || phase.commands.some(command => /(?:agent-teams-node-test|\brun test\b)/u.test(command.command))
     || /^(?:test(?::|$)|quality:native$)/u.test(phase.script)) {
-    assert.ok(phase.tests.every(result => result.status !== 'failed' && result.status !== 'cancelled' && result.bodyless !== true),
+    assert.ok(phase.tests.every(result => result.status !== 'failed'
+      && result.status !== 'cancelled' && result.bodyless !== true),
       `${phase.script} emitted file-only test evidence`);
-    if (nodeTests.length > 0) {
-      assert.ok(phase.tests.every(result => result.bodyless !== undefined), `${phase.script} emitted text-only test evidence`);
+    if (authoritative) {
+      assert.ok(phase.tests.every(result => result.bodyless === false), `${phase.script} emitted text-only test evidence`);
     }
     const identities = phase.tests.map(result => JSON.stringify([result.suite, result.ancestry, result.name, result.kind]));
     assert.equal(new Set(identities).size, identities.length, `${phase.script} emitted duplicate test identity`);
     assert.ok(phase.tests.some(isExecutedTestLeaf)
-      || phase.unqualifiedRunners.some(summary => mandatoryRunnerSummary(summary)),
+      || (phase.tests.length === 0 && phase.unqualifiedRunners.some(summary => mandatoryRunnerSummary(summary))),
       `${phase.script} emitted no test execution`);
   }
 }
@@ -475,7 +522,8 @@ export async function measure(entry: string, output: string): Promise<ProcessOut
     report.phases.push(phase);
     await save();
   });
-  report.receiptReuseAllowed = sourceComplete && observedFailure === undefined;
+  report.receiptReuseAllowed = sourceComplete && observedFailure === undefined
+    && report.phases.some(phase => phase.tests.some(isExecutedTestLeaf));
   await save();
   return observedFailure ?? { code: sourceComplete ? 0 : 1, signal: null };
 }

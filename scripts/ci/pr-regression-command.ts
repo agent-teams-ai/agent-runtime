@@ -72,17 +72,17 @@ function assertFoundationNegativeExecution(execution: Execution, required: reado
 // expected nested negatives cannot become parent execution evidence.
 export async function observeRegressionProcess(command: string, root: string, env: NodeJS.ProcessEnv): Promise<Execution> {
   const foundation = command === regressionCommands['foundation-negative'];
-  if (foundation) {
-    assert.equal((await readScripts(join(root, 'package.json')))['foundation:boundaries:negative'], foundationCommand,
-      'original three-file Foundation command drift');
-  }
   const serialCommand = foundation ? foundationCommand : command;
   const tokens = serialCommand.split(' '), executable = tokens.shift(); assert.ok(executable);
   const file = executable === 'node' ? process.execPath : executable === 'pnpm' ? 'pnpm' : resolvePath(root, 'node_modules/.bin', executable);
   const args = tokens;
-  const scripts = await readScripts(join(root, 'package.json'));
   const pnpmScript = /^pnpm ([\w:-]+)$/u.exec(serialCommand)?.[1];
-  const commands = pnpmScript ? commandInventory(scripts, pnpmScript) : [{ script: command, command: serialCommand }];
+  const scripts = foundation || pnpmScript ? await readScripts(join(root, 'package.json')) : undefined;
+  if (foundation) {
+    assert.equal(scripts?.['foundation:boundaries:negative'], foundationCommand,
+      'original three-file Foundation command drift');
+  }
+  const commands = pnpmScript ? commandInventory(scripts!, pnpmScript) : [{ script: command, command: serialCommand }];
   const childEnv = authoritativeNodeEventEnvironment(commands, env);
   delete childEnv.NODE_TEST_CONTEXT;
   if (foundation) {
@@ -128,12 +128,16 @@ export function assertPrObligations(expected: readonly Obligation[], observed: r
       assert.ok(!declaration.regression || !deferred.includes(declaration.regression), 'wrong disposition');
       assert.equal(item.execution.code, 0, 'failed or missing command'); assert.equal(item.execution.signal, null, 'cancelled command');
       if (/node --test|agent-teams-node-test/u.test(item.command)) {
-        assert.ok(item.execution.tests.every(result => result.bodyless !== undefined), 'text-only test evidence');
+        assert.ok(item.execution.tests.every(result => result.bodyless === false), 'text-only test evidence');
       }
       assert.ok(item.execution.tests.every(result =>
         result.status !== 'failed' && result.status !== 'cancelled' && result.bodyless !== true),
       'failed, cancelled or file-only test');
-      if (declaration.regression === 'foundation-negative') {assertFoundationNegativeExecution(item.execution, foundationRequired);}
+      if (declaration.regression === 'foundation-negative') {
+        assertFoundationNegativeExecution(item.execution, foundationRequired);
+        assert.ok(item.execution.tests.filter(result => result.kind === 'test').every(result => result.status === 'passed'),
+          'skipped or todo original Foundation test execution');
+      }
       // Pretty CLI output lacks source sites and can forward repeated fixture
       // names. Enforce identity uniqueness for actual public Node events only.
       if (declaration.regression === 'foundation-negative' || /^node --test(?: |$)/u.test(item.command)) {
@@ -141,7 +145,8 @@ export function assertPrObligations(expected: readonly Obligation[], observed: r
         assert.equal(new Set(identities).size, identities.length, 'duplicate observed test identity');
       }
       if (/node --test|agent-teams-node-test/u.test(item.command) || /^pnpm (?:test:|foundation:boundaries:negative|docs:qualification:(?:serial|portable))/u.test(item.command)) {
-        assert.ok(item.execution.tests.some(isExecutedTestLeaf) || item.execution.mandatory.length === 1,
+        assert.ok(item.execution.tests.some(isExecutedTestLeaf)
+          || (item.execution.tests.length === 0 && item.execution.mandatory.length === 1),
           'no executed test leaf');
       }
     }
