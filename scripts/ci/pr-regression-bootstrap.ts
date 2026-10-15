@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import { lstat, open, readFile, readdir, readlink, realpath } from 'node:fs/promises';
 import { dirname, extname, join, relative, resolve as resolvePath, sep } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { installationStateDigest, parseInstallationJson } from './installation-state.ts';
 import type { PrInput } from './pr-regression-inputs.ts';
 
 const packageName = '@agent-teams/ci-input-proof';
@@ -34,7 +35,8 @@ const controlPaths = [
   '.github/workflows/ci-foundation-route.yml', '.github/workflows/ci-pr-regressions.yml', '.github/workflows/ci-lane.yml', '.github/workflows/ci.yml',
   'architecture/foundation/ci-pr-regressions.json', 'architecture/foundation/source-dependencies.yaml', 'package.json', 'pnpm-lock.yaml',
   'pnpm-workspace.yaml', 'scripts/ci/contracts.test.ts', 'scripts/ci/conformance.ts', 'scripts/ci/measure.ts',
-  'scripts/ci/pr-regression-bootstrap.ts', 'scripts/ci/pr-regression-bootstrap.test.ts', 'scripts/ci/pr-regression-command.ts', 'scripts/ci/pr-regression-inputs.ts',
+  'scripts/ci/installation-state.ts', 'scripts/ci/pr-regression-bootstrap.ts', 'scripts/ci/pr-regression-bootstrap.test.ts',
+  'scripts/ci/pr-regression-command.ts', 'scripts/ci/pr-regression-inputs.ts',
   'scripts/ci/pr-regression-inputs.test.ts', 'scripts/docs/consumer-migration.test.mjs', 'scripts/sdk-growth-source/fixtures',
 ] as const;
 
@@ -57,91 +59,9 @@ function exportValues(value: unknown): string[] {
   return typeof value === 'string' ? [value] : value !== null && typeof value === 'object' ? Object.values(value).flatMap(exportValues) : [];
 }
 
-interface JsonCursor { index: number }
-interface JsonStringToken { raw: string; value: string }
-
-function skipJsonWhitespace(source: string, cursor: JsonCursor): void {
-  while (cursor.index < source.length && [0x09, 0x0a, 0x0d, 0x20].includes(source.charCodeAt(cursor.index))) {cursor.index++;}
-}
-
-function parseJsonString(source: string, cursor: JsonCursor): JsonStringToken {
-  assert.equal(source[cursor.index], '"', 'installed metadata string expected');
-  const start = cursor.index++;
-  while (cursor.index < source.length) {
-    const code = source.charCodeAt(cursor.index++);
-    if (code === 0x22) {
-      const raw = source.slice(start, cursor.index); return { raw, value: JSON.parse(raw) as string };
-    }
-    if (code !== 0x5c) {
-      assert.ok(code >= 0x20, 'installed metadata string contains an unescaped control character'); continue;
-    }
-    assert.ok(cursor.index < source.length, 'installed metadata string escape is incomplete');
-    const escape = source[cursor.index++]!;
-    if (escape !== 'u') {
-      assert.ok('"\\/bfnrt'.includes(escape), 'installed metadata string escape is invalid'); continue;
-    }
-    assert.ok(cursor.index + 4 <= source.length, 'installed metadata Unicode escape is incomplete');
-    for (const digit of source.slice(cursor.index, cursor.index + 4)) {
-      assert.ok((digit >= '0' && digit <= '9') || (digit >= 'a' && digit <= 'f') || (digit >= 'A' && digit <= 'F'),
-        'installed metadata Unicode escape is invalid');
-    }
-    cursor.index += 4;
-  }
-  throw new Error('installed metadata string is incomplete');
-}
-
-function scanJsonValue(source: string, cursor: JsonCursor, keys: JsonStringToken[]): void {
-  skipJsonWhitespace(source, cursor);
-  const value = source[cursor.index];
-  assert.ok(value !== undefined, 'installed metadata value is incomplete');
-  if (value === '{') {scanJsonObject(source, cursor, keys); return;}
-  if (value === '[') {scanJsonArray(source, cursor, keys); return;}
-  if (value === '"') {parseJsonString(source, cursor); return;}
-  const start = cursor.index;
-  while (cursor.index < source.length && !',]}'.includes(source[cursor.index]!) && ![0x09, 0x0a, 0x0d, 0x20].includes(source.charCodeAt(cursor.index))) {cursor.index++;}
-  assert.ok(cursor.index > start, 'installed metadata value is empty');
-}
-
-function scanJsonObject(source: string, cursor: JsonCursor, keys: JsonStringToken[]): void {
-  cursor.index++;
-  skipJsonWhitespace(source, cursor);
-  if (source[cursor.index] === '}') {cursor.index++; return;}
-  while (true) {
-    skipJsonWhitespace(source, cursor); keys.push(parseJsonString(source, cursor)); skipJsonWhitespace(source, cursor);
-    assert.equal(source[cursor.index], ':', 'installed metadata property separator'); cursor.index++;
-    scanJsonValue(source, cursor, keys); skipJsonWhitespace(source, cursor);
-    const separator = source[cursor.index];
-    assert.ok(separator === ',' || separator === '}', 'installed metadata object is incomplete');
-    cursor.index++;
-    if (separator === '}') {return;}
-  }
-}
-
-function scanJsonArray(source: string, cursor: JsonCursor, keys: JsonStringToken[]): void {
-  cursor.index++;
-  skipJsonWhitespace(source, cursor);
-  if (source[cursor.index] === ']') {cursor.index++; return;}
-  while (true) {
-    scanJsonValue(source, cursor, keys); skipJsonWhitespace(source, cursor);
-    const separator = source[cursor.index];
-    assert.ok(separator === ',' || separator === ']', 'installed metadata array is incomplete');
-    cursor.index++;
-    if (separator === ']') {return;}
-  }
-}
-
-function jsonObjectKeys(source: string): JsonStringToken[] {
-  const cursor: JsonCursor = { index: 0 }, keys: JsonStringToken[] = [];
-  scanJsonValue(source, cursor, keys);
-  skipJsonWhitespace(source, cursor);
-  assert.equal(cursor.index, source.length, 'installed metadata has trailing content');
-  return keys;
-}
-
 export function parseInstallationMetadata(bytes: Buffer): { packageManager: string; virtualStoreDir: string } {
   assert.ok(bytes.byteLength <= installationMetadataMaxBytes, 'installed metadata exceeds bounded parse');
-  const source = bytes.toString('utf8'); assert.equal(Buffer.byteLength(source, 'utf8'), bytes.byteLength, 'installed metadata is not UTF-8');
-  const sourceKeys = jsonObjectKeys(source);
+  const { value: metadata, keys: sourceKeys } = parseInstallationJson(bytes);
   const identityKeys = (name: 'packageManager' | 'virtualStoreDir' | 'virtualStoreOnly'): readonly string[] =>
     sourceKeys.filter(key => key.value === name).map(key => key.raw);
   const packageManagerKeys = identityKeys('packageManager');
@@ -153,31 +73,10 @@ export function parseInstallationMetadata(bytes: Buffer): { packageManager: stri
   assert.equal(packageManagerKeys[0], '"packageManager"', 'installed pnpm identity key spelling drift');
   assert.equal(virtualStoreDirKeys[0], '"virtualStoreDir"', 'installed store layout key spelling drift');
   assert.ok(virtualStoreOnlyKeys.length === 0 || virtualStoreOnlyKeys[0] === '"virtualStoreOnly"', 'installed virtual-store-only key spelling drift');
-  const parsed: unknown = JSON.parse(source);
-  assert.ok(parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed), 'installed metadata is not a JSON object');
-  const metadata = parsed as Record<string, unknown>;
   assert.equal(metadata.packageManager, expectedPackageManager, 'installed pnpm identity drift');
   assert.equal(metadata.virtualStoreDir, expectedVirtualStoreDir, 'installed store layout drift');
   assert.ok(metadata.virtualStoreOnly === undefined || metadata.virtualStoreOnly === false, 'installed virtual-store-only layout cannot admit the optimizer');
   return { packageManager: expectedPackageManager, virtualStoreDir: expectedVirtualStoreDir };
-}
-
-function canonicalJson(value: unknown): string {
-  if (Array.isArray(value)) {return `[${value.map(canonicalJson).join(',')}]`;}
-  if (value !== null && typeof value === 'object') {
-    const entries = Object.entries(value as Record<string, unknown>).toSorted(([left], [right]) => left.localeCompare(right));
-    return `{${entries.map(([key, child]) => `${JSON.stringify(key)}:${canonicalJson(child)}`).join(',')}}`;
-  }
-  const serialized = JSON.stringify(value);
-  assert.ok(serialized !== undefined, 'canonical JSON value');
-  return serialized;
-}
-
-function installationStateDigest(bytes: Buffer): string {
-  const state = object(JSON.parse(bytes.toString('utf8'))); assert.equal(typeof state.lastValidatedTimestamp, 'number', 'installed workspace state timestamp');
-  const { lastValidatedTimestamp: volatileTimestamp, ...stable } = state;
-  assert.ok(Number.isFinite(volatileTimestamp), 'installed workspace state timestamp');
-  return sha256(canonicalJson(stable));
 }
 
 async function readInstallationMetadata(path: string): Promise<Buffer> {

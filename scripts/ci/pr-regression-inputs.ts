@@ -5,6 +5,7 @@ import { lstat, readFile, readdir, readlink, realpath } from 'node:fs/promises';
 import { join, relative, resolve } from 'node:path';
 import { parse } from 'yaml';
 import type { ComparisonResult, LeafInventory } from '@agent-teams/ci-input-proof';
+import { installationStateDigest } from './installation-state.ts';
 
 export const regressionIds = ['foundation-negative', 'fms', 'cms-regression', 'ci-selftests', 'docs-portable'] as const;
 export type RegressionId = typeof regressionIds[number];
@@ -14,7 +15,7 @@ export const packageRoots = ['packages/apps/embedded-runtime', 'packages/context
 export const policyPath = 'architecture/foundation/ci-pr-regressions.json';
 const schedulingClosure = [policyPath, 'scripts/ci/pr-regression-inputs.ts', 'scripts/ci/pr-regression-inputs.test.ts',
   'scripts/ci/pr-regression-command.ts', 'scripts/ci/pr-regression-bootstrap.ts', 'scripts/ci/pr-regression-bootstrap.test.ts',
-  'scripts/ci/pr-regression-bootstrap-fixtures.ts',
+  'scripts/ci/pr-regression-bootstrap-fixtures.ts', 'scripts/ci/installation-state.ts',
   '.github/workflows/ci-foundation-route.yml', '.github/workflows/ci-pr-regressions.yml'];
 interface Policy {
   schemaVersion: number; packageRoots: string[]; foundationAnchors: string[]; cmsBodyRoots: string[]; docsBodyAnchors: string[];
@@ -224,7 +225,9 @@ export async function installationFingerprint(root: string): Promise<string> {
       for (const child of (await readdir(path)).toSorted()) {await visit(join(path, child));}
     } else {
       assert.ok(stat.isFile(), 'unqualified installed kind');
-      entries.push([name, 'file', stat.mode & 0o777, sha256(await readFile(path))]);
+      const bytes = await readFile(path);
+      entries.push([name, 'file', stat.mode & 0o777,
+        name === '.pnpm-workspace-state-v1.json' ? installationStateDigest(bytes) : sha256(bytes)]);
     }
   };
   await visit(modules);

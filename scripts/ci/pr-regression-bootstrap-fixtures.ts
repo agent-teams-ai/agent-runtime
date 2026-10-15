@@ -4,7 +4,7 @@ import { chmod, copyFile, cp, lstat, mkdir, mkdtemp, readFile, readdir, readlink
 import { tmpdir } from 'node:os';
 import { join, relative, sep } from 'node:path';
 import type { TestContext } from 'node:test';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import type { LeafInventoryComparator } from './pr-regression-inputs.ts';
 
 const repository = fileURLToPath(new URL('../../', import.meta.url));
@@ -12,6 +12,7 @@ export const retainedHistorySource = process.env.TEST_HISTORY_BUNDLE ?? reposito
 const fixtureBootstrapImport = "import { admitAndImportOptimizer } from './scripts/ci/pr-regression-bootstrap.ts';";
 const retainedHistoryRevision = '47a79675fac84436e96bc6119478d740848f4f02';
 const fixtureOwner = { name: 'iliya', email: 'iliyazelenkog@gmail.com' } as const;
+const admittedPublishedComparators = new Map<string, Promise<LeafInventoryComparator>>();
 
 export const regressionGraphTestName = 'complete quick obligations retain live conformance and reject deferred execution or passes';
 
@@ -113,23 +114,22 @@ async function assertPublishedPackageMode(path: string): Promise<void> {
 }
 
 export async function admitPublishedComparator(): Promise<LeafInventoryComparator> {
-  const root = process.env.TEST_PUBLISHED_COMPARATOR_ROOT ?? repository;
-  return ((base, head, structuralPaths) => {
-    const source = `${fixtureBootstrapImport}
-import { readFileSync } from 'node:fs';
-const input = JSON.parse(readFileSync(0, 'utf8'));
-const compare = await admitAndImportOptimizer(process.cwd());
-process.stdout.write(JSON.stringify(compare(input.base, input.head, input.structuralPaths)));`;
-    const result = spawnSync(process.execPath, ['--input-type=module', '--eval', source], {
-      cwd: root,
-      env: fixtureExecutionEnvironment(process.env.TMPDIR ?? tmpdir()),
-      input: JSON.stringify({ base, head, structuralPaths }),
-      encoding: 'utf8',
-    });
-    assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
-    assert.equal(result.signal, null);
-    return JSON.parse(result.stdout) as ReturnType<LeafInventoryComparator>;
-  }) as LeafInventoryComparator;
+  const root = await realpath(process.env.TEST_PUBLISHED_COMPARATOR_ROOT ?? repository);
+  let admitted = admittedPublishedComparators.get(root);
+  if (!admitted) {
+    admitted = (async () => {
+      // The bootstrap module has no optimizer import at module scope. Importing
+      // it here retains its real pre-import admission before the first optimizer
+      // load, while the admitted pure relation can then be reused without
+      // rescanning the complete installed tree for every fixture assertion.
+      const bootstrap = await import(pathToFileURL(join(root, 'scripts/ci/pr-regression-bootstrap.ts')).href) as {
+        admitAndImportOptimizer: (root?: string) => Promise<LeafInventoryComparator>;
+      };
+      return bootstrap.admitAndImportOptimizer(root);
+    })();
+    admittedPublishedComparators.set(root, admitted);
+  }
+  return admitted;
 }
 
 export async function copyPublishedOptimizer(target: string): Promise<void> {

@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { parse } from 'yaml';
+import { installationStateDigest, parseInstallationJson } from './installation-state.ts';
 import { assertAggregate, assertFullInventory, assertRevision, productPhases, requiredJobs } from './policy.ts';
 import { commandInventory, routedScripts } from './script-routing.ts';
 import type { Scripts } from './script-routing.ts';
@@ -609,4 +610,21 @@ test('strict retained C0 retrieval restores an unreachable object before source 
   assert.equal(git('cat-file', '-e', `${object}^1^{commit}`).status, 0, 'retained parent history');
   assert.equal(git('fsck', '--connectivity-only', '--no-reflogs', object).status, 0, 'retained tree/blob connectivity');
   assert.equal(run().status, 0, 'present object needs no fetch');
+});
+
+const installationJsonState = (value: string) => Buffer.from(`{"lastValidatedTimestamp":1,"settings":{"value":${value}}}`);
+
+test('installation JSON rejects lossy numeric and truncated UTF-8 replacement collisions', () => {
+  for (const [canonical, collision] of [
+    ['null', '1e400'], ['null', '-1e400'], ['9007199254740992', '9007199254740993'],
+    ['1', '1.00000000000000001'],
+  ] as const) {
+    installationStateDigest(installationJsonState(canonical));
+    assert.throws(() => installationStateDigest(installationJsonState(collision)), /lossy or non-canonical/u);
+  }
+  const prefix = Buffer.from('{"lastValidatedTimestamp":1,"settings":{"value":"');
+  const suffix = Buffer.from('"}}');
+  assert.throws(() => parseInstallationJson(Buffer.concat([prefix, Buffer.from([0xf0, 0x9f, 0x92]), suffix])), /exact UTF-8/u);
+  const replacement = parseInstallationJson(Buffer.concat([prefix, Buffer.from('\ufffd', 'utf8'), suffix]));
+  assert.equal((replacement.value.settings as { value: string }).value, '\ufffd');
 });
