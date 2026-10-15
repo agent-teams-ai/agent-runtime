@@ -5,6 +5,8 @@ import { fileURLToPath } from "node:url";
 // Their compiler harnesses use disposable directories, never an agent runtime project.
 const result = spawnSync(process.execPath, [
   "--test", "--test-concurrency=1",
+  `--test-reporter=${fileURLToPath(new URL("../../scripts/ci/measure.ts", import.meta.url))}`,
+  "--test-reporter-destination=stdout",
   "scripts/native-helper/build-native-helper.test.mjs",
   "packages/contexts/agent-execution/tests/features/contained-agent-turn/darwin-attempt-owner-tree.test.ts",
   "packages/contexts/agent-execution/tests/features/contained-agent-turn/darwin-attempt-owner-protocol.test.ts",

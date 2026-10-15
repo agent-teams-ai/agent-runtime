@@ -6,15 +6,24 @@ import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
 import { readScripts } from './inventory.ts';
 import { groups } from './policy.ts';
+import { commandInventory } from './script-routing.ts';
 import type { Group } from './policy.ts';
 import { assertCmsComposite, captureCmsComposite, cmsBinding, cmsContract, cmsDirectCommand, cmsMandatoryCommand,
-  createTestResultCollector, mandatoryRunnerSummary } from './measure.ts';
+  authoritativeNodeEventEnvironment, createTestResultCollector, isExecutedTestLeaf, mandatoryRunnerSummary } from './measure.ts';
 import type { NodeSummary, TestResult } from './measure.ts';
 import { classifyPrRegressions, currentPrInput, installationFingerprint, regressionCommands } from './pr-regression-inputs.ts';
-import type { PrPlan, RegressionId } from './pr-regression-inputs.ts';
+import type { LeafInventoryComparator, PrInput, PrPlan, RegressionId } from './pr-regression-inputs.ts';
 
 export interface Execution { code: number | null; signal: string | null; tests: TestResult[]; mandatory: string[]; nodeSummaries?: NodeSummary[] }
 export interface Obligation { id: string; command: string; regression?: RegressionId }
+export class PrRegressionProcessFailure extends Error {
+  readonly outcome: Pick<Execution, 'code' | 'signal'>;
+  constructor(outcome: Pick<Execution, 'code' | 'signal'>, obligation: Obligation) {
+    super(`sampled process failed: ${obligation.id}`);
+    this.name = 'PrRegressionProcessFailure';
+    this.outcome = outcome;
+  }
+}
 export type ObservedObligation = Obligation & (
   { disposition: 'executed'; execution: Execution }
   | { disposition: 'deferred-unchanged-regression-inputs'; tests: [] }
@@ -59,38 +68,48 @@ function assertFoundationNegativeExecution(execution: Execution, required: reado
 }
 
 // Fixed commands come from the reviewed script inventory, never an event payload.
-// This observes real stdout and exit/signal; deferrals never enter this function.
+// This observes real stdout and exit/signal; child diagnostics stay on stderr so
+// expected nested negatives cannot become parent execution evidence.
 export async function observeRegressionProcess(command: string, root: string, env: NodeJS.ProcessEnv): Promise<Execution> {
   const foundation = command === regressionCommands['foundation-negative'];
-  if (foundation) {
-    assert.equal((await readScripts(join(root, 'package.json')))['foundation:boundaries:negative'], foundationCommand,
-      'original three-file Foundation command drift');
-  }
   const serialCommand = foundation ? foundationCommand : command;
   const tokens = serialCommand.split(' '), executable = tokens.shift(); assert.ok(executable);
-  const directNodeTest = executable === 'node' && tokens[0] === '--test';
   const file = executable === 'node' ? process.execPath : executable === 'pnpm' ? 'pnpm' : resolvePath(root, 'node_modules/.bin', executable);
-  const args = directNodeTest ? [...tokens.slice(0, 1), `--test-reporter=${fileURLToPath(new URL('./measure.ts', import.meta.url))}`, ...tokens.slice(1)] : tokens;
-  const childEnv = { ...env }; delete childEnv.NODE_TEST_CONTEXT;
+  const args = tokens;
+  const pnpmScript = /^pnpm ([\w:-]+)$/u.exec(serialCommand)?.[1];
+  const scripts = foundation || pnpmScript ? await readScripts(join(root, 'package.json')) : undefined;
+  if (foundation) {
+    assert.equal(scripts?.['foundation:boundaries:negative'], foundationCommand,
+      'original three-file Foundation command drift');
+  }
+  const commands = pnpmScript ? commandInventory(scripts!, pnpmScript) : [{ script: command, command: serialCommand }];
+  const childEnv = authoritativeNodeEventEnvironment(commands, env);
+  delete childEnv.NODE_TEST_CONTEXT;
   if (foundation) {
     // Serial PR FULL and sampled execution never inherit the non-PR shard route.
     for (const key of ['FOUNDATION_FIXTURE_PROTOCOL', 'FOUNDATION_FIXTURE_INDEX', 'FOUNDATION_FIXTURE_COUNT']) {delete childEnv[key];}
   }
   const child = spawn(file, args, { cwd: root, env: childEnv, stdio: ['ignore', 'pipe', 'inherit'] });
   const execution: Execution = { code: null, signal: null, tests: [], mandatory: [], nodeSummaries: [] };
+  const eventTests: TestResult[] = [], textTests: TestResult[] = [];
   const observe = createTestResultCollector();
   const lines = createInterface({ input: child.stdout });
   lines.on('line', line => {
-    console.log(line);
-    const result = directNodeTest && line.startsWith('CI_NODE_EVENT ') ? JSON.parse(line.slice(14)) as TestResult : observe(line);
-    if (result) {execution.tests.push(result);}
-    if (directNodeTest && line.startsWith('CI_NODE_SUMMARY ')) {execution.nodeSummaries!.push(JSON.parse(line.slice(16)) as NodeSummary);}
+    process.stderr.write(`CI_NODE_CHILD_DIAGNOSTIC ${line}\n`);
+    if (line.startsWith('CI_NODE_EVENT ')) {
+      eventTests.push(JSON.parse(line.slice(14)) as TestResult);
+    } else {
+      const result = observe(line);
+      if (result) {textTests.push(result);}
+    }
+    if (line.startsWith('CI_NODE_SUMMARY ')) {execution.nodeSummaries!.push(JSON.parse(line.slice(16)) as NodeSummary);}
     const summary = mandatoryRunnerSummary(line); if (summary) {execution.mandatory.push(summary);}
   });
   await new Promise<void>((resolve, reject) => {
     child.once('error', reject);
     child.once('close', (code, signal) => { execution.code = code; execution.signal = signal; resolve(); });
   });
+  execution.tests.push(...(eventTests.length > 0 ? eventTests : textTests));
   return execution;
 }
 
@@ -108,8 +127,17 @@ export function assertPrObligations(expected: readonly Obligation[], observed: r
       assert.equal(item.disposition, 'executed');
       assert.ok(!declaration.regression || !deferred.includes(declaration.regression), 'wrong disposition');
       assert.equal(item.execution.code, 0, 'failed or missing command'); assert.equal(item.execution.signal, null, 'cancelled command');
-      assert.ok(item.execution.tests.every(result => result.status === 'passed'), 'failed, skipped, todo or cancelled test');
-      if (declaration.regression === 'foundation-negative') {assertFoundationNegativeExecution(item.execution, foundationRequired);}
+      if (/node --test|agent-teams-node-test/u.test(item.command)) {
+        assert.ok(item.execution.tests.every(result => result.bodyless === false), 'text-only test evidence');
+      }
+      assert.ok(item.execution.tests.every(result =>
+        result.status !== 'failed' && result.status !== 'cancelled' && result.bodyless !== true),
+      'failed, cancelled or file-only test');
+      if (declaration.regression === 'foundation-negative') {
+        assertFoundationNegativeExecution(item.execution, foundationRequired);
+        assert.ok(item.execution.tests.filter(result => result.kind === 'test').every(result => result.status === 'passed'),
+          'skipped or todo original Foundation test execution');
+      }
       // Pretty CLI output lacks source sites and can forward repeated fixture
       // names. Enforce identity uniqueness for actual public Node events only.
       if (declaration.regression === 'foundation-negative' || /^node --test(?: |$)/u.test(item.command)) {
@@ -117,7 +145,9 @@ export function assertPrObligations(expected: readonly Obligation[], observed: r
         assert.equal(new Set(identities).size, identities.length, 'duplicate observed test identity');
       }
       if (/node --test|agent-teams-node-test/u.test(item.command) || /^pnpm (?:test:|foundation:boundaries:negative|docs:qualification:(?:serial|portable))/u.test(item.command)) {
-        assert.ok(item.execution.tests.length > 0 || item.execution.mandatory.length === 1, 'no observed test execution');
+        assert.ok(item.execution.tests.some(isExecutedTestLeaf)
+          || (item.execution.tests.length === 0 && item.execution.mandatory.length === 1),
+          'no executed test leaf');
       }
     }
   }
@@ -138,11 +168,12 @@ export function prObligations(group: Group): Obligation[] {
   });
 }
 
-export async function runPrRegressions(group: Group, output: string): Promise<void> {
+export async function runPrRegressions(group: Group, output: string, compareLeafInventories: LeafInventoryComparator,
+  suppliedInput?: PrInput): Promise<void> {
   const root = process.cwd(), scripts = await readScripts(join(root, 'package.json'));
   assert.ok(scripts[`check:ci:${group}`], 'known CI group');
-  const input = await currentPrInput(root, process.env);
-  const plan: PrPlan = await classifyPrRegressions(root, input);
+  const input = suppliedInput ?? await currentPrInput(root, process.env);
+  const plan: PrPlan = await classifyPrRegressions(root, input, compareLeafInventories);
   const expected = prObligations(group);
   const foundationRequired = expected.some(item => item.regression === 'foundation-negative' && !plan.deferred.includes(item.regression))
     ? await foundationNegativeTests(root) : undefined;
@@ -160,31 +191,44 @@ export async function runPrRegressions(group: Group, output: string): Promise<vo
       report.obligations.push({ ...item, disposition: 'deferred-unchanged-regression-inputs', tests: [] });
     } else if (item.id === 'cms-direct') {
       const cms = await captureCmsComposite();
-      // The existing pin contract remains authoritative for BOTH processes.
-      assertCmsComposite(cms, await cmsBinding(), cms.direct.tests, JSON.parse(await readFile(cmsContract, 'utf8')));
+      const mandatoryItem = expected.find(value => value.id === 'cms-mandatory')!;
+      const directExecution: Execution = { ...cms.direct, mandatory: [] };
+      report.obligations.push({ ...item, disposition: 'executed', execution: directExecution });
+      await save();
+      if (cms.direct.code !== 0 || cms.direct.signal !== null) {
+        throw new PrRegressionProcessFailure({ code: cms.direct.code, signal: cms.direct.signal }, item);
+      }
       assert.ok(cms.mandatory);
-      report.obligations.push({ ...item, disposition: 'executed', execution: { ...cms.direct, mandatory: [] } },
-        { ...expected.find(value => value.id === 'cms-mandatory')!, disposition: 'executed', execution: { ...cms.mandatory, tests: [], mandatory: cms.mandatory.summaries } });
+      const mandatoryExecution: Execution = { ...cms.mandatory, tests: [], mandatory: cms.mandatory.summaries };
+      report.obligations.push({ ...mandatoryItem, disposition: 'executed', execution: mandatoryExecution });
+      await save();
+      if (cms.mandatory.code !== 0 || cms.mandatory.signal !== null) {
+        throw new PrRegressionProcessFailure({ code: cms.mandatory.code, signal: cms.mandatory.signal }, mandatoryItem);
+      }
+      // Process outcomes are persisted first; the existing pin contract remains
+      // authoritative for BOTH processes after real failures can propagate.
+      assertCmsComposite(cms, await cmsBinding(), cms.direct.tests, JSON.parse(await readFile(cmsContract, 'utf8')));
     } else if (item.id !== 'cms-mandatory') {
       // currentPrInput already observes the frozen installation before this lane.
       // The final observation rejects drift across the entire execution.
       const execution = await observeRegressionProcess(item.command, root, process.env);
       report.obligations.push({ ...item, disposition: 'executed', execution });
       await save();
+      if (execution.code !== 0 || execution.signal !== null) {
+        throw new PrRegressionProcessFailure({ code: execution.code, signal: execution.signal }, item);
+      }
       assertPrObligations(expected.slice(0, report.obligations.length), report.obligations, plan.deferred, foundationRequired);
     }
     await save();
   }
   if (plan.mode === 'affected-pr') {
     assert.equal(await installationFingerprint(root), plan.installation, 'installed drift during PR');
-    assert.deepEqual(await classifyPrRegressions(root, input), plan, 'current source/scope drift during PR');
+    assert.deepEqual(await classifyPrRegressions(root, input, compareLeafInventories), plan, 'current source/scope drift during PR');
   }
   assertPrObligations(expected, report.obligations, plan.deferred, foundationRequired);
   console.log(`PR regression sampling ${plan.mode}: ${plan.deferred.join(', ') || 'all regressions executed'}; no historical pass reused.`);
 }
 
 if (process.argv[1] && resolvePath(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const group = process.argv[2]?.replace('check:ci:', '');
-  assert.ok(group === 'quick' || group === 'foundation' || group === 'architecture' || group === 'docs', 'known PR group');
-  await runPrRegressions(group, process.env.CI_EVIDENCE_DIR ?? 'tmp/root-export-evidence/pr-regressions');
+  throw new Error('PR regression command requires pre-import source admission through pr-regression-bootstrap.ts');
 }
