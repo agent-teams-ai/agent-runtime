@@ -63,7 +63,6 @@ const immutableProjection = (operation: ContainedTurnKernelOperation): string =>
 });
 
 // The count is the frozen write-once/append-only invariant matrix, not branching policy.
-// oxlint-disable-next-line complexity
 export const validateContainedTurnHistory = (
   candidate: ContainedTurnKernelOperation,
   previous: ContainedTurnKernelOperation,

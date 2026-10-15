@@ -193,7 +193,7 @@ export class CodexAppServerContainedTurnProvider implements ContainedTurnProvide
     this.#cancellationPollMs = positiveInteger("cancellationPollMs", options.cancellationPollMs, DEFAULT_CANCELLATION_POLL_MS);
   }
 
-  // oxlint-disable-next-line max-params -- request correlation and bounded buffer state are explicit protocol seams.
+  // request correlation and bounded buffer state are explicit protocol seams.
   async #request(
     process: CustodiedProviderProcess,
     reader: BoundedCodexJsonLineReader,

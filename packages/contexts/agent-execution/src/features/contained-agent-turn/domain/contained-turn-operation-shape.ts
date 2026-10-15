@@ -47,7 +47,6 @@ function validateOperationRecord(operation: unknown): asserts operation is Recor
 
 /** Rejects object-spread leakage before semantic validation or persistence. */
 // The count exhaustively mirrors closed orthogonal record variants, not lifecycle transitions.
-// oxlint-disable-next-line complexity
 export function validateContainedTurnOperationShape(operation: unknown): asserts operation is ContainedTurnOperationShape {
   validateOperationRecord(operation);
 

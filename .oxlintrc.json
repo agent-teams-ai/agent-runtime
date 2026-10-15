@@ -70,6 +70,109 @@
         ],
         "max-params": ["error", 6]
       }
+    },
+    {
+      "files": [
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-app-server/codex-app-server-contained-turn-provider.ts"
+      ],
+      "rules": {
+        "max-params": ["error", 6]
+      }
+    },
+    {
+      "files": [
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/node-contained-turn-workspace.ts"
+      ],
+      "rules": {
+        "max-lines-per-function": [
+          "error",
+          { "max": 241, "skipBlankLines": true, "skipComments": true }
+        ]
+      }
+    },
+    {
+      "files": [
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/egress/http-egress-runtime-security-v2.ts"
+      ],
+      "rules": {
+        "complexity": ["error", 50]
+      }
+    },
+    {
+      "files": [
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-evidence.ts"
+      ],
+      "rules": {
+        "complexity": ["error", 25]
+      }
+    },
+    {
+      "files": [
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/host-custody/host-custody-launch.ts"
+      ],
+      "rules": {
+        "complexity": ["error", 27]
+      }
+    },
+    {
+      "files": [
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/application/contained-turn-grant-claim.ts"
+      ],
+      "rules": {
+        "complexity": ["error", 38]
+      }
+    },
+    {
+      "files": [
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/application/contained-turn-preparation-cleanup.ts"
+      ],
+      "rules": {
+        "max-params": ["error", 7]
+      }
+    },
+    {
+      "files": [
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-closure-recovery.ts"
+      ],
+      "rules": {
+        "complexity": ["error", 26]
+      }
+    },
+    {
+      "files": [
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-history.ts"
+      ],
+      "rules": {
+        "complexity": ["error", 43]
+      }
+    },
+    {
+      "files": [
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-operation-shape.ts"
+      ],
+      "rules": {
+        "complexity": ["error", 50]
+      }
+    },
+    {
+      "files": [
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-proof-validation.ts"
+      ],
+      "rules": {
+        "complexity": ["error", 47],
+        "max-lines-per-function": [
+          "error",
+          { "max": 168, "skipBlankLines": true, "skipComments": true }
+        ]
+      }
+    },
+    {
+      "files": [
+        "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-validation.ts"
+      ],
+      "rules": {
+        "complexity": ["error", 36]
+      }
     }
   ]
 }

@@ -451,7 +451,7 @@ const ingressClosureFailure = async (
   return stdoutStatus === "overflow" || stderrStatus === "overflow" ? "ingress-overflow" : "ingress-incomplete";
 };
 
-// oxlint-disable-next-line complexity -- ordered fail-closed closure phases remain explicit.
+// ordered fail-closed closure phases remain explicit.
 export const containCustody = async (
   live: ContainmentState,
   input: { readonly attemptId: string; readonly custodyRef?: string; readonly operationId: string },

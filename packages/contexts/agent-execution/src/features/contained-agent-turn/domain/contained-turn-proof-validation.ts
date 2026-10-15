@@ -26,7 +26,6 @@ type ProofShape<Value> = Value extends ContainedTurnProof ? {
 export type ContainedTurnProofShape = ProofShape<ContainedTurnProof>;
 
 // Exhaustive by proof kind so no proof can smuggle unbound authority fields.
-// oxlint-disable-next-line complexity
 function validateProofShape(proof: unknown): asserts proof is ContainedTurnProofShape {
   assertContainedTurnDataRecord("contained-turn proof", proof);
   validateProofKind(proof.kind);
@@ -157,7 +156,6 @@ export function validateContainedTurnProofs(
 }
 
 // The count is the exhaustive closed proof union; every case validates distinct subject bindings.
-// oxlint-disable-next-line complexity, max-lines-per-function
 export function validateContainedTurnProofBinding(
   operation: ContainedTurnIdentityValidatedOperation,
   proof: unknown,
@@ -335,7 +333,6 @@ export const containedTurnRequiredProofsSatisfied = (operation: Pick<ContainedTu
 };
 
 // The branches are the closed set of independently evidenced execution axes.
-// oxlint-disable-next-line complexity
 export const validateContainedTurnAxisProofs = (operation: ContainedTurnProofValidatedOperation): void => {
   invariant(operation.proofs.some(proof => proof.kind === "provider_access_acceptance"), "Provider Access acceptance requires its own proof");
   invariant(operation.proofs.some(proof => proof.kind === "runtime_security_acceptance"), "Runtime Security acceptance requires its own proof");

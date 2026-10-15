@@ -83,8 +83,8 @@
     },
     {
       "path": "packages/contexts/agent-execution/src/features/contained-agent-turn/domain/contained-turn-validation.ts",
-      "start": 15543,
-      "end": 15597,
+      "start": 15504,
+      "end": 15558,
       "sha256": "c91ecdc112568243fb4cf34f0f53a233285fce4475a8b1094d0d4d8cca17d24d",
       "rationale": "The digest input is reached only after identity, proof, output and execution-axis validation of the kernel operation.",
       "rejectingTest": "packages/contexts/agent-execution/tests/features/contained-agent-turn/contained-turn-kernel.test.ts"
