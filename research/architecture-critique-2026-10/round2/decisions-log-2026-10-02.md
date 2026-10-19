@@ -135,3 +135,72 @@
 
 Кроме того (владелец, 10 октября): окна ревизий контрактов (бывший train 2) отложены до появления отдельно собранных плагинов; контракты меняются на месте вместе со всеми потребителями.
 
+
+## Version 3 inputs and supersession (2026-10-15 to 2026-10-19)
+
+This appendix preserves the earlier record. It distinguishes owner direction
+from technical defaults; it does not silently amend an accepted ADR or authorize
+implementation in another repository. The version 3 plan supplies the execution
+sequence and the smallest required successor records.
+
+50. Owner direction, October 15-16: rewrite the active ordinary path inside
+agent-runtime by slices, existing behavioral tests first, then one consumer
+switch. Build all selected libraries; do not replace them with a reduced scope.
+51. Owner direction, October 15: contained code stays frozen and is not deleted.
+No implementation dependency may wait for CONTAINED-REMOVAL. This supersedes the
+removal timing in decisions 14, 18, 25 and 32(5) for this program; it preserves
+contained code, tests, data and shared materialization ownership.
+52. Technical selections in the October 15 synthesis, accepted with option (a)
+on October 16: verified storage object with no Host pool; Provider Access grants
+in the store package and shared materialization with Provider Access; dedicated
+ordinary schemas; preserve #231 assertions while adapting narrowed port calls;
+one Provider Access rewrite with libraries/auth-file/refresh; capability feature
+names; Provider Access and Agent Execution directly nested after N2.
+53. Accepted reductions, October 16: generator before slices; preserve meaningful
+oracles and add only risk-driven tests; coherent PRs that avoid repeated registry
+churn, within the current review budget rather than a mandatory PR count.
+54. Correction after communication-catalog inspection, October 16: configuration
+and release are creation snapshots; journal is a required command; one upward
+receiver uses an explicit port. Observation stores/watch/events are not a
+prerequisite and no temporary substitute is built.
+55. Completion delegation, October 19: finish the outstanding plan with technical
+choices inside the accepted scope. The following are coordinator defaults, not
+additional owner quotations: infer recognized roles from nonempty directories
+after the scoped N2 successor; runtime root entrypoint for platform libraries;
+remove public Embedded Runtime ./composition at API cutover while preserving
+internal contained build/tests; keep Runtime Configuration private unless the
+public Host signature proves a standalone publication necessary.
+56. Verified source update, October 19: the process-runtime repository now
+publishes node-or-bun 0.2.1. Its current run-to-completion API lacks the duplex
+and POSIX group semantics the runtime needs. Plan a narrow separately owned
+extension there; do not create a duplicate @agent-teams/process. This is a
+planning choice and not authorization for implementation in that repository.
+57. Verified source update, October 19: Foundation 1.10.0 and the FMS package
+0.1.1 are published. Reuse their baseline/source graph/kernel rather than plan
+them as missing work. Baseline adoption uses its actual CLI configuration path,
+not an invented capability key. Consumer adoption and validation remain work.
+
+Earlier references to owner-only routine merge or repeated independent review
+are historical procedure. Current global/repository delivery rules govern actual
+execution; this planning delivery does not merge or publish product changes.
+
+58. Owner approval, October 19: implement the planned bounded interactive
+process extension in the existing process-runtime repository, whose package is
+node-or-bun. This supplies the repository scope missing from decision 56;
+PROCESS-DUPLEX requires no repeat owner scope confirmation. Preserve the existing
+run API and deliver the selected duplex stdio / Node POSIX group mechanism with
+its owning successor record, tests and release. Other repositories or unrelated
+capabilities are not added by this approval. The architecture program still
+rewrites the active ordinary path from scratch by slices, directly in the nested
+v1.1 target after N2; this approval does not turn the documentation delivery into
+an already completed implementation.
+
+59. Planning completeness audit, October 19: restore explicit cards and acceptance
+for the already accepted ACTIVE-SUPPORT module-rules lane, PUBLISH-NATIVE and
+filesystem-custody publication, conditional shared tooling/library-first standard
+successor, and the full source/feature/config/refresh checklist of Codex bump.
+This is a coordinator completion of existing scope, not a new owner feature
+request. Published FMS v1.1 provides nesting; it does not prove the separate
+LIBRARY_FIRST extraction criterion delivered. PUBLISH-NATIVE selects prebuilt
+optional artifacts matching the full existing native binding, with typed refusal
+for an unavailable tuple and no weakened JavaScript no-replace fallback.

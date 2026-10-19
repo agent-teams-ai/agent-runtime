@@ -68,6 +68,9 @@ Documents:
 - [Agent Runtime Architecture Program: Execution Brief](agent-runtime-architecture-program-execution-brief.md):
   preconditions, card instructions, review checklists and stop conditions for
   implementing the remaining cards of the architecture program.
+- [S1 Libraries](agent-runtime-architecture-program-s1-libraries.md): reusable mechanisms and process-owner integration.
+- [S2 Operations and Storage](agent-runtime-architecture-program-s2-operations-storage.md): state, persistence and the single cutover.
+- [S3-S5 Features and Host](agent-runtime-architecture-program-s3-s5-features-host.md): capability features, release selection and public operations.
 - [Legacy feature inventory](legacy-feature-inventory.json): commit-pinned,
   structured legacy/current/authority/implementation/qualification/backlog
   traceability. Its validator permits additions and uses explicit
