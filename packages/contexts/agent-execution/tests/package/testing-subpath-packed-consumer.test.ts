@@ -70,6 +70,9 @@ const BASE_COMPOSITION_RUNTIME_EXPORTS = [
   "snapshotDockerImageInitLock", "v4Decode", "v4Hash", "v4Replay", "validateContainedTurnConsumedGrantReceipts",
   "validateContainedTurnOperation",
 ] as const;
+// ADR-0091 adds this closed, independently reviewed composition surface.
+const INTERACTIVE_COMPOSITION_RUNTIME_EXPORTS = ["PostgresInteractiveSessionStore", "createInteractiveSessionFeature",
+  "migrateInteractiveSessionStore", "verifyInteractiveSessionStore"] as const;
 
 const run = (command: string, args: readonly string[], cwd: string) => {
   const result = spawnSync(command, args, {
@@ -105,7 +108,7 @@ const runFailure = (command: string, args: readonly string[], cwd: string) => {
   return `${result.stdout}\n${result.stderr}`;
 };
 
-test("qualifies the two packed curated package assembly entrypoints", async () => {
+test("qualifies packed curated package assembly and interactive SPI entrypoints", async () => {
   const temporaryParent = join(packageRoot, ".cache");
   await mkdir(temporaryParent, { recursive: true });
   const temporaryRoot = await mkdtemp(join(temporaryParent, "assembly-pack-"));
@@ -125,6 +128,8 @@ test("qualifies the two packed curated package assembly entrypoints", async () =
     assert.ok(packedPaths.includes("dist/index.d.ts"));
     assert.ok(packedPaths.includes("dist/composition.js"));
     assert.ok(packedPaths.includes("dist/composition.d.ts"));
+    assert.ok(packedPaths.includes("dist/interactive-contracts.js"));
+    assert.ok(packedPaths.includes("dist/interactive-contracts.d.ts"));
     assert.ok(packedPaths.includes(protocolHeaderPath));
     assert.equal(packedPaths.some(path => /^dist\/(?:production|testing)(?:\.|\/)/u.test(path)), false);
     assert.equal(packedPaths.some(path => /(?:^|[-./_])test-support|-fixtures?\.|\.(?:test|spec)\./u.test(path)), false);
@@ -157,8 +162,9 @@ test("qualifies the two packed curated package assembly entrypoints", async () =
       import: "./dist/composition.js",
       types: "./dist/composition.d.ts",
     });
+    assert.deepEqual(packedManifest.exports["./interactive-contracts"], {import: "./dist/interactive-contracts.js", types: "./dist/interactive-contracts.d.ts"});
     const extraExports = Object.keys(packedManifest.exports).filter(
-      key => key !== "." && key !== "./composition",
+      key => key !== "." && key !== "./composition" && key !== "./interactive-contracts",
     );
     assert.equal(
       extraExports.some(key => key.startsWith("./production") || key.startsWith("./testing")),
@@ -170,7 +176,7 @@ test("qualifies the two packed curated package assembly entrypoints", async () =
         key,
       );
     }
-    for (const entrypoint of ["index", "composition"]) {
+    for (const entrypoint of ["index", "composition", "interactive-contracts"]) {
       await access(join(installedPackage, `dist/${entrypoint}.js`));
       await access(join(installedPackage, `dist/${entrypoint}.d.ts`));
     }
@@ -212,7 +218,7 @@ test("qualifies the two packed curated package assembly entrypoints", async () =
     };
     // The immutable base census is an independent compatibility oracle. Local
     // parity alone cannot detect a named export removed from both fresh builds.
-    assert.deepEqual(resolved.compositionKeys, BASE_COMPOSITION_RUNTIME_EXPORTS);
+    assert.deepEqual(resolved.compositionKeys, [...BASE_COMPOSITION_RUNTIME_EXPORTS, ...INTERACTIVE_COMPOSITION_RUNTIME_EXPORTS].toSorted());
     const localComposition = await import("../../dist/composition.js");
     assert.deepEqual(resolved.compositionKeys, Object.keys(localComposition).toSorted());
     assert.equal(resolved.compositionKeys.includes("FakeDockerEngine"), false,
