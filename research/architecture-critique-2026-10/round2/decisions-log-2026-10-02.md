@@ -228,3 +228,21 @@ an explicitly ordered static extension point. They do not implement lossless
 events, dynamic registration, readiness authority or distributed notification.
 No new event bus, plugin framework, invented first `load` consumer or local
 copy of a shared mechanism is selected by this direction.
+
+62. Owner request, October 20: examine high-cost Get Modular foundation choices
+before the runtime rewrite and strengthen the implementation plan. The source
+review found no missing shared runtime primitive that blocks the selected
+static/nested/per-run scope. Coordinator selections now explicitly fix six
+contracts: capabilities/boundaries, ownership/lifetime, command/state/occurrence
+delivery, readiness/diagnostics, behavioral replacement/evolution and the future
+trust/isolation seam. Existing P7b/N2 and slice cutovers own their enforcement;
+there is no new platform-wide completion gate before S1/S2 authoring.
+The four runtime outcomes now have concrete implementation instructions and
+positive/rejecting acceptance. Diagnostics enter from an outer-root/per-Host
+input rather than creating an AE/Host cycle. OBS-ADOPT's public refusal,
+activation and close state machine retains sources through pending reader
+construction and incomplete cleanup; passive callbacks cannot become feedback
+commands. Optional events, plugin isolation, dynamic registries and hot
+replacement remain additive work for a selected consumer, not blanket module
+requirements. This records planning choices only; no Get Modular or runtime
+implementation is claimed.

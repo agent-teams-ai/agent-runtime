@@ -332,6 +332,78 @@ work only for the specific missing capability after source inspection; do not
 rebuild delivered baseline/source graph/FMS packages. A first package may use a
 small package-local packed qualification instead of waiting for that work.
 
+### Get Modular decisions before the affected rewrite
+
+The October 20 pre-rewrite source review found no missing Get Modular runtime
+primitive that must be built before this rewrite. The published train already
+supports its selected static/nested graph, per-run inputs, scopes and Observation
+consumer. Prepare the contracts below now; adopt/enforce them with P7b/N2 and
+each affected cutover. Do not hold S1 pure libraries or S2 engine/store authoring
+for events, plugins, platform-wide certification or another manager.
+
+| Contract to settle now | Concrete rule that prevents later cross-module rewrites | Owning delivery |
+| --- | --- | --- |
+| Public capabilities and boundaries | Consumer-language function-property ports and plain data; descriptor owns permanent capability ID and exact revision. Optional absence and ordered bounded contributions are explicit. No universal module base class, parent services or ambient resolver. | Contract/feature owner; P7a/P7b and N2 classification before its cutover |
+| Ownership and instance lifetime | Slots/inputs are borrowed; own acquisitions and shorter reader/operation scopes explicitly. Reserve before await, settle construction before close, retain incomplete cleanup and source custody. A prepared template holds no per-run state. | Resource owner and Host; first owning slice |
+| Commands, state and occurrences | Commands/queries return their actual outcome. Observation carries latest confirmed plain state only. Each occurrence that matters keeps its acknowledged journal/output/domain contract. New observers opt into a new narrow slot instead of changing every factory's context. | S2/S3/S4 authority owners; OBS adapter with S5 |
+| Readiness and diagnostics | One declared per-Host diagnostic input exists before factories and survives cleanup. It never depends on the runtime-host capability being constructed. Construction and readiness are different facts; no provider effect occurs to prove Host readiness. | Root/Host integrator; first effectful root cutover |
+| Replacement and evolution | Contract suites preserve refusal, uncertainty, cancellation and custody, not just method names. Published value-type changes, additive included, advance the descriptor revision. Module IDs, package versions, durable formats and release records are different identities. Cache a template by plan digest and factory-set identity. | Contract and adapter owners; shared suite and root binding at cutover |
+| Trust and future isolation | Current capability objects/resources belong to trusted cooperative in-process modules. A future untrusted or remote contribution crosses a validated Host-owned DTO/IPC adapter; it receives no raw factory, writer or Resources. Keep this seam in the contract without building a plugin runtime now. | Host/public-contract owner; seam now, implementation with a selected future consumer |
+
+Adding a later event source, readiness view or dynamic extension capability can
+use a new descriptor/slot for the modules that actually consume it; existing
+module factories need not acquire lifecycle methods or a larger context. A
+future dynamic registry still needs its own contributor lifetime and delivery
+contract. `many()` already covers fixed contributions; it is not live
+registration. Revision windows, a universal event/replay API and hot replacement
+are not prerequisites of this program. Native TypeScript 7.0.2 follows the
+accepted upstream ADR-0038 even where historical CMS checklist wording still
+names 5.8.3; retain that delta explicitly in the pin review. Missing
+`Resources.path` is an additive diagnostic improvement, not a blocker: use the
+existing safe instance/operation/purpose names and source/subscription/revision.
+
+### Module cutover acceptance: four concrete outcomes
+
+These are P7b/N2 and the affected slice's acceptance, not a new platform-wide
+phase. Record the outcome for the boundary being replaced; pure S1/S2 source
+work does not wait for unrelated module deliveries. Use the existing
+[adoption record](get-modular-adoption.md#train-030-conformance-status) as the
+retained starting inventory, not proof that its old package pins satisfy the
+new scope. Keep frozen contained rows unchanged and record active replacements.
+
+| Outcome / owner | Implementation instructions | Observable completion |
+| --- | --- | --- |
+| Boundaries / feature owner + N2 integrator | List semantic owner, public value contract, composition descriptor, declared slots and lifetime for each meaningful new boundary. Register the nested feature/group once and republish only the chosen child surface. Private parsers and fixed library dependencies stay imports. One source-graph inventory feeds the scoped FMS/import/layout checks. | Every active new root and runtime/type edge is classified. A private child/deep import, undeclared owner, forbidden domain/framework edge and cycle reject. No production fallback assembly or string resolver remains. |
+| Replaceability / contract owner + adapter owner | Reuse each card's independent behavior cases and contract suite. Run that suite against the owner fake and real behavioral implementation when both exist; do not count a one-scenario stub as a second implementation or build an extra production backend. Select variants through the root's explicit binding, keeping domain code unchanged. | Same observable success/refusal/uncertainty and ownership semantics pass on both subjects. A wrong capability revision or ambiguous binding fails before any factory/effect. The independent wiring oracle pins intended providers; production data-format/profile identities remain separate from module IDs. |
+| Lifetime / Host + resource-owning module | For every acquired or borrowed resource record who closes it, which dependent cleanup needs it and what remains owned after failure. Reserve each dynamic run before its first await, inject per-run inputs explicitly and close failed/cancelled construction after it settles, including untransferred returned products. Keep related retire/settle steps in one owner cleanup. | Two runs with different inputs have separate state and scopes; closing one leaves the other usable. Failed partial construction retains a recovery handle when release is incomplete. Borrowed pools/ports are not closed. Subscriber detach precedes drain; owner cleanup precedes the journal. Abort/timeout alone never proves physical release. |
+| Diagnostics / Host + adoption integrator | Map Core preparation diagnostics and Assembly run failures into safe Host outcomes by stable code, phase and implementation identity. Keep raw causes and retained cleanup products private. Construction success and product readiness are separate; the Host admits calls only after its actual selected resources/policy checks pass. | Missing dependency, wrong binding, factory failure, cancellation and cleanup debt identify their owner/phase without secrets or false ready/closed claims. Unknown codes fail closed while retaining safe machine-readable details. Existing static graph/created journal describes the known result; no live progress stream is claimed before such a mechanism exists. |
+
+Write the module factory as a typed value with function-property ports and
+consumer-owned dependency records. Keep Get Modular/resources/observation in
+outer composition, not application/domain. Inputs are one narrow port or plain
+data, never a parent service bag. `optional` means explicitly absent in this
+composition; provider failure is not silently converted to absence. A replacement
+in this program is a new prepared run/Host, not live slot rebinding or an implicit
+promise of plugin hot replacement.
+Host readiness here admits the declared local command interface after storage,
+release/configuration and scope checks. It does not pre-launch a provider,
+consume a grant or wait for another module's future during construction.
+The diagnostic sink is a declared per-Host input or outer-root port, ready before
+factories and alive through cleanup. AE may consume it while runtime-host
+consumes AE; never provide it from runtime-host and create a dependency cycle.
+Normalize listener/Assembly causes only at that outer boundary; keep causes and
+untransferred products private, with a non-throwing safe report path.
+
+Use the actual `architecture:get-modular-adoption` and
+`test:get-modular-adoption` commands for current source/profile rejection, plus
+the scoped N2 checker selected from the installed shared kernel. Conformance's
+`isolate`, root `smoke`, `checkWiring` and `runContractSuite` provide the existing
+mechanisms. Extend the owning suite for the risks above; avoid repeating the
+same behavior at every layer. A root smoke/zero subscription count does not
+prove physical process, descriptor or database release: retain the existing
+adapter/custody and Postgres cases for those claims. Changed/fast/full checks
+keep their existing program-wide meaning and run policy.
+
 ### 5.1 Active support features (ACTIVE-SUPPORT)
 
 The active path includes setup/configuration support, not only the engine and

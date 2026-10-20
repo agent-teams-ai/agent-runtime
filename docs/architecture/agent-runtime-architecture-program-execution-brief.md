@@ -39,6 +39,16 @@ Only report a blocker when a concrete prerequisite prevents this card's dependen
 step. Continue independent work. Routine design/placement choices inside these
 contracts are resolved by the executor; do not create new owner questionnaires.
 
+For a rewritten module, fill the existing feature card/owning brief with the
+contract before implementing its adapters: semantic owner; public data/port
+shape and refusal/uncertainty meanings; descriptor/slots and chosen bindings;
+acquired versus borrowed resources and instance lifetime; command/state/occurrence
+classification; and the existing suite that proves the boundary. State readiness,
+cancellation and completion separately where they apply. Do not invent a second
+manifest, a base module interface or an ADR for every routine field. The main
+plan's four module-cutover outcomes define the concrete acceptance for P7b/N2
+and each affected slice.
+
 ## 2. Bounded start check
 
 Record the actual source head, `git status`, package manager, Node pin and changed

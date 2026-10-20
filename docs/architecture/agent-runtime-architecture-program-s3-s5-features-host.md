@@ -274,6 +274,11 @@ a last-confirmed initial summary and an inert owned subscription handle, or a
 typed refusal. A valid but historical/nonlocal operation returns `not_live_here`;
 keep authorization failure distinct and avoid existence disclosure across scopes.
 Callers can always use authorized durable `observe` for the final truth.
+Use existing invalid-input, authorization and Host-closed facade refusals;
+the new capacity refusal is `reader_limit`. Do not collapse those outcomes into
+`not_live_here`. The initial summary and subscription handle appear together
+only on successful admission. `start()` returns `started`, `already_started` or
+`closed`; all results are synchronous and no callback runs inline.
 
 The Agent Execution producer publishes only confirmed ordinary identity/revision/
 status. Its one writer ignores lower durable revisions, treats an equal revision
@@ -285,11 +290,22 @@ the first await and supplies only its exact facet through `run({ inputs })`.
 After a successful run and final admission check, expose its public facade.
 Close failed/cancelled runs after they settle; the source outlives the runs.
 No singleton slot rebinding, closure-captured run inputs or broad facet registry.
+Track the reader through reserved/constructing, inert, started, closing and
+closed states. Terminal operation completion, Host close or caller abort during
+construction first fences facade publication/activation and aborts the run; then
+await run settlement and close its child scope. Keep the producer alive until
+all constructing and active readers finish that cleanup. An uncooperative run
+retains its producer/cleanup debt; a timeout does not free either reference.
 All Get Modular/resource handling stays in composition; domain/application code
 receives plain owner types and ports. No public `Resources` or raw facet, no
 central store containing many tenants, and no hidden global lookup. A live-owner
 index, if needed, belongs to this Host instance and its existing admission bounds.
 Do not retain completed-operation stores, scopes or listeners indefinitely.
+The diagnostic/error sink is a declared per-Host run input or outer-root port,
+available before factories and retained through their cleanup. It is not a
+capability produced by runtime-host: that would make AE and its Host cyclic.
+Only the outer adapter sees raw framework causes and emits safe allowlisted
+fields through the non-throwing sink.
 
 Registration and initial-summary acquisition form one owned operation. The run
 retains its authentic snapshot across awaits but attaches `watch` only when the
@@ -301,6 +317,11 @@ release the child scope and return the typed refusal/closed result rather than
 activating. Closing the public handle or its supplied abort signal
 detaches its scope without cancelling the operation. Callback errors go to the
 non-throwing sanitized Host error port and do not change command outcomes.
+The public callback is passive, synchronous and idempotent inspection. It runs
+in Observation's delivery context and must not issue a feedback command that
+changes the summary it follows. Do not add a timer/trampoline to evade that
+guard; status-driven business automation would need its own explicitly selected
+owner/command contract and cannot rely on every update being delivered.
 Delivery is deferred/coalesced; the API promises neither all transitions nor a
 terminal callback when close wins. Output still uses the cursor-based contract.
 Cap reserved plus active readers at 64 per Host in the first delivery; reject
@@ -308,6 +329,13 @@ excess before acquisition. The existing direct flight-completion path closes
 readers before source disposal, even if no terminal callback ran. The public
 `closed` outcome concerns the subscription lane, not completion of process work.
 No unbounded terminal store or inactive-handle retention beyond that owned bound.
+An inert returned handle consumes a reader slot until explicit close, caller
+abort, terminal completion or Host closure. Close installs a synchronous delivery
+fence before waiting: no callback begins after that fence, while an already
+running synchronous callback may return. Repeated close joins the same cleanup
+and reports typed complete/incomplete facts; incomplete cleanup remains owned
+and retryable without rerunning construction. A closed delivery lane alone does
+not release a source still borrowed by unsettled reader construction/cleanup.
 
 Minimal meaningful consumer qualification:
 
@@ -318,6 +346,7 @@ Minimal meaningful consumer qualification:
 | False authority | Commit-unknown, stale summary and missing notification never authorize dispatch, settlement or an automatic retry |
 | Lossy delivery misused | Burst updates may coalesce; two journal/output occurrences remain two acknowledged occurrences; final durable query works even if close prevented terminal callback |
 | Lifetime leak | Two subscribers are independent; closing one stops its callbacks; terminal direct cleanup and Host close free readers; the 65th reserved/active reader refuses, and all involved store subscription counts return to zero |
+| Close while constructing | Abort/terminal/Host close before run settlement publishes no handle/callback, keeps the producer alive through cleanup and retains debt after an uncooperative run; an inert handle consumes capacity until one of its close paths |
 | Scope/data leak | Wrong tenant/project/operation refuses before facet acquisition; neither summary values nor sanitized reports contain credentials, output or raw causes |
 | Failure coupling | A throwing subscriber does not block its sibling or cancel execution; preserve new-owned/duplicate `onAccepted` behavior and existing journal-failure assertions |
 | Wiring/type misuse | Independent producer/consumer oracle plus wrong-binding and production `/testing` import rejection; public declaration imports require no Observation/resources types |
