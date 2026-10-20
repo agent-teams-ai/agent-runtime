@@ -32,7 +32,7 @@ move the old implementation and then rewrite it. A small mechanical relocation
 needed by an already published boundary is allowed; it is not a second rewrite.
 
 Deliver all selected reusable concerns: JSONL, Codex app-server protocol/session,
-interactive process mechanism, ordinary operations, Postgres adapters and private
+native-client execution integration, ordinary operations, Postgres adapters and private
 storage conformance. Preserve the existing filesystem-custody package. Keep
 business and security policy with Agent Execution, Provider Access, Runtime
 Security and the product Host. No central SDK, universal kernel or service bag.
@@ -62,8 +62,15 @@ Program acceptance requires all of the following, not merely merged code:
    the real Host boundary, with isolated scopes and no authority or output
    delivery moved into notifications. This is a new bounded inspection capability,
    not evidence that an existing command needed a reactive replacement.
+7. S1-NATIVE integrates the native-owned client under the agreed contract.
+   Fixture integration, Rust conformance and complete Linux+Docker E2E are
+   separate results; activate the new profile only after its exact real tuple
+   and scoped authority/credential/receipt successor qualify. Native work is not
+   duplicated or counted as runtime-owned implementation.
 
-No new providers, platforms, remote execution, sessions/resume, event system,
+The October 20 native-team handoff adds a separately qualified Linux+Docker
+execution integration; its external keeper/init implementation is not our lane.
+No other new providers/platforms, remote execution, sessions/resume, event system,
 plugin loader, scheduler, extra storage backend or orphan-process reaper.
 No Subscription Runtime migration. New handwritten Node tooling is TypeScript.
 
@@ -89,12 +96,13 @@ closure, not a new count, implementation progress or a scope denominator.
 | Organization standard | v1.1 published, blob `bd949a9a670862fea851a7791fce772fdef3b4fc` | Publication is not agent-runtime adoption |
 | Process repository | Main `46f0a8d5c4914e96589c4356ea9be7861eb422a5`; published package renamed to `node-or-bun` 0.2.1 | Do not introduce another `@agent-teams/process` package |
 
-The current process API owns a direct child until run-to-completion; it does not
-provide the duplex stdio / POSIX group contract needed here. S1 specifies a
-narrow separately owned extension in that existing repository. Do not wrap the
-current API and claim equivalent cleanup guarantees. The owner approved this bounded repository scope on October 19 (decision 58).
-PROCESS-DUPLEX is a separate implementation card; this documentation delivery
-implements no product code.
+The current process API owns a direct child until run-to-completion. The former
+PROCESS-DUPLEX direction and its October 19 repository approval remain historical
+decisions, but the October 20 native-team handoff supersedes that dependency for
+this runtime: S1-NATIVE consumes the native-owned keeper client. Do not wrap
+`node-or-bun.run()` as custody, implement another TS process owner, or take over
+the native team's repositories. This does not cancel separately owned process
+library work; it removes it from this runtime's required implementation chain.
 
 The current [Consumer Module Standard](https://github.com/agent-teams-ai/get-modular/blob/077434e34d75506a610bc9271f8b5b9d5718c876/docs/architecture/common-assembly.md#consumer-module-standard)
 is navigation, not a silent replacement of the consumer's pinned `81063add`
@@ -137,10 +145,11 @@ same delivery before claiming the changed behavior accepted.
 | Embedded Runtime publication | Publish curated `.` and `./host`; remove `./composition` from npm exports at S5 API cutover | S3-S5 Q4; frozen implementation still builds and has internal tests |
 | Runtime Configuration | Keep private unless the final public Host signature demonstrably requires a standalone package; expose needed value types through curated Host types | Conservative default for Q-RUNTIME-CONFIG; no speculative publication |
 | Observation | Immutable construction inputs and explicit commands remain; OBS-ADOPT adds a real live-operation inspection subscriber, not a bus or authority cache | October 20 direction refines decision 54 without changing its protected command paths |
+| Native execution ownership | Separate native team owns Rust keeper/init, protocols, generic TS client and native artifacts; runtime owns the consumer port/adapter and provider policy | October 20 handoff supersedes PROCESS-DUPLEX as a runtime dependency and the planning deferral of keeper/init integration; no frozen contained activation |
 
 Technical defaults are reversible plan choices within the accepted scope. The
-process repository extension is approved by the owner (decision 58) and remains
-a separately owned delivery with its own tests and release. First real Codex bump and npm interactive authentication
+process repository approval (decision 58) does not authorize duplicate custody
+after the native handoff; native implementation stays separately owned. First real Codex bump and npm interactive authentication
 retain their existing execution-time requirements; neither blocks planning.
 
 ## 4. Architecture and invariants
@@ -200,13 +209,11 @@ disposal contracts; those are precisely the responsibilities S2/S5 replace.
 The frozen contained Host remains compiled and keeps its separate contracts.
 
 TypeScript Host/API/domain ownership and Rust technical custody are different
-boundaries. The owner explicitly deferred the Rust migration on September 6 in
-the [Rust custody follow-up](rust-custody-migration-follow-up.md). Its proposed
-keeper/init would own native process/resource lifecycle; operation authority,
-PA/RS policy, official SDKs and HTTP/TLS remain TypeScript. This program keeps
-that disposition: no whole-Host language port, Rust keeper, updater or Windows
-custody lane is a prerequisite. S1's bounded `node-or-bun` mechanism does not
-claim to complete that deferred custody migration.
+boundaries. The [September follow-up](rust-custody-migration-follow-up.md) is
+historical research; the owner's October 20 handoff now assigns keeper/init to
+a separate native lane and its integration to this runtime. Operation authority,
+PA/RS policy, SDKs and HTTP/TLS stay TypeScript. Follow the coordination contract
+below; no whole-Host language port, Supervisor/updater or Windows lane is added.
 
 | Existing component | S5 disposition |
 | --- | --- |
@@ -214,7 +221,7 @@ claim to complete that deferred custody migration.
 | Generic abort coordination, safe snapshots/validation and setup capabilities | Reuse an unchanged independent helper where its contract still fits; otherwise replace it once in its named ACTIVE-SUPPORT/Host owner. Do not add a dependency on frozen contained policy. |
 | Journal ownership and cleanup-only recovery | Preserve their independent assertions and proven mechanisms. Adapt their owner-local contracts to the new Host; never copy the contained authority/proof ledger as the ordinary disposal policy. |
 | Shared Provider Access materialization and native filesystem custody | Reuse their existing owner/implementation under the stated S2/native distribution contracts; no second rewrite or ownership transfer. |
-| Rust Supervisor/Guardian experiment | Retain its source and evidence as a future technical reference. Audit/qualify selected primitives if that separate migration starts; do not import experiment binaries as production or rewrite them in this program. |
+| Rust Supervisor/Guardian experiment | Native team may audit/reuse Guardian primitives. Keep experiment source/evidence here unchanged; no production import or local rewrite. Supervisor generation/updater work is a different concern and not a third required component. |
 
 Platform claims are scoped to the executed boundary, not to the language:
 
@@ -230,8 +237,89 @@ Use [readiness](readiness.md), the exact
 [Rust production gates](../spikes/rust-system-boundaries-production-gates.md)
 for those claims. A new ordinary provider/binary revision needs its own selected
 target evidence through FIRST-BUMP; inherited tests or a three-OS Rust spike are
-not that evidence. Keep the current ordinary OS/profile bounds in the rewrite
-and reject unsupported targets; adding Linux/Windows execution is separate scope.
+not that evidence. The newly selected native integration targets Linux+Docker
+under its own explicit profile/successor and exact qualification tuple. It never
+relabels Darwin cooperative records or the frozen contained tuple. No Windows,
+Kubernetes or automatic weaker TS fallback is selected.
+
+### Native-team coordination contract (NATIVE-INTEGRATION)
+
+This is the canonical boundary for the October 20 owner-supplied handoff. Link
+here from assignments and owning briefs; do not maintain separate wire schemas.
+`agent-teams-ai/custody-keeper` and `agent-teams-ai/custody-init` are working
+repository names, not evidence that repositories, packages or releases exist.
+The external native lane creates/delivers them and supplies exact identities.
+
+| Owner | Sole implementation responsibility |
+| --- | --- |
+| Native keeper | Per-attempt Rust Host component: Docker resource lifecycle/unknown outcomes, owned process/container identities, init transport, accepted autonomous deadlines, technical resource journal, cleanup-only recovery and enforcement of the selected technical limits/network rules. Owns broker child launch/stop/wait. No host-wide daemon without a demonstrated need. |
+| Native init | Rust execution/stdio/descriptor ownership, bounded queues/backpressure, partial writes, close-input, signals/wait and technical observations; runs under Tini, not a new PID 1 or OCI runtime. Owns its protocol; keeper consumes its pinned compatible version. |
+| Native client/release lane | Keeper external API and generic TS client, protocol compatibility, binaries/images/artifacts and the main real-process/Docker E2E matrix. Client imports no runtime models, PG, provider SDKs or Get Modular. No third repository merely for shared types. |
+| Runtime TS lane | Consumer-owned execution port and keeper adapter, committed claims/operations/receipts/PG, PA/RS and credential/policy decisions, provider protocol/SDK integration, broker HTTP/TLS semantics, workspace/artifact contents, public API and modular Host lifetime. No second Docker engine wrapper, process custodian, native journal or generic keeper client. |
+
+Dependencies run in one direction: runtime adapter -> keeper client/API -> init
+protocol. Runtime command/domain types never leak backward. Keep the execution
+port provider-neutral and in the existing seven-port family; no generic RPC
+framework, service bag or per-native-method domain abstraction.
+
+Before either adapter or native API is committed, the runtime integration owner
+and native protocol owner fix a small versioned contract plus executable fixture:
+
+1. Protocol version/transport, typed errors, incompatibility and disconnect facts;
+   pin client, keeper, init and image/artifact identities, not moving branches.
+2. Request/attempt identity, the exact acceptance of native custody and query of
+   the same attempt after lost acknowledgement. A confirmed runtime claim still
+   precedes executable start. Unknown DB claim never grants start; observing an
+   existing native attempt after a lost reply never grants a second launch.
+3. Validated command/args/environment, explicit mounts, limits and authentic
+   descriptors; no serialized PID/FD number treated as acquisition authority.
+4. Deadline representation/clock and acceptance, independent enforcement,
+   stdin-first stop policy and completion bounds. Reconnect does not extend it;
+   unavailable Docker/recovery retains discoverable incomplete cleanup.
+5. Ready/start failure, bounded stdin/stdout/stderr, partial-write outcomes,
+   EOF/exit and delivery facts. Transport acceptance is not provider-pipe write
+   acceptance; unknown writes are never blindly replayed.
+6. Technical query/cleanup/recovery and a retained recovery reference. The Host
+   integration owner invokes native startup/recovery via the supplied client;
+   deployment startup owns recovery when no runtime Host exists. Native performs
+   cleanup-only recovery, never provider restart/resume or retry policy.
+7. Resource ownership and identity mismatch refusal. TS owns source/workspace
+   content; declaring a mount never transfers permission to delete its source.
+   Native release observations are inputs to owner-evaluated receipts, not
+   operation truth or permission grants.
+
+S3 owns broker executable behavior and its narrow credential/policy inputs;
+keeper owns that executable from launch. Do not TS-spawn a production broker
+and transfer it afterward. Broker stop/closed sockets do not prove cancellation
+of a request already accepted by a provider. S3/S4 retain remote reconciliation.
+Fix helper placement and the exact Linux credential-file access/sandbox contract
+with native/PA owners before NATIVE-AUTH activation; the old Darwin auth helper
+and its permission grammar do not automatically qualify on Linux or in Docker.
+No broader credential mount/write permission follows from this handoff.
+
+If a selected SDK synchronously requires a process-like handle, its runtime TS
+facade adapts the async client: finite early-write bounds, delayed readiness,
+typed launch failure, cancellation before ready, streams/exit/EOF and unknown
+writes. It does not acquire a second process owner. Codex remains the first
+provider; no automatic Claude/all-SDK rewrite is added by native generality.
+
+Work against the agreed native fixture while artifacts are pending; it is test
+support, never a hidden production TS custody implementation. Report fixture
+integration, actual Rust contract conformance and full TS->keeper->init->Docker
+E2E separately. The native lane owns its broad matrix; runtime tests the product
+mapping and one complete integration, including lost ack/no duplicate launch,
+partial stdin, overload, controller loss, keeper crash/recovery, identity mismatch
+and incomplete cleanup. Verify unrelated containers/processes and source mounts
+survive. No LLM calls are needed for those deterministic disposable scenarios.
+Keep provider smoke separately authorized. Use focused unit/property/fuzz tests
+for dangerous transitions/parsers; no test-line quota or accessor test mandate.
+Throughput/density requires measured load evidence, not the choice of Rust.
+
+Native interface/profile/artifact unavailability blocks only its effectful
+cutover and E2E. Pure libraries, engine/store and TS policy work continue. Never
+silently substitute direct Node/Docker execution or claim physical guarantees
+from a fixture. Accepted ADR/profile successors are required before activating
+the new Linux+Docker target; frozen contained source and records stay frozen.
 
 ### Module communication
 
@@ -375,6 +463,8 @@ contains the executor contract and verification policy.
 | N2 | Runtime FMS adoption lane | v1.1 pin + shared FMS kernel/fixtures, deepest owner, visible surfaces/republications, runtime/type edge cycles, load cycles, empty directory rejects, mirrored tests, roles inferred under successor | P7b; compatible Foundation + FMS release installed |
 | PUBLISH-ROUTE | Integrator: package versions/changesets, surface and tarball qualification | Per-package release with migration notes; names/kinds surface report and isolated runtime/types imports. Local package qualification may be used now; shared Foundation mechanism replaces it once available, never two active implementations | Before first relevant package publication, not before authoring its source |
 | CONTAINED-FREEZE | Integrator: exact source/test classification and notices | Keep code/build/typecheck; disable only proven contained-only tests with owned return conditions; all ordinary/shared materialization tests remain. No delete lane | CI-CONTRACT-1; active reachability and shared-test inventory |
+| NATIVE-CONTRACT | Runtime integration + external native protocol owners | Versioned seven-part contract above, shared executable fixture, exact external owner/artifact handoff and rejecting incompatibility/unknown-effect cases | Before diverging adapter/native implementations; no production fixture fallback |
+| NATIVE-AUTH | PA + native integration owners | Exact helper placement, credential route/file permissions and broker executable inputs; Linux sandbox/identity/refresh proof and scoped profile successor | Before native provider/auth activation; no implicit port of Darwin permission guarantees |
 
 GOV-BASELINE does not imply EF-SURFACE or isolated-install mechanisms exist.
 Match actual capability IDs and commands in the installed release. The old
@@ -649,13 +739,13 @@ profile revision, change durable authority or require a program-wide refactor.
 | Card | Result | Starts after | Acceptance owner |
 | --- | --- | --- | --- |
 | S1-JSONL | Bounded byte decoder and framing consumer | CI-CONTRACT-1, library entry/classification successor | Library owner + consuming adapter |
-| S1-PROCESS | Duplex/process-group mechanism in existing `node-or-bun` repository | Owner approved repository scope October 19; scoped successor, current run API and qualification preserved | Process owner; disposable adapter tests |
+| S1-NATIVE | Consumer-owned execution/byte port and adapter over native-owned keeper client; no local custody implementation | NATIVE-CONTRACT; fixture for TS development, pinned native artifacts for actual E2E | Runtime adapter owner; native team owns protocol/client/keeper/init |
 | S1-CODEX | Session correlation and explicit protocol/turn entrypoints | JSONL; accepts a structural byte port, independent of process implementation | Protocol owner + independent fixture oracle |
 | S2-ENGINE | Pure model/decisions, narrowed ports, format/profile split, G1/G2 and owner-loss projection | Governance classification; can develop apart from Host reserved files | Engine owner + retained store case suite |
 | S2-STORE | Drizzle adapters, migrations/verify/open, conformance; Provider Access facade | Engine/owner ports; storage successor and test-support classification | Store owner; isolated Postgres fault/concurrency suite |
 | S5-RELEASE | Product release record and narrow per-consumer inputs | Release-policy successor; no dependence on completed PA rewrite | Host owner; unknown hash refuses before effects |
 | S3-SECURITY | New capability feature, recorded-limit settlement; adapter supplied by S2; part of the single S2 owner/storage checkpoint | S2 port/store contract plus P7b and generated registries; no intermediate owner rewrite | Security owner |
-| S3-ACCESS | Single new access feature with capture and broker sub-features | S1 mechanisms; N2; auth successor; S2 ports/store; S5-RELEASE | Access owner |
+| S3-ACCESS | Single new access feature with capture and broker sub-features; keeper owns declared helper/broker processes | S1 mechanisms; N2; auth successor/NATIVE-AUTH; S2 ports/store; S5-RELEASE | Access owner |
 | S4-EXECUTION | New execution parent with four sub-features and claim-gated bindings | S1 mechanisms; S2 ports; N2; S5-RELEASE | Execution owner |
 | S5-STORAGE | Verified structural storage object in Host, no migrations/raw pool | S2 stores + S3 owners; P7b | Host/store integrator |
 | S5-API | New runtime-host operations access, curated host exports, public outcome parity | S3/S4 and S5-STORAGE; N2 for nested operations; release selection | Host/API owner |
@@ -668,7 +758,7 @@ inspection, package interfaces and PUBLISH-NATIVE design. No runtime behavior.
 Wave B: CI-CONTRACT-1, one Foundation/baseline adoption, registry generator,
 P7-now completion, then P7a/P7b/N2 in their reserved-file write order.
 Wave C: S1 libraries, S2 engine/stores and S5 release data can develop in
-parallel with the consumer adoption lane. S1-CODEX does not wait for S1-PROCESS
+parallel with the consumer adoption lane. S1-CODEX does not wait for S1-NATIVE
 because it borrows a structural channel. ACTIVE-SUPPORT proceeds per package
 with its stated P7b/N2 reservations, rather than disappearing between the slices. Cutovers wait only for their row's
 actual prerequisites, not the end of an unrelated wave.
@@ -678,6 +768,9 @@ dependency-complete package as it becomes qualified. Pure libraries do not wait
 for this subscription capability.
 Wave E: final packed consumer, full current-head qualification, release tooling
 and first live bump when its existing run authorization is satisfied.
+The external native lane proceeds independently. S1-NATIVE/S3/S4 may qualify TS
+mapping against its contract fixture, but Linux+Docker activation waits for the
+real pinned keeper/client/init/image and the complete cross-lane E2E.
 
 Reserved Get Modular files stay with P7a/P7b until that delivery completes:
 Embedded Runtime Host roots/modules/groups, `ordinary-session-runtime`, Assembly
@@ -735,6 +828,9 @@ explicit accepted limits of decision 47. A turn's captured token is not refreshe
 mid-turn. POSIX group cleanup does not prove containment; a Host SIGKILL can
 leave a group. Unknown binaries/platform tuples remain unqualified. This program
 does not make a general sandbox or silently enable Linux/Windows ordinary runs.
+The explicit new native Linux+Docker target follows NATIVE-INTEGRATION; its
+profile, credential route and receipt closure need their own successor/evidence.
+Do not reinterpret legacy ordinary or contained records as that new profile.
 
 ## 9. Estimates and status
 

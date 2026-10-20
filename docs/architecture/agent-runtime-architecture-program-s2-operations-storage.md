@@ -28,6 +28,23 @@ Provider Access grant persistence ships in the first complete store release.
 Provider auth capture/broker redesign belongs to S3, execution bindings to S4,
 and public Host/API restructuring to S5. Their forced port adaptations land with S2 cutover.
 
+Follow the [native-team ownership contract](agent-runtime-architecture-program-plan.md#native-team-coordination-contract-native-integration).
+The engine/store remain TypeScript and independent of keeper wire DTOs. S1/S4
+implement the consumer-owned execution port over the native-owned generic client;
+S2 never introduces a Docker wrapper, native inventory journal or TS custodian.
+Persist only the owner-reviewed operation-to-native-attempt/recovery reference
+needed for reconciliation, with exact immutable profile/attempt identity. The
+native resource journal remains native-owned, not mirrored as a second authority.
+Native acceptance, lost acknowledgement, program exit, stream EOF/delivery,
+container absence and complete inventory cleanup are different facts. Unknown
+DB claim never starts execution; query of an already admitted native attempt
+cannot authorize another launch. Native cleanup-only recovery never decides a
+provider retry or operation outcome. The new Linux+Docker receipt/profile/codec
+successor must be explicit before activation: do not map container absence to
+the old `process_group_closed` receipt or reinterpret Darwin/contained records.
+Develop S2 against the shared contract fixture while artifacts are pending;
+only the native-dependent profile cutover requires real native E2E.
+
 The three former S2 questions are resolved:
 
 - Host receives verified owner capabilities, never a pool or a Postgres adapter class.

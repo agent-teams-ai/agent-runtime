@@ -29,6 +29,10 @@ Give an executor the following bounded input, filled from the selected card:
   accepted-decision metadata; name any externally owned overlapping branch.
 - Exact cutover/rollback boundary, including who retains incomplete cleanup and
   how nonempty legacy data refuses without loss.
+- For native-dependent cards, the external native owner, agreed client/fixture
+  contract and exact keeper/init/image artifact status. Link the canonical
+  [runtime/native boundary](agent-runtime-architecture-program-plan.md#native-team-coordination-contract-native-integration)
+  in the assignment; do not reconstruct its protocol or claim artifacts exist.
 
 The executor is not alone. Do not revert another lane or edit its reserved
 files. A library is mechanism; product permissions and recovery remain with
@@ -110,6 +114,12 @@ modify or merge it.
    framework-neutral public types. It is a new bounded inspection view, not an
    excuse to replace direct commands. Preserve journal acknowledgement, durable
    `observe`, output/cursor delivery and exact `onAccepted` failure behavior.
+8. NATIVE-CONTRACT -> S1-NATIVE and NATIVE-AUTH -> selected Linux+Docker profile
+   cutover. Native team owns Rust custody/protocols/generic TS client/artifacts;
+   runtime owns its port/adapter, SDK facade and broker behavior. Pure libraries,
+   engine/store and TS policy proceed against the agreed executable fixture.
+   Real native artifacts and complete E2E gate only the dependent activation.
+   No TS custodian, copied client, stronger-profile claim or weaker fallback.
 
 Before each inter-module link, classify it with the main plan's communication
 table and current CMS authoring guide section 21. Choose a snapshot, query,
@@ -149,12 +159,13 @@ unknown commit, concurrency, process lifetime and confirmed regressions.
 
 | Changed boundary | Minimum evidence beyond ordinary type/build checks |
 | --- | --- |
-| Process/session/JSONL | bounded bytes/backpressure, aborted-before-send zero writes, partial-send ambiguity, one start, clean EOF vs truncation, truthful group/close facts, no leaked handles |
+| Process/session/JSONL | bounded bytes/backpressure, aborted-before-send zero writes, partial-send ambiguity, one start, clean EOF vs truncation, truthful profile-specific cleanup facts, no leaked handles; native physical custody stays with native tests |
 | Engine/owner ports | independent transition/readback table, CAS races, unknown claim never dispatches, G1 mismatch rejects, G2 retains cleanup, owner-loss projection never relaunches |
 | Postgres/migrations | borrowed pool, one-client locks, concurrent/partial migration, exact name/hash prefix, unknown commit, nonempty legacy intact, old-writer fence, owner-specific conformance |
 | Auth/capture/broker | strict secret byte handling, account/file identity, cumulative secret guard, actual sandbox fake helper rewrite permissions, stdin-first grace and bounded refusal |
 | Module adoption | reviewed content pin, structural layout/import checks, shared rejecting FMS fixtures, independent wiring oracle, smoke/isolate cleanup and own-property ports |
 | Host/API/package | exact replay/scope/uncertainty outcomes, failure/disposal recovery, verify-only/no DDL, public union parity and isolated tarball runtime/type imports |
+| Native integration | shared contract fixture versus real Rust conformance versus full TS/keeper/init/Docker E2E reported separately; no duplicate launch after lost ack, partial writes, controller/keeper crash cleanup and preservation of unrelated resources. Broad native matrix belongs to keeper. |
 
 Physical adapter claims need real disposable adapters. Tests never use the user's
 real projects or credentials. A separately permitted pinned-binary TEST run is
@@ -226,6 +237,9 @@ those actions are actually reached: provider-required npm authentication,
 permission for the first real Codex bump TEST run, and a separately supported
 migration if real nonempty legacy data requires one. They do not block preparing
 code, offline comparison, review or the other slices. The owner approved the
-process-runtime repository / node-or-bun extension on October 19 (decision 58);
-execute its bounded PROCESS-DUPLEX card with its named owner, tests and release.
-No repeat scope confirmation is required for that card.
+process-runtime repository / node-or-bun extension on October 19 (decision 58).
+The newer native-team handoff supersedes that runtime dependency: do not assign
+PROCESS-DUPLEX here or cancel the other repository's independent work. Agree
+NATIVE-CONTRACT/NATIVE-AUTH with the native owners and consume their actual
+client/artifacts. No repeat Rust/repository-choice approval is required; exact
+interface and Linux helper/profile evidence are delivery dependencies.

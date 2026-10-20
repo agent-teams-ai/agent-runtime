@@ -159,7 +159,7 @@ features/process-binding/
   domain/{claim-gate,process-receipts}.ts
   application/ports/process-handle.ts
   application/use-cases/{reserve-process,start-process,close-process}.ts
-  adapters/outbound/library-process-handle.ts
+  adapters/outbound/keeper-execution-handle.ts
 features/workspace/
   domain/workspace-rules.ts
   application/use-cases/{prepare-workspace,snapshot-workspace,close-workspace}.ts
@@ -168,20 +168,61 @@ features/artifacts/
   application/use-cases/{publish-artifact,read-artifact}.ts
 ```
 
-S1 owns process IO/group mechanism, JSONL framing and session correlation.
-S4 owns matching claim, start authority, deadlines, config/effective-config,
-sealed channel/launch facts, effect/path admission and truthful process receipts.
+The native team owns process/container/stdio custody, its protocol/client and
+autonomous deadline/cleanup machinery; S1-NATIVE adapts its client, and S1 still
+owns JSONL/session libraries. S4 owns matching claim, start authority, permitted
+deadline selection, config/effective-config, sealed channel/launch facts,
+effect/path admission and truthful owner-evaluated receipts. It does not repeat
+native Docker calls, process signalling, timeout supervision or resource journals.
 S2 owns state transitions and the workspace cleanup-only port. Libraries do not
 import the engine, Host, grants or recovery policy. The engine package enters
 only through inbound/composition adapters, not feature domain/application.
 
-Allocate process output storage on start, not reservation. Preserve combined
-stdout/stderr bound, strict decoder budget, single start and no signal after
-observed leader exit. Do not claim physical group absence from a timeout, stream
-EOF or permission error. Workspace/artifact logic preserves non-overlap, source
+Runtime allocates its bounded session/decoder buffers on actual start, not
+reservation; native owns the process queues and physical enforcement. Preserve
+combined output bounds, strict decoding and one start. Old POSIX leader/group
+cases remain reference oracles, not a new TS signal/probe implementation. Never
+infer complete native inventory cleanup from a timeout, EOF or absent container.
+Workspace/artifact logic preserves non-overlap, source
 mutation detection, content-addressed readback and ownership of retained paths.
 An unconfirmed cleanup produces debt and retains custody; it never frees bytes
 only in memory and claims deletion.
+
+### Native coordination for access, execution and SDKs
+
+Use the [canonical coordination contract](agent-runtime-architecture-program-plan.md#native-team-coordination-contract-native-integration)
+for the client boundary, errors, launch identity, deadlines, writes and recovery.
+The runtime execution port stays in application vocabulary; only its outer
+adapter imports the native client. The generic client/protocol and Rust binaries
+are external deliveries, not packages to recreate inside Agent Runtime.
+
+S3 owns the provider broker's HTTP/TLS/credential semantics and executable.
+Keeper launches/owns that executable from the first process effect, including
+stop/wait; do not TS-spawn and hand it over later. A broker exit or closed socket
+does not prove remote provider cancellation. Keep PA/RS policies and provider
+reconciliation in TS. Runtime owns workspace/artifact content; native mounts and
+cleanup cover only explicitly acquired resources and never grant recursive
+deletion of a caller's source directory.
+
+NATIVE-AUTH fixes the helper's location, exact credential route/file rights and
+supported Linux sandbox with PA/native owners. Existing Darwin capture rules
+below are behavioral/security oracles, not proof that the same paths or sandbox
+work in Linux+Docker. Preserve their authority/secret/refresh limits; qualify the
+new placement with its scoped successor before any native provider activation.
+
+Where a selected SDK requires a synchronous process-like return value, implement
+one TS facade over async native launch: inert handle, finite early writes,
+ready/failure, cancel-before-ready, stdout/stderr and distinct exit/EOF. A write
+accepted by transport is not necessarily written to the provider pipe. No retry
+after unknown bytes and no independent TS custodian. Add only the selected SDK;
+native generality does not authorize a new Claude execution rewrite.
+
+The Host integration owner invokes the native client's startup/cleanup-recovery
+path and retains incomplete custody; deployment startup owns invocation when no
+Host exists. Native recovery never restarts a provider/turn. Fixture integration,
+real Rust contract conformance and full Docker E2E are separate acceptance facts.
+Native owns the broad physical matrix; runtime verifies policy mapping and one
+complete pinned chain, including unrelated-resource preservation.
 
 ### S5-RELEASE: build before consumer cutovers
 
@@ -190,6 +231,7 @@ Under `packages/apps/embedded-runtime/src/features/codex-releases/`:
 ```text
 contracts/codex-release.ts
 domain/releases/codex-0-153-4-darwin-arm64.ts
+domain/releases/native-linux-docker.ts
 domain/release-registry.ts
 application/ports/executable-digest.ts
 application/use-cases/select-codex-release.ts
@@ -200,10 +242,17 @@ composition/select-release.ts
 The code-owned registry selects current/previous verified release by actual
 binary SHA, never a caller's claimed digest/version. It holds CLI/platform/binary
 identity, protocol revision, model, effective-config expectations, disabled-feature
-set and startup-warning policy. Hash at Host creation and recheck file identity
-and bytes at each launch/capture. Unknown digest refuses before constructing an
-effectful owner. A single verified record is allowed initially; do not invent a
-previous release or silently bump the qualified 0.153.4 tuple.
+set and startup-warning policy. Retained local-binary paths hash at Host creation
+and recheck identity/bytes at launch/capture. For native execution, the client
+contract binds observed image/executable identities and native validates them
+before provider start; runtime selects/adopts the trusted release policy without
+adding its own Docker inspection/exec path. Unknown identity refuses before
+provider effects. A single verified record is allowed initially; do not invent a
+previous release or silently bump the qualified 0.153.4 tuple. The Darwin record
+is retained reference, not a default for native execution. The new Linux+Docker
+target pins provider binary/protocol/profile plus native client/keeper/init and
+image/artifact identities. A fixture or the frozen contained tuple qualifies
+none of that new tuple; no weaker Node/Darwin fallback on incompatibility.
 
 Pass each consumer only its narrow structurally compatible slice: launch config,
 helper config or broker headers. One record provides the currently divergent
@@ -259,7 +308,9 @@ Replace its constructor DDL/raw pool, old access projection and contained-ledger
 coupling together with S2/S5. Retain generic helpers only when their independent
 contract still holds; shared materialization and native custody keep their owners.
 Do not first move the old Host and then rewrite it, or introduce a second
-production root as a fallback. Rust keeper/init remain separately deferred.
+production root as a fallback. The October 20 handoff supersedes the old native
+integration deferral: the separate team delivers keeper/init/client/artifacts;
+this runtime implements only its port/adapter and product integration.
 
 Before switching the Host binding, preserve these existing independent oracles:
 
@@ -275,10 +326,10 @@ Before switching the Host binding, preserve these existing independent oracles:
   preserve the separate frozen contained expectations.
 
 These tests establish synthetic integration and physical boundary facts only
-where actually exercised. The ordinary product adapters currently support
-Darwin/non-root plus arm64 auth; keep that cooperative scope. A passive Host
-constructing on Linux, Postgres CI or the separate three-OS Rust experiment does
-not make Linux/Windows ordinary execution supported or live-qualified.
+where actually exercised. Existing ordinary adapters' Darwin/non-root plus
+arm64 auth limits remain historical facts. The selected native Linux+Docker
+profile requires separate authority/credential/receipt acceptance and real
+native E2E, not relabelled old tests. No Windows support or automatic TS fallback.
 
 | Public entrypoint | Target |
 | --- | --- |
@@ -388,10 +439,16 @@ replaceable inspection query may use `load` only under the main plan's physical
 completion/currentness contract. Events, dynamic registries and config reload
 remain outside this slice.
 
-## 4. Credential capture and refresh detail
+## 4. Credential capture and refresh: retained policy and native prerequisite
 
 Implement auth-file reading, refresh handling and library integration together,
-after their scoped ADR-0090 successor. Preserve decision 47's mechanism and limits:
+after their scoped ADR-0090 successor. Preserve decision 47's authority and
+secret/refresh limits through the selected mechanism.
+
+The following is the retained Darwin-policy oracle. NATIVE-AUTH must select and
+qualify its native helper placement/credential permissions for Linux+Docker;
+neither a bind mount nor running under init automatically preserves that sandbox.
+Helper process custody belongs to native, with capture and refresh policy in PA.
 
 1. Open the already custodied source and validate the pinned release's exact
    ChatGPT auth grammar before spawning. Read `tokens.access_token` with a bounded
@@ -438,7 +495,7 @@ as needed; do not rewrite expected outcomes from the new implementation.
 | Runtime Security `ordinary-security-policy`, `-grant-owner`, `-grant-store`, `-transactions`, `-postgres` | mirrored `tests/features/operation-security`; changed Host limits keep recorded grants readable, wrong identity rejects |
 | Provider Access `ordinary-pa-grant-decisions`, `-owner-port`, `-owner-disposal`, `-owner-races`, `-broker`, `-postgres` | mirrored `operation-access`/broker; retire vs begin race, failed insert never repeats, upstream begins only after durable admission |
 | Provider Access `ordinary-codex-auth`, `ordinary-codex-auth-files` | mirrored capture; complete bounded parser/custody/refresh cases from section 4 |
-| Agent Execution `ordinary-codex`, `ordinary-node-process`, `ordinary-filesystem`, `ordinary-composed` | mechanisms go to S1; claim/effect/workspace/artifact policy remains mirrored under S4 |
+| Agent Execution `ordinary-codex`, `ordinary-node-process`, `ordinary-filesystem`, `ordinary-composed` | protocol goes to S1; native physical cases belong to keeper conformance; runtime claim/ambiguity/effect/workspace/artifact mapping remains under S4 |
 | Embedded Runtime `ordinary-runtime-assembly`, `ordinary-host-disposal`, creation/disposal fixtures | new Host tests; storage verify-only/no pool end, construction cleanup retained, owners before journal |
 | Shared access-layer ordinary behavior in contained-turn E2E/disposal/uncertainty cases | new operations tests: exact replay joins, conflicting replay rejects, late acceptance, scope bounds, abort and uncertain acceptance |
 | `public-api`, `assembly-packed-consumer`, trusted-runtime-access-scope cases | runtime and type import success through ./host, no public composition/deep paths, outcome union parity |

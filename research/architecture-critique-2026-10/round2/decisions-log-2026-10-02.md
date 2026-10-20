@@ -286,3 +286,32 @@ live-provider claim follows from those tests. Existing Host assertions are
 mapped explicitly; obsolete positive constructor-migration expectations become
 verify-only/no-DDL rejection. No new product answer or Get Modular capability is
 needed to complete this bounded plan refinement.
+
+65. Owner-supplied native-team handoff, October 20: keep the new runtime in
+TypeScript and assign technical custody to a separate Rust lane in proposed
+`agent-teams-ai/custody-keeper` and `agent-teams-ai/custody-init` repositories.
+Working names are not created/published artifact claims. Native owns per-attempt
+keeper, init under Tini, Docker/process/resources, autonomous accepted deadlines,
+technical journals/recovery, normative protocols, generic TS client and native
+artifacts. Runtime owns operations/PG/claim/receipt decisions, PA/RS/SDK/provider
+and broker semantics, workspace/artifact contents, Host and the consumer-owned
+execution port/adapter. Generic client is not the runtime adapter.
+The handoff supersedes PROCESS-DUPLEX as this runtime's dependency and the native
+integration deferral in decision64; separately approved process-runtime work is
+not cancelled or taken over. Existing contained remains frozen. Guardian is a
+possible primitive reference, not a ready keeper/init implementation; Supervisor
+updater/generation work is not an extra prerequisite.
+The canonical program section now owns the seven-part shared integration
+contract, dependency direction and fixture/real-conformance/real-Docker evidence
+split. Keeper owns broker process custody from launch, TS its HTTP/TLS behavior;
+mounts never transfer source-directory deletion rights. Native startup/recovery
+invocation has an explicit Host/deployment owner; native never resumes/retries a
+provider. No second TS custody/client implementation or weaker automatic fallback.
+First native profile is Linux+Docker with exact artifact/provider/profile and
+credential/receipt successors, not relabelled Darwin or frozen contained evidence.
+NATIVE-AUTH explicitly resolves helper placement/credential rights with native/PA
+owners before activation. Runtime may develop against the agreed fixture while
+native is pending; only dependent physical cutover/E2E waits. Native owns its
+broad E2E matrix, runtime the policy mapping and complete integration; no test-line
+quota. This delivery records coordination, not native implementation, repository
+creation, provider activation or accepted-ADR changes.

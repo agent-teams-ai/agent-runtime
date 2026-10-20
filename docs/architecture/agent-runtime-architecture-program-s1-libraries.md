@@ -3,7 +3,7 @@ id: runtime.architecture.architecture-program-s1
 type: architecture
 status: active
 owner: architecture
-summary: Implementation brief for reusable process, JSONL and Codex protocol mechanisms in architecture program version 3.
+summary: Implementation brief for reusable JSONL and Codex libraries and runtime integration with the native-owned execution client.
 ---
 
 # S1: platform libraries and their first runtime consumers
@@ -11,9 +11,10 @@ summary: Implementation brief for reusable process, JSONL and Codex protocol mec
 This is an implementation brief for the [architecture program](agent-runtime-architecture-program-plan.md).
 It plans work; it does not establish implementation, publication or product readiness.
 It replaces LIB-JSONL, LIB-PROCESS, LIB-CODEX-1, LIB-CODEX-2 and the mechanism portion of ACCESS-LIB.
-All accepted library capabilities remain in scope. The process capability belongs to the existing
-[process-runtime repository](https://github.com/agent-teams-ai/process-runtime), whose current package is `node-or-bun`.
-Do not create `@agent-teams/process` or restore the retired `@agent-teams/process-runtime` package name.
+Reusable JSONL/Codex capabilities remain in scope. Native custody and its generic
+TS client belong to the separate keeper/init team; runtime owns S1-NATIVE's port
+and adapter. This supersedes the earlier runtime PROCESS-DUPLEX dependency,
+without cancelling the separately approved `node-or-bun` repository work.
 The other libraries and PostgreSQL conformance remain assigned to their respective slices.
 
 ## Authority and evidence baseline
@@ -47,7 +48,7 @@ Generated data bytes and fixture bytes are separate. Counts are inventory, not p
 
 | Current file relative to AE or PA | Lines | Ownership after S1 |
 | --- | ---: | --- |
-| `AE/ordinary-process/node-ordinary-process.ts` | 212 | runtime policy binding over process library |
+| `AE/ordinary-process/node-ordinary-process.ts` | 212 | policy/error oracle for runtime native adapter; no parallel TS process custody |
 | `AE/ordinary-channel/ordinary-byte-channel.ts` | 29 | runtime sealed-channel policy |
 | `AE/ordinary-codex/ordinary-framing.ts` | 24 | replaced by JSONL |
 | `AE/ordinary-codex/ordinary-codex-protocol.ts` | 211 | mechanism replaced; policy retained in binding |
@@ -75,11 +76,11 @@ SSE broker decoding and whole-document configuration diagnostics remain outside 
 | --- | --- | --- |
 | matching dispatch claim, binding, reservation, deadline and abort before one spawn | `AE/ordinary-process/node-ordinary-process.ts:161-173` | runtime process binding |
 | synchronous journal acknowledgment; throw or non-undefined return prevents spawn | same file `:98-103,170` | journal command in binding |
-| no shell, explicit cwd/environment, detached current-process group | same file `:172-173` | Node POSIX process adapter |
-| shared stdout/stderr 1 MiB, 262,144-byte write maximum | same file `:127-129,150-153,182-183` | bounded process mechanism |
-| stderr fatal UTF-8 and erasure | same file `:117,182-183` | process mechanism with explicit policy |
-| no signal after observed leader exit | same file `:122-125,198-203`; test `AT/ordinary-node-process.test.ts:313` | process adapter |
-| group absence only from ESRCH, never EPERM/unknown | same file `:26-29`; `PA/ordinary-codex-auth-ipc.ts:21-25` | process adapter facts |
+| no shell, explicit cwd/environment, detached current-process group | same file `:172-173` | explicit native launch spec; group detail remains old POSIX oracle |
+| shared stdout/stderr 1 MiB, 262,144-byte write maximum | same file `:127-129,150-153,182-183` | runtime policy bounds + native/client enforcement under agreed contract |
+| stderr fatal UTF-8 and erasure | same file `:117,182-183` | runtime decoding/secret policy over bounded native bytes |
+| no signal after observed leader exit | same file `:122-125,198-203`; test `AT/ordinary-node-process.test.ts:313` | old POSIX identity oracle; native owns its actual custody proof |
+| group absence only from ESRCH, never EPERM/unknown | same file `:26-29`; `PA/ordinary-codex-auth-ipc.ts:21-25` | old POSIX fact distinction; no inference from container absence |
 | close retries observation after failure, memoizes success, never respawns | same file `:190-224` | mechanism plus receipt binding |
 | discarded bytes or missing clean framing EOF permanently invalidate drain | same file `:205-211` | runtime receipt binding |
 | strict UTF-8, decoded duplicate keys, object-only JSON, CRLF, bounded lines, no unterminated EOF | `AE/codex-app-server/codex-app-server-jsonl.ts:159-228` | JSONL |
@@ -103,7 +104,9 @@ Their fixed imports are library dependencies, not extra Assembly nodes. Product 
 remain declared through their consumer-owned ports at the accepted composition root.
 Libraries import no Agent Execution, Provider Access, Host, storage or orchestrator code.
 `jsonl` has no production dependency; `codex-app-server` depends only on `jsonl`.
-The process dependency is the separately published `node-or-bun` extension, pinned after its own delivery.
+The native execution dependency is the native-owned keeper client, pinned with
+compatible keeper/init/image artifacts after its actual delivery. No local
+production process/Docker owner or generic protocol client is added here.
 
 Exact source families below are the intended files; create only directories containing real implementation.
 Each package additionally has package.json, tsconfig.json, README.md, CHANGELOG.md and LICENSE.
@@ -153,9 +156,11 @@ Enforce 300 noncomment lines/file, 60/function, four parameters, 80/module file;
 The single feature can later split only at an actual ownership seam after the v1.1 profile supports nesting.
 Errors expose closed codes and static `JsonLineError.is`, `CodexProtocolError.is`, `CodexTurnError.is` guards;
 foreign failures are mapped at each package boundary, without arbitrary payload/cause messages.
-The process extension preserves its existing `ProcessRuntimeError`/`isProcessRuntimeError` contract and closed code type.
+The native owner defines its generic client error contract; the runtime adapter
+maps those typed errors without importing or imposing `node-or-bun` error types.
 Expected refusal/ambiguity is a discriminated outcome; broken syntax/state gives a sticky branded error.
-Async operations take signal last; deadlines and effect-retry decisions remain with the consumer.
+Async runtime operations take signal last; deadline selection and effect-retry
+decisions remain with the consumer, accepted deadline enforcement with native.
 
 Resolve original Q3 now: platform root entries may expose their own feature runtime API; contexts remain contracts-only.
 The current checker maps every non-root export to composition.ts (`scripts/architecture/feature-module-edges.mjs:59`).
@@ -212,109 +217,69 @@ Otherwise copy retained input and never mutate caller bytes. JS strings and pars
 No Node imports or Buffer in the runtime API; a packed browser-import probe verifies that boundary.
 Errors contain closed codes such as `jsonl.key.duplicate`, never raw text, keys or byte excerpts.
 
-## Existing process owner and required separate extension
+## Native execution integration (S1-NATIVE)
 
-[process-runtime at 46f0a8d5c4914e96589c4356ea9be7861eb422a5](https://github.com/agent-teams-ai/process-runtime/tree/46f0a8d5c4914e96589c4356ea9be7861eb422a5)
-exports `node-or-bun@0.2.1`, with `.`, `./node`, `./bun`, `./testing` and zero production dependencies.
-[PR #2](https://github.com/agent-teams-ai/process-runtime/pull/2) renamed the former package;
-[PR #6](https://github.com/agent-teams-ai/process-runtime/pull/6) preserved captured output on errors.
-There were no open PRs at this inspection; neither merged PR implements an interactive process owner.
-`src/contract.ts` exposes run-to-completion capture and cleanup, without stdin, write or group facts.
-`src/adapters/node.ts` defaults to ignored stdin and direct-child cleanup; `src/executor.ts` consumes both streams itself.
-Wrapping `run()` would create competing readers and cannot preserve ordinary protocol/cleanup invariants.
+The [canonical native-team contract](agent-runtime-architecture-program-plan.md#native-team-coordination-contract-native-integration)
+supersedes the earlier PROCESS-DUPLEX prerequisite for this runtime. The October
+19 `node-or-bun` repository approval remains historical authorization for that
+separate owner; it is not an instruction to build a parallel TS custodian here.
+Do not change/cancel its independent work, create a second process package, or
+wrap its current run-to-completion API to impersonate keeper custody.
 
-The separate PROCESS-DUPLEX implementation card belongs to process-runtime, with S1 as its consumer-contract owner.
-It extends the existing owner with a narrow duplex contract and explicit Node POSIX implementation; no duplicate package.
-Existing Node/Bun run APIs and their first-cause/cleanup arbitration remain intact.
-The new entry points are named exports on the existing root and `./node`; add no speculative Bun/Windows/group adapter.
-The owner repository records the bounded scope extension to its current no-stdin/no-group decision before implementing it.
-The owner approved this bounded cross-repository implementation on October 19 (decision 58).
-No repeat scope confirmation is needed; the extension still needs its owning decision, tests and release.
-This documentation delivery does not claim the implementation or release is available.
+The external native team owns the proposed keeper/init repositories, Rust
+process/Docker lifecycle, normative protocols, generic TS client, executable
+artifacts and native/Docker qualification. Working repository names are not
+published dependency names. Runtime imports the exact delivered client public
+entrypoint; it never copies its transport implementation or wire DTO authority.
+JSONL/Codex continue as independently reusable libraries over structural bytes.
 
-Chosen extension API for the separate card: root exports the named contracts; `./node` exports
-`prepareNodeDuplexProcess(spec, options) -> PreparedDuplexProcess`. Its private native ownership never escapes.
-The implementation card may refine names through its owning decision, but cannot weaken these semantics:
+Runtime owns one narrow execution/byte port and its adapter to that client.
+Its semantic contract, completed jointly under NATIVE-CONTRACT, must preserve:
 
-```ts
-interface DuplexProcessSpec {
-  readonly executable: string; readonly arguments: readonly string[];
-  readonly cwd: string; readonly environment: Readonly<Record<string, string>>;
-}
-interface DuplexProcessOptions {
-  readonly outputBudgetBytes: number; readonly maxWriteBytes: number;
-  readonly stderr: "discard" | "validate-utf8-and-discard";
-  readonly observations: ProcessObservationPort;
-}
-interface ProcessObservationPort {
-  readonly report: (fact: ProcessFact) => { readonly kind: "accepted" | "rejected" };
-}
-interface PreparedDuplexProcess {
-  readonly start: (signal: AbortSignal) => Promise<StartOutcome>;
-  readonly close: (budget: CloseBudget, signal: AbortSignal) => Promise<CloseOutcome>;
-}
-type StartOutcome =
-  | { readonly kind: "started"; readonly handle: OwnedProcess; readonly identity: ProcessIdentity }
-  | { readonly kind: "not_started"; readonly code: ProcessErrorCode }
-  | { readonly kind: "incomplete"; readonly handle: OwnedProcess; readonly facts: CloseFacts };
-interface ProcessIdentity { readonly pid: number; readonly processGroupId: number }
-interface CloseBudget {
-  readonly inputGraceMs: number; readonly terminateGraceMs: number; readonly killGraceMs: number;
-}
-type CloseOutcome =
-  | { readonly kind: "not_started" }
-  | { readonly kind: "closed" | "incomplete"; readonly facts: CloseFacts };
-interface SignalFacts { readonly sent: boolean; readonly leaderExitObserved: boolean }
-interface OwnedProcess {
-  readonly read: (signal: AbortSignal) => Promise<Uint8Array | undefined>;
-  readonly write: (bytes: Uint8Array, signal: AbortSignal) => Promise<WriteOutcome>;
-  readonly closeInput: (signal: AbortSignal) => Promise<void>;
-  readonly terminate: (signal: "SIGTERM" | "SIGKILL") => SignalFacts;
-  readonly close: (budget: CloseBudget, signal: AbortSignal) => Promise<CloseOutcome>;
-}
-type WriteOutcome =
-  | { readonly kind: "written" }
-  | { readonly kind: "not_written"; readonly code: ProcessErrorCode }
-  | { readonly kind: "possibly_written"; readonly code: ProcessErrorCode };
-```
+- One runtime-confirmed claim before executable start; private native attempt/
+  request identity retained before awaiting acceptance. Lost acknowledgement
+  permits query/reconciliation of that same attempt, never a second launch.
+- Explicit validated command/args/environment, workspace/mounts and limits;
+  immutable launch selection, no ambient environment or persisted PID as authority.
+- Distinct prepared/starting/ready/proven-not-started/start-unknown/closing and
+  cleanup-complete/incomplete facts. An error or timeout alone proves none of them.
+- Provider-pipe write acceptance separate from transport acceptance; one bounded
+  pending write, finite early-write/output buffering and honest partial/unknown
+  byte facts. No blind resend after uncertain progress or disconnect.
+- Separate stdout/stderr, EOF, program exit, output delivery, container absence
+  and cleanup of the complete owned inventory. Runtime combines actual evidence
+  with its output cursor/profile into receipts; native never mints operation truth.
+- Runtime-selected deadline accepted and autonomously enforced by native,
+  stdin-first stop/grace/escalation under that contract, no deadline extension
+  on reconnect. Unsupported profile refuses; unavailable Docker leaves retained
+  cleanup debt, not a false successful close or a weaker Node fallback.
+- Native-owned identity/fencing and cleanup-only recovery; explicit runtime Host/
+  deployment invocation of that recovery via the client. A disconnected TS handle
+  does not free resources. Repeated safe cleanup may be native-idempotent;
+  provider replay/retry decisions remain runtime-owned.
 
-Preparation snapshots absolute executable, arguments, explicit environment and absolute cwd; no ambient environment.
-Closing a prepared-but-unstarted owner fences start permanently and returns not_started.
-ProcessFact is a closed union of started/exited/stream_failed/closed/close_incomplete, with non-secret physical facts.
-Runtime rejects an async observation acknowledgment at this boundary; observer failure is explicit cleanup debt.
-`start(signal)` is one-shot and yields started+owned handle, proven-not-started, or incomplete custody with retained owner.
-A spawn-attempt error is never automatically proof of no child. Cleanup uncertainty retains identity and forbids replay.
-No caller supplies a persisted PID/PGID as authority; ownership comes only from this adapter's native acquisition.
-Only the Node POSIX adapter asserts detached-group mechanics. Product acceptance is the existing Darwin/nonroot profile;
-Linux mechanism tests do not qualify Linux product execution. Unsupported platforms fail before acquisition.
+The accepted old POSIX ESRCH/EPERM, leader-exit and group-reuse cases remain
+historical oracles for that adapter, not commands for keeper's container API.
+The Linux+Docker profile needs its own receipt/profile successor: do not infer
+`process_group_closed` from a missing container or mutate old receipts/records.
+Keep source/workspace/artifact ownership in TS; mounts do not give native cleanup
+permission to remove caller directories. Native owns only its acquired inventory.
 
-One owner observes exit, native close, stdout/stderr EOF, write failures, observer failures and group probes separately.
-ESRCH means absent at that observation; EPERM and all other outcomes are unknown/present, never closed proof.
-No signal is sent after leader exit observation, including abort, overflow and close retries, to avoid recycled groups.
-This can leave incomplete group cleanup; expose that debt rather than claiming universal descendant containment.
-Close is stdin-first, then grace, TERM, grace, KILL, grace; AE uses 1,500/1,000/1,000 ms.
-PA selects its separately owned helper-close policy, including the refresh helper's opportunity to finish naturally.
-A close caller's abort ends waiting and reports incomplete facts; it never abandons custody or certifies cleanup.
-Concurrent closes join one attempt; successful physical closure is memoized; incomplete closure may retry observation.
-Lost/discarded output is sticky and cannot become a clean drain after late EOF.
+Use an executable fixture of the jointly versioned client contract while native
+artifacts are pending. No fixture or in-memory fake enters production selection.
+The adapter's real acceptance requires pinned client/keeper/init/image artifacts
+and a complete disposable integration; the external keeper lane owns the broad
+process/Docker matrix. Unsupported or incompatible artifacts refuse explicitly.
+Do not invent package names, exact method spellings or a universal RPC framework
+before the native owner supplies that contract.
 
-stdout/stderr share an explicit raw-byte budget; AE 1 MiB, PA 262,144 bytes. Retained output is bounded.
-One pending reader, no hidden read-ahead queue; read returns a caller-owned copy with documented erasure responsibility.
-The Node adapter pauses/resumes acquisition under its bounded buffer and stops retaining on total-budget overflow.
-Overflow marks failure and reports it to the owner; Host policy requests termination explicitly.
-Writes have a 262,144-byte AE maximum and one in-flight operation; reject concurrent writes before native invocation.
-Honor native backpressure and settle after write acknowledgment and required drain; do not queue unbounded writes.
-An abort before native write is not_written; after invocation it is possibly_written unless settlement proves written.
-Written means accepted by the pipe, never provider execution. No automatic retry follows either ambiguous outcome.
-Always erase private environment copies and output storage when released; never expose environment in launch facts.
-
-Close facts include exit/code/signal, native close, stream EOFs, group absence, unread/discarded bytes, overflow,
-write/observer failure and sent signals. Runtime alone combines them with clean JSONL EOF and final output sequence
-into output_drain/process_group_closed receipts. A process library never mints runtime authority receipts.
-The binding calls a synchronous durable journal command before start; a throw or any non-undefined return refuses spawn.
-One typed upward observation port has one receiver in that binding. It reports physical facts, with no bus or multicast.
-That receiver calls the journal command and returns a typed acknowledgment; failure is retained as observer/journal debt.
-Configuration and selected release are construction snapshots; journal writes are commands. None needs watch or stores.
+SDK process-like adaptation lives in the runtime TS facade: synchronously return
+an inert handle only where a selected SDK actually requires it; bounded early
+writes, start failure, cancel-before-ready and EOF/exit remain explicit. It never
+TS-spawns a provider or broker and transfers custody afterward. The keeper-owned
+broker executable contains runtime-owned HTTP/TLS and credential/policy behavior.
+The Linux auth-helper placement/permission route is NATIVE-AUTH, not a silent
+reuse of the old Darwin sandbox. No additional provider is selected by this card.
 
 ## Codex session, validation and turn API
 
@@ -392,7 +357,7 @@ Frozen contained tests remain intact and retain their historical fixtures and re
 | `AT/codex-app-server-linear-framing.test.ts:19,31,41,52,71` | JSONL reader: every byte split, fragments, aggregate chunks, CRLF and duplicate keys; originals stay frozen |
 | `AT/ordinary-codex.test.ts:129,136,142,149,155,269` | JSONL reader limits/EOF, with explicit raw-byte delta case |
 | `PT/ordinary-codex-auth.test.ts:54` | JSONL decode: escaped duplicate keys, UTF-8, depth 32 |
-| `AT/ordinary-node-process.test.ts:21,56,78,88,103,135,247,254,270,305,313,324` | PROCESS-DUPLEX conformance plus runtime journal/drain binding tests |
+| `AT/ordinary-node-process.test.ts:21,56,78,88,103,135,247,254,270,305,313,324` | native-adapter claim/ambiguity/journal/drain assertions; physical cases owned by native conformance; old POSIX-only expectations stay scoped |
 | `PT/ordinary-codex-auth.test.ts:79,89,102,171` | process cleanup/observation/abort/quota cases, then PA policy oracle in its slice |
 | `AT/ordinary-codex.test.ts:84,110,118,321` | session correlation, unknown reply, zero-write abort and single owner |
 | `PT/ordinary-codex-auth.test.ts:182-209` | protocol timestamp/envelope/status placement; repeated startup notice remains PA policy |
@@ -407,7 +372,9 @@ concurrent write rejection, false-return/backpressure plus abort races, partial 
 EPERM versus ESRCH, leader exit during escalation, and a descendant holding inherited stdio open.
 Protocol negatives include unknown effects/security fields, wrong known informational types, bad refs/keywords,
 ambiguous oneOf, schema defaults mutating input, stale IDs and overflow after an ambiguous write.
-Use deterministic fake native ports for races and disposable native child fixtures for actual pipe/group semantics.
+Use the shared native contract fixture for runtime races. The native owner uses
+real child/Docker fixtures for physical pipe/resource claims; runtime adds the
+full pinned cross-lane integration, not a copy of the native matrix.
 No provider or agent command is needed. Every acquired resource closes; tests fail on outstanding handles/debts.
 Use the migrated conformance version where already adopted; do not infer leak freedom from force-exit alone.
 
@@ -417,7 +384,8 @@ migrate once to shared tooling when it supplies the same invariant, without bloc
 Pack outside the workspace with no accidental root dependencies; import every public entry and reject deep paths.
 Type-check positive and negative consumer probes, check curated exports, shipped files and dependency declarations.
 Generator replay verifies source digests and deterministic projection bytes offline.
-A real native process probe is only for PROCESS-DUPLEX qualification; JSONL/protocol probes use synthetic streams.
+A real TS->keeper->init->Docker integration qualifies S1-NATIVE's physical mapping;
+JSONL/protocol probes use synthetic streams and never claim physical cleanup.
 Publication readiness and product execution readiness are separate results, each with its own exact inputs.
 
 ## Delivery, cutover and dependency order
@@ -438,15 +406,16 @@ This avoids the cycle library -> engine -> provider feature -> library while lea
 | --- | --- | --- |
 | S1-ENTRY | program registry generator first, CI/package-registry contract and the scoped platform-entry profile successor (not full N2) | declared platform public-entry rule plus rejecting checker fixtures |
 | S1-JSONL | S1-ENTRY | JSONL package and ordinary framing consumer; remove ordinary-framing.ts in this cutover |
-| PROCESS-DUPLEX | owner-approved process-runtime scope (decision 58); scoped successor | released duplex contract, Node POSIX implementation and conformance; preserves run API |
-| S1-PROCESS | PROCESS-DUPLEX release; S1-ENTRY | AE process binding over released package; mechanism code removed from old ordinary file |
+| NATIVE-CONTRACT | runtime/native owners agree the canonical integration contract | versioned executable client fixture and exact ownership, launch/write/deadline/recovery facts |
+| S1-NATIVE | NATIVE-CONTRACT; S1-ENTRY | runtime port/keeper-client adapter and selected SDK facade; actual E2E waits for pinned native artifacts; no second custodian |
 | S1-CODEX-SESSION | S1-JSONL | root/protocol package plus ordinary request/shape consumer; no dual production parser |
 | S1-CODEX-TURN | S1-CODEX-SESSION | reducer and AE policy switch; delete replaced ordinary protocol/lifecycle mechanism |
-| PA library adoption | S1 session/protocol/turn and process availability | PA's single secret-path rewrite in its owning slice |
+| PA library adoption | S1 session/protocol/turn, native contract and NATIVE-AUTH | PA's single secret-path rewrite; keeper owns helper/broker processes |
 
-JSONL/session work proceeds while PROCESS-DUPLEX is externally pending; only process binding acceptance waits for it.
-The library byte-channel port permits synthetic qualification and the current owned process adapter as a real consumer.
-Do not add a local competing process implementation to bypass that dependency.
+JSONL/session work proceeds while native artifacts are externally pending. Use
+the structural channel and agreed fixture to develop the TS adapter; only real
+native-profile activation/physical E2E waits for those artifacts. Do not select
+the old Node adapter as an automatic production fallback.
 Version registry/bump automation consumes the explicit protocol revision but does not block fixed-revision library delivery.
 Module migration owns P7a/P7b and v1.1/N2 equivalents; S1 uses the resulting current standard rather than stale train dates.
 No unrelated observation, event or plugin-lifecycle implementation enters this dependency chain.
@@ -456,7 +425,9 @@ Keep factory signatures stable until their owning slice deliberately changes the
 Policy wrappers remain policy; no pass-through compatibility layer survives after the consumer adopts the new API.
 Update packageRoots, governed roots, feature/module edges, public exports, ordinary census, compiler projects and
 CMS classification/evidence together. Frozen contained source/evidence never follows current-library generation.
-Executable stable identity/digests use filesystem-custody or their existing product adapter; add no hashing utility to node-or-bun.
+Local executable identity uses filesystem-custody or the existing product port;
+native image/executable identity comes through the agreed native contract. Add
+no parallel Docker inspection or hashing toolkit to work around that boundary.
 The accepted generator-first program step supplies the registry writer before slice cutovers; use its named write/check
 commands once per coherent integration. Do not claim an unshipped generator has run. A missing/no-op enforcement command leaves adoption pending.
 
@@ -467,7 +438,9 @@ Use workspace dependency declarations under the adopted repository policy and in
 Verify current stable dependency versions, provenance and release notes when implementation adds/upgrades them;
 retain exact tested versions and lock integrity rather than substituting latest or hard-coding an old target release.
 
-Publish each proven library as its delivery is ready; JSONL precedes Codex; process-runtime publishes through its owner.
+Publish each proven runtime-owned library as it becomes ready; JSONL precedes
+Codex. Native repositories publish their own client/artifacts; runtime records
+their exact compatible identities and never republishes a local copy.
 Do not wait for the entire program. Each release includes changelog, API/limits/non-goals and migration notes for a break.
 Build/pack once from the merged revision, qualify those exact bytes and retain package/version, merge SHA, integrity
 and tarball digest. Complete provider-required authentication through the supported publication workflow if requested.
@@ -493,19 +466,22 @@ Target about 2,000 authored changed lines per PR; split at API/consumer seams, n
 A required coherent overrun records its reason; no three-PR quota forces a broken invariant.
 
 Estimates below are planning ranges, not measured work or delivery promises. Source/test inventory is their basis;
-the unimplemented duplex contract and current checker migration are the largest uncertainty.
+the former duplex dependency has now been replaced by externally owned native
+integration. These historical ranges are not a fresh budget for keeper/init or
+the new runtime adapter; re-estimate S1-NATIVE after the joint contract is fixed.
 
 | Work owner | New production/tooling lines | Test lines | Deleted ordinary lines | Docs/registry lines | Estimated agent-days |
 | --- | ---: | ---: | ---: | ---: | ---: |
 | S1 JSONL + first consumer | 400-600 | 450-650 | 40-100 | 180-300 | 2-4 |
 | S1 session/protocol/generator | 800-1,200 | 650-950 | 220-350 | 180-300 | 4-6 |
 | S1 turn + AE bindings | 550-850 | 500-800 | 280-450 | 120-220 | 3-5 |
-| S1 process binding/integration | 150-300 | 150-300 | 120-220 | 80-160 | 1-3 |
-| separate PROCESS-DUPLEX card | 550-900 | 650-1,000 | 0-100 | 120-220 | 4-7 |
+| former S1 process binding (historical, superseded) | 150-300 | 150-300 | 120-220 | 80-160 | 1-3 |
+| former PROCESS-DUPLEX dependency (external historical estimate) | 550-900 | 650-1,000 | 0-100 | 120-220 | 4-7 |
 | PA combined adoption, charged to PA | 180-300 | 100-200 | 250-400 | 50-100 | 1-3 |
 
-S1-owned total estimate: 1,900-2,950 production/tooling, 1,750-2,700 tests, 660-1,120 deletions,
+Historical S1-owned total estimate: 1,900-2,950 production/tooling, 1,750-2,700 tests, 660-1,120 deletions,
 560-980 docs/registry lines and 10-18 agent-days. External process and PA estimates are not double-counted.
 Retained schema archives/generated data are reported separately by bytes at implementation.
-All three original open questions are resolved above; the concrete remaining external dependency is a qualified,
-released PROCESS-DUPLEX extension. Its absence blocks S1-PROCESS, not completion of this planning document.
+The remaining native dependencies are the agreed client/launch/recovery contract,
+Linux helper/profile permissions and actual compatible artifacts/E2E. Native
+implementation remains external; its absence blocks only the dependent cutover.

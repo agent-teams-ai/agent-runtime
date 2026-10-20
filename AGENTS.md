@@ -21,6 +21,14 @@ Use [.agents/skills/docs-authoring/SKILL.md](.agents/skills/docs-authoring/SKILL
 - Planned passive Assembly adoption and outstanding gates:
   [Get Modular adoption](docs/architecture/get-modular-adoption.md)
 
+For the new runtime rewrite, read the owner-selected
+[native-team coordination contract](docs/architecture/agent-runtime-architecture-program-plan.md#native-team-coordination-contract-native-integration).
+The separate native lane owns keeper/init, protocols, generic TS client and
+native artifacts; this repository owns the TS runtime and consumer adapter.
+Do not duplicate production Docker/process custody, native journals or client
+transport here, or revive PROCESS-DUPLEX as a runtime prerequisite. Fixture
+integration is not real native qualification; frozen contained stays frozen.
+
 Guardrails:
 
 - Every new production feature, including in excluded packages or legacy files,
