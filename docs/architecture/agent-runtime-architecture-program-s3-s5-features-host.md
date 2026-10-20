@@ -31,7 +31,8 @@ They are not open questions again.
 Additional technical defaults: curated Host exports `.` and `./host`, internal
 contained composition stays compiled; ordinary grants use S2 adapters; release
 selection is built ahead of its consumers; creation-time snapshots and typed
-command ports need no observation package. Use accepted ADR successors where
+command ports remain direct. OBS-ADOPT supplies the separately selected live
+summary view, not reactive authority or configuration replacement. Use accepted ADR successors where
 these choices change a frozen architectural contract, never edit accepted bytes.
 
 ## 2. Source baseline and semantic ownership
@@ -262,6 +263,71 @@ Submit/observe/cancel outcome unions keep all existing members/codes, including
 operation views remove Codex profile/version literals. Setup query/view types
 move once into their active owner; keep a frozen contained copy where necessary.
 Scope checks still require the Host tenant/project to match the bound handle.
+
+### OBS-ADOPT: live operation summary
+
+Deliver with S5-API, after the scoped CMS/package adoption and N2. This is the
+selected new continuous inspection capability from the main plan, not a rewrite
+of existing durable `observe` or `onAccepted`. Add `watchSummary` to the bound
+`operations` facade and its scoped public-contract successor. It returns either
+a last-confirmed initial summary and an inert owned subscription handle, or a
+typed refusal. A valid but historical/nonlocal operation returns `not_live_here`;
+keep authorization failure distinct and avoid existence disclosure across scopes.
+Callers can always use authorized durable `observe` for the final truth.
+
+The Agent Execution producer publishes only confirmed ordinary identity/revision/
+status. Its one writer ignores lower durable revisions, treats an equal revision
+with equal data as a no-op and reports conflicting data at an equal revision
+without overwriting. Late acknowledgements cannot regress a newer/terminal view.
+Prepare one subscriber template whose declared facet input satisfies the reader's
+required slot. Each authorized subscription reserves its own child run before
+the first await and supplies only its exact facet through `run({ inputs })`.
+After a successful run and final admission check, expose its public facade.
+Close failed/cancelled runs after they settle; the source outlives the runs.
+No singleton slot rebinding, closure-captured run inputs or broad facet registry.
+All Get Modular/resource handling stays in composition; domain/application code
+receives plain owner types and ports. No public `Resources` or raw facet, no
+central store containing many tenants, and no hidden global lookup. A live-owner
+index, if needed, belongs to this Host instance and its existing admission bounds.
+Do not retain completed-operation stores, scopes or listeners indefinitely.
+
+Registration and initial-summary acquisition form one owned operation. The run
+retains its authentic snapshot across awaits but attaches `watch` only when the
+caller invokes the returned handle's synchronous, idempotent `start()` after
+applying the initial summary. No callback before that activation or synchronously
+inside it; catch up newer revisions through the shared package, not a new queue.
+If authority/call admission closes during acquisition or before activation,
+release the child scope and return the typed refusal/closed result rather than
+activating. Closing the public handle or its supplied abort signal
+detaches its scope without cancelling the operation. Callback errors go to the
+non-throwing sanitized Host error port and do not change command outcomes.
+Delivery is deferred/coalesced; the API promises neither all transitions nor a
+terminal callback when close wins. Output still uses the cursor-based contract.
+Cap reserved plus active readers at 64 per Host in the first delivery; reject
+excess before acquisition. The existing direct flight-completion path closes
+readers before source disposal, even if no terminal callback ran. The public
+`closed` outcome concerns the subscription lane, not completion of process work.
+No unbounded terminal store or inactive-handle retention beyond that owned bound.
+
+Minimal meaningful consumer qualification:
+
+| Risk | Passing/rejecting case |
+| --- | --- |
+| Initial-read race | Change during awaited construction catches up from the original snapshot after `start`; no callback precedes initial seed/activation, and admission closing during the await refuses |
+| Reversed acknowledgements | Publish durable revision 3 then late 2: keep 3; identical 3 is a no-op, conflicting 3 reports integrity failure without overwriting |
+| False authority | Commit-unknown, stale summary and missing notification never authorize dispatch, settlement or an automatic retry |
+| Lossy delivery misused | Burst updates may coalesce; two journal/output occurrences remain two acknowledged occurrences; final durable query works even if close prevented terminal callback |
+| Lifetime leak | Two subscribers are independent; closing one stops its callbacks; terminal direct cleanup and Host close free readers; the 65th reserved/active reader refuses, and all involved store subscription counts return to zero |
+| Scope/data leak | Wrong tenant/project/operation refuses before facet acquisition; neither summary values nor sanitized reports contain credentials, output or raw causes |
+| Failure coupling | A throwing subscriber does not block its sibling or cancel execution; preserve new-owned/duplicate `onAccepted` behavior and existing journal-failure assertions |
+| Wiring/type misuse | Independent producer/consumer oracle plus wrong-binding and production `/testing` import rejection; public declaration imports require no Observation/resources types |
+
+Use actual `delivered`/`settled` waits scoped to the stores in test code and the
+existing disposal checks, not arbitrary ticks or production global-flush waits.
+No `load` or `many()` is required for this single producer/consumer. A later
+replaceable inspection query may use `load` only under the main plan's physical
+completion/currentness contract. Events, dynamic registries and config reload
+remain outside this slice.
 
 ## 4. Credential capture and refresh detail
 

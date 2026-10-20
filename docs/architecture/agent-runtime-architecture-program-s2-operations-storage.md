@@ -65,7 +65,8 @@ It forbids application/domain imports of contracts and Get Modular outside compo
 Configuration and release facts enter factories as immutable snapshots; the factory does not watch
 configuration, wait for a sibling's future or emit an operation notification during construction.
 Module communication follows calls by default, one writer, explicit upward command/signal ports,
-and subscriber-owned lifetimes. An unfinished observation package does not gate S2.
+and subscriber-owned lifetimes. The released Observation package does not gate
+pure S2 engine/store work; its selected live-summary adapter lands with OBS-ADOPT.
 
 | Source | Verified behavior or gap |
 | --- | --- |
@@ -372,8 +373,27 @@ An explicit `OperationSignals` port carries accepted/revision/terminal facts upw
 It is passed as a typed run input/declared dependency; no captured global bus or implicit parent.
 The Host adapts it to its journal command; journal failure follows the existing evidence failure policy.
 Signals do not authorize state mutation, acquire dispatch ownership or turn unknown commit into success.
-Factories never emit them. Optional caller `onAccepted` remains observation-only with existing failure semantics.
-A future scoped observation adapter may consume these facts in composition without changing the core.
+Factories never emit them. Optional caller `onAccepted` retains its exact existing
+failure semantics. In the ordinary baseline, its throw on a newly owned submission
+cancels durably and aborts, while a duplicate callback throw is ignored. Do not
+replace either path with a deferred subscriber or unify it with frozen contained
+callback handling.
+
+OBS-ADOPT adds an owner-local plain summary publication port, separate from the
+acknowledged journal command and critical caller callback. It carries only the
+operation identity, durable revision and confirmed status after a successful
+owner transition; reuse one pure summary mapper. Domain/application and storage
+code import no Get Modular types. The outer composition adapter owns the store
+writer and publishes that aggregate; the Host consumes its read-only contract.
+Guard publication by the durable operation revision: lower is ignored, equal
+matching data is a no-op and equal conflicting data is reported without a write.
+Independent commit acknowledgements arriving out of order cannot regress status.
+An unknown commit retains uncertainty and permits no confirmed success or new
+dispatch. A failed projection is reported safely, never compensated by cancelling,
+retrying or rolling back an already acknowledged command. No journal, SQL mutation,
+grant, process launch or raw output becomes `watch`/`load` delivery. Durable
+`observe` remains authoritative; the new view covers only locally owned live work.
+The main plan's OBS-ADOPT contract and S5 define scope, admission and disposal.
 
 ## Migration and recovery contract
 

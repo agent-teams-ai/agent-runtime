@@ -8,7 +8,7 @@ summary: Owner decisions, target architecture, lanes, task cards and parallel wa
 
 # Agent Runtime Architecture Program Plan
 
-Version 3, 2026-10-19. Replaces version 2 as the implementation plan; the
+Version 3, updated 2026-10-20. Replaces version 2 as the implementation plan; the
 historical decisions and critique remain in the [decisions log](../../research/architecture-critique-2026-10/round2/decisions-log-2026-10-02.md).
 The accepted rewrite direction of October 15-16 and the technical selections
 below supersede the v2 move-first sequence. This document plans implementation;
@@ -51,13 +51,17 @@ Program acceptance requires all of the following, not merely merged code:
    The explicitly shared Provider Access materialization adapter remains declared.
 2. Existing authority, one-shot dispatch, uncertainty, resource custody and secret
    protections pass the mapped behavioral oracles plus focused new regression tests.
-3. Host composition is on the reviewed Get Modular 0.5.0 API; nested features
+3. Host composition is on the reviewed Get Modular 0.6.0 train; nested features
    use an actually adopted v1.1 profile and checker. Scope and pins stay explicit.
 4. Each publishable package passes isolated tarball installation, its public
    surface check and a disposable consumer before publication. Publish each
    dependency-complete package when ready, without a release-wide waiting gate.
 5. Required current-head repository checks pass; release and real provider
    qualification are reported separately. Private test-support is never published.
+6. OBS-ADOPT supplies the selected live-operation summary subscription through
+   the real Host boundary, with isolated scopes and no authority or output
+   delivery moved into notifications. This is a new bounded inspection capability,
+   not evidence that an existing command needed a reactive replacement.
 
 No new providers, platforms, remote execution, sessions/resume, event system,
 plugin loader, scheduler, extra storage backend or orphan-process reaper.
@@ -78,8 +82,8 @@ closure, not a new count, implementation progress or a scope denominator.
 | agent-runtime | Get Modular 0.3.0 and Foundation 1.7.2 installed; Node default 26.11.1, pnpm 11.18.0 | Current dependency installation is not current upstream adoption |
 | agent-runtime #234 | Merged October 15; 19 contained suppression waivers now expire 2027-01-13 | Do not repeat the expired-waiver repair; replace with a baseline before expiry |
 | agent-runtime #230 | Still open; CI recovery changes remain separately owned | CI-CONTRACT-1 coordinates its shared files; do not take over or merge this PR implicitly |
-| Get Modular | Main `3dd68a6b26f42159714a4640b613534a55c2c6aa`; release PR #178 merged; Core/Assembly 0.5.0 train | Skip an intermediate consumer 0.4.0 migration; P7a/P7b are still consumer work |
-| Get Modular observation | Implementation PR #195 open | Not an implementation prerequisite for this program |
+| Get Modular | October 20 refresh: main `077434e34d75506a610bc9271f8b5b9d5718c876`; Core/Assembly 0.6.0, resources 0.2.0, conformance 0.4.0 published | P7a/P7b review this train directly; no intermediate 0.4/0.5 consumer migration |
+| Get Modular observation | #195 and release #199 merged; public 0.1.0 published October 20, resources peer `^0.2.0` | OBS-ADOPT uses the released mechanism; it does not gate pure S1/S2 source work |
 | Engineering Foundation | Main `aed890a6ac09762d9f487ed2624e64a873935868`; package 1.10.0 published on npm | Reuse released baseline/source-graph capabilities, not the old pending 1.8.0 work |
 | Feature Module Standard package | `@agent-teams/feature-module-standard` 0.1.1 published | N2 adopts the shared kernel with consumer-specific discovery and policy |
 | Organization standard | v1.1 published, blob `bd949a9a670862fea851a7791fce772fdef3b4fc` | Publication is not agent-runtime adoption |
@@ -92,10 +96,20 @@ current API and claim equivalent cleanup guarantees. The owner approved this bou
 PROCESS-DUPLEX is a separate implementation card; this documentation delivery
 implements no product code.
 
-The current [Consumer Module Standard](https://github.com/agent-teams-ai/get-modular/blob/3dd68a6b26f42159714a4640b613534a55c2c6aa/docs/architecture/common-assembly.md#consumer-module-standard)
+The current [Consumer Module Standard](https://github.com/agent-teams-ai/get-modular/blob/077434e34d75506a610bc9271f8b5b9d5718c876/docs/architecture/common-assembly.md#consumer-module-standard)
 is navigation, not a silent replacement of the consumer's pinned `81063add`
 revision. P7a and N2 each retain their actual reviewed document/package delta
 and accepting records; moving the pin is not this documentation delivery.
+
+The October 20 read-back of Observation 0.1.0 matched the retained tested archive
+byte for byte: SHA-256 `083bed3ca61e586d6ce91c272be4b4d07c3c68ae00aa9b414febee20e60f1915`.
+The [release record](https://github.com/agent-teams-ai/get-modular/blob/c5c314ab98c57d2c73448f0c3c9860424a993d8a/research/releases/observation-0.1.0/release-intent.md)
+retains the source, six OS/Node cells and external packed TEST evidence. Those
+results qualify that package contract, not this consumer. The support floor is
+native TypeScript 7.0.2 and the declared Node 24/26 ranges; consumer adoption
+verifies its effective compiler/resolver and one physical resources/observation
+copy. The last upstream commit changes agent instructions only; communication
+source and guidance are unchanged from `c5c314a`.
 
 ## 3. Settled choices and supersession
 
@@ -122,7 +136,7 @@ same delivery before claiming the changed behavior accepted.
 | Execution bindings during S1 | Keep the consuming adapter at the currently legal boundary until S2 moves the port; one mechanical relocation into S4 | S1 Q2; avoids S1/S2 dependency cycle |
 | Embedded Runtime publication | Publish curated `.` and `./host`; remove `./composition` from npm exports at S5 API cutover | S3-S5 Q4; frozen implementation still builds and has internal tests |
 | Runtime Configuration | Keep private unless the final public Host signature demonstrably requires a standalone package; expose needed value types through curated Host types | Conservative default for Q-RUNTIME-CONFIG; no speculative publication |
-| Observation | Creation-time inputs and explicit command ports now; no store/watch/event placeholder | Last-session correction; no observation release wait |
+| Observation | Immutable construction inputs and explicit commands remain; OBS-ADOPT adds a real live-operation inspection subscriber, not a bus or authority cache | October 20 direction refines decision 54 without changing its protected command paths |
 
 Technical defaults are reversible plan choices within the accepted scope. The
 process repository extension is approved by the owner (decision 58) and remains
@@ -176,14 +190,122 @@ The mandatory behaviors carried into each affected slice are:
 ### Module communication
 
 Follow the accepted [communication practice catalog](https://github.com/agent-teams-ai/get-modular/blob/3dd68a6b26f42159714a4640b613534a55c2c6aa/research/module-communication-2026-10/raw/practices/practices-catalog-v2.md),
-particularly A1/A3/A5/A6, B1/B3, C1/C2/C4 and E2/E3/E5.
+and the current [module authoring guide, section 21](https://github.com/agent-teams-ai/get-modular/blob/077434e34d75506a610bc9271f8b5b9d5718c876/docs/guides/module-authoring.md#21-module-communication).
+Use A1/A3/A5/A6, B1/B3, C1/C2/C4/C5/C6, D1/D4/D6 and E1/E2/E3/E5.
+The catalog's dated `Planned`/`Proposed` labels are historical: current CMS,
+accepted successors and actual released APIs decide what exists.
 Configuration and the selected Codex release are immutable construction
 snapshots. A changed release/configuration creates a new Host; in-flight work
 retains its recorded release. The journal is a required command with an outcome,
 never a notification. One upward receiver is an explicit typed port. No global
 bus, polling, wildcard subscription, hidden parent or observer used as a command.
-If a future separately scoped capability needs reactive state, it adopts the
-released observation package then; no speculative hooks are written here.
+
+| Need | Selected mechanism and boundary |
+| --- | --- |
+| Value needed at construction | Typed slot/run input; read once, no subscription |
+| Current durable authority, permission, claim or cancellation | Explicit owner query/command and its typed result; read at the operation boundary |
+| Converge to another owner's newest state | `ReadonlyStore<Slice>` through a declared required slot; `read` then `watch` from that authentic snapshot |
+| Replaceable asynchronous query following changing input | `load` calling a typed query port; only when a concrete reader needs it. No initial load consumer is invented by OBS-ADOPT |
+| A fixed set of independent contributions | Owner's narrow extension-point contract and `many()` with an explicit ordered binding row; owner declares aggregation/error policy |
+| Every occurrence matters, including identical occurrences | Existing acknowledged journal, cursor/output or domain operation contract. Observation 0.1 has no lossless events, replay or delivery acknowledgement |
+
+The word "hooks" does not authorize one universal callback API. Commands,
+latest-state observation and extension points have different contracts. A single
+receiver stays a direct call, not `many()` or an event. Fixed helpers remain
+imports/factories; a new graph node requires real independent composition or
+lifetime. Dependencies are acyclic; a common ancestor/bridge coordinates owners
+instead of a feedback chain. Nested feature republication exposes only the
+chosen contracts, never private child entry identities.
+
+### First Observation adoption (OBS-ADOPT)
+
+Select one useful new capability: a bound Host caller can follow the latest
+non-secret summary of an ordinary operation executing in this Host, without
+polling durable storage. Agent Execution owns the summary writer; a Host
+inspection/operations composition subscriber consumes it. This continuous view
+does not exist in the baseline. It is the bounded technical choice implementing
+the owner's October 20 direction to use the module mechanism, not a reason to
+turn existing correct calls into subscriptions.
+
+The summary is one correlated plain-data aggregate: operation identity, durable
+operation revision and the existing status union. Add only separately justified
+safe scalar progress fields. Exclude output/prompt text, credentials, grants,
+handles, signals and raw error causes. Do not copy `OrdinaryView` wholesale.
+Observation's store revision is a separate local identity, not a durable revision
+or cross-store transaction. Define the data contract with its semantic owner;
+only outer composition uses Get Modular types/resources and keeps the writer.
+
+S2 exposes an ordinary typed owner-local publication seam for confirmed summary
+changes. The composition adapter commits the store after the authoritative
+transition is acknowledged. Unknown commit or ownership never publishes a
+confirmed running/succeeded state. Every successful owned transition uses the
+same mapper; replay/readback cannot grant a new dispatch. Projection failure
+reports through the safe Host error boundary and leaves explicit command results,
+cancellation, evidence and reconciliation semantics intact. The view is advisory;
+`observe` remains the authoritative durable query and fallback.
+Serialize publication through its one owner and compare durable revisions:
+ignore a lower revision, treat equal revision/equal summary as a no-op and report
+equal revision/conflicting summary as an integrity fault without overwriting.
+An acknowledgement arriving late cannot regress a newer or terminal summary.
+
+S5 exposes a framework-neutral, explicitly scoped latest-summary subscription
+on the already bound operations handle. Composition creates/closes its child
+resource scope; public callers receive no `Resources`, writer or other-operation
+facet. Authorize before acquiring or exposing the exact operation's facet. A
+typed slice is not a field-level access boundary: a broad facet must never carry
+another tenant's data or secrets. The Host receives the full supported
+`ReadonlyStore<Slice>` contract internally, not `Pick`/`Omit` of its methods.
+
+Prepare the subscriber template once; each authorized reader reserves a child
+run before its first await. A declared `input<C>()` supplies that exact
+operation's facet in `run({ inputs })`; the subscriber consumes it through its
+required slot. The Host does not rebind a singleton slot or pass a facet registry.
+Publish only a successful run's facade after rechecking call admission; close
+failed/cancelled runs after they settle. The producer outlives its reader runs.
+
+First adoption covers only live operations this Host owns. A nonlocal/historical
+operation gets an explicit `not_live_here` subscription result and can still use
+durable `observe`; do not fake distributed notifications or introduce a database
+watcher. Admission returns a last-confirmed initial summary and an inert owned
+subscription handle, or a typed refusal. The handle's explicit `start()` is a
+synchronous, idempotent activation after the caller has applied the initial
+summary; no callback occurs before activation or synchronously inside it. The
+prepared run retains the authentic initial snapshot and attaches `watch` at
+activation, catching up changes across all awaits. A closed/revoked instance
+returns a typed closed result instead of activating. No custom delivery queue.
+Updates may coalesce and callbacks are synchronous/idempotent. A terminal callback
+is not guaranteed if close wins delivery; callers obtain a definitive final
+result through existing completion/query contracts. A subscriber failure never
+cancels or retries execution and cannot change `onAccepted` behavior.
+
+Subscriptions have instance/operation/purpose names and the receiving scope's
+lifetime. Closing one reader detaches it before drain and leaves siblings alive;
+closing the Host stops admission, detaches subscriptions and drains existing
+owners before journal close. Retain incomplete physical cleanup as debt. The
+Host's error sink must not throw and must sanitize raw listener causes. No
+production import of `/testing`, global flush, order dependency between listeners
+or borrowed-resource disposal. Releasing a subscription never claims the process
+or a durable obligation has ended.
+Count reserved and active reader scopes against a first-delivery Host limit of
+64; refuse excess before acquisition, without evicting another reader. This is
+an explicit bounded policy, not a scale qualification. The direct owned-flight
+completion path closes its readers before releasing the summary source; do not
+wait for a lossy terminal notification to perform cleanup. The handle's `closed`
+outcome describes the subscription lane only, not physical operation completion.
+
+If a later selected capability needs `load`, its promise includes physical work
+and cleanup; one active plus one newest pending job is not a deadline. Superseded
+success/errors cannot publish. Ignored abort may block successors, and Host
+escalation reports debt rather than pretending to stop work. Never launch a
+provider, spend quota, append evidence or settle a grant from a loader. Correlated
+derived values use one aggregate and one initial/update mapping; do not watch
+both raw and derived state or infer cross-store atomicity.
+
+Lossless events and dynamic contribution registries remain separate future
+capabilities, not unfinished parts of Observation 0.1. Before selecting one,
+identify actual independent reactors and specify ordering, loss/duplication,
+acknowledgement, replay, failure and scope semantics in its owner. No new event
+package or plugin system is required by this program.
 
 ## 5. Prerequisite cards
 
@@ -198,7 +320,7 @@ contains the executor contract and verification policy.
 | P7-now | Runtime integrator: immediate rules, named OrdinaryTurn port, source/layout checks | Publish consumer mapping/AGENTS block; narrow port fix; new code follows target limits; use released ratchet APIs/producer, not a second baseline implementation. Preserve exact frozen entries, no blanket exclusions | Can start docs/port work now; strict baseline activation follows GOV-BASELINE |
 | GOV-REGISTRIES | Integrator: generator over current owner data | One `registries:write` and same generator `--check`, deterministic output/readable diff, no source execution/network; mechanical census/profile digests/coverage anchors derived once, hand decisions never generated. Reject unknown owner, missing root, unresolvable edge and ambiguous anchor | CI-CONTRACT-1; shared source-graph API; record current pin procedure |
 | DOCS-SUCCESSORS | Integrator: scoped ADR successors, not accepted-byte edits | Record library export/classification, auth-file/refresh/release policy and Host API/storage boundary changes. Batch related decisions; no ADR per file or routine layer | Before affected behavioral cutover, parallel with library development |
-| P7a/P7b | Existing Get Modular consumer adoption lane | Core/Assembly 0.5.0, conformance 0.3.0, current reviewed CMS pin; static entries/groups/root, one assembly, own-property ports, smoke/wiring oracles; update reserved files once | P7-now; actual registry artifact verification |
+| P7a/P7b | Existing Get Modular consumer adoption lane | Review published Core/Assembly 0.6.0, resources 0.2.0 and conformance 0.4.0 with TS 7.0.2; current CMS pin; static entries/groups/root, one assembly, own-property ports, smoke/wiring oracles; update reserved files once | P7-now; actual registry artifact verification |
 | N2 | Runtime FMS adoption lane | v1.1 pin + shared FMS kernel/fixtures, deepest owner, visible surfaces/republications, runtime/type edge cycles, load cycles, empty directory rejects, mirrored tests, roles inferred under successor | P7b; compatible Foundation + FMS release installed |
 | PUBLISH-ROUTE | Integrator: package versions/changesets, surface and tarball qualification | Per-package release with migration notes; names/kinds surface report and isolated runtime/types imports. Local package qualification may be used now; shared Foundation mechanism replaces it once available, never two active implementations | Before first relevant package publication, not before authoring its source |
 | CONTAINED-FREEZE | Integrator: exact source/test classification and notices | Keep code/build/typecheck; disable only proven contained-only tests with owned return conditions; all ordinary/shared materialization tests remain. No delete lane | CI-CONTRACT-1; active reachability and shared-test inventory |
@@ -358,6 +480,7 @@ profile revision, change durable authority or require a program-wide refactor.
 | S4-EXECUTION | New execution parent with four sub-features and claim-gated bindings | S1 mechanisms; S2 ports; N2; S5-RELEASE | Execution owner |
 | S5-STORAGE | Verified structural storage object in Host, no migrations/raw pool | S2 stores + S3 owners; P7b | Host/store integrator |
 | S5-API | New runtime-host operations access, curated host exports, public outcome parity | S3/S4 and S5-STORAGE; N2 for nested operations; release selection | Host/API owner |
+| OBS-ADOPT | Real AE summary producer, Host subscriber and scoped public live-summary view; Observation 0.1/resources 0.2, preserving acknowledged commands and durable queries | S2 summary seam; P7b/N2; land with S5-API and its scoped successor, not a second data migration | Execution/Host integrator; positive/rejecting ownership and lifecycle cases |
 | BUMP-TOOL | Source/registry/schema/config comparison, no binary execution | S1 protocol + S5 release record | Release tooling owner |
 | FIRST-BUMP | Latest verified stable Codex at execution time | Source/ABI/config review and previously required permission for real TEST run | Existing live-qualification contract |
 
@@ -371,7 +494,9 @@ because it borrows a structural channel. ACTIVE-SUPPORT proceeds per package
 with its stated P7b/N2 reservations, rather than disappearing between the slices. Cutovers wait only for their row's
 actual prerequisites, not the end of an unrelated wave.
 Wave D: S3 security; nested access/execution; verified Host storage and API
-cutovers. Release each dependency-complete package as it becomes qualified.
+cutovers with OBS-ADOPT's actual live-summary consumer. Release each
+dependency-complete package as it becomes qualified. Pure libraries do not wait
+for this subscription capability.
 Wave E: final packed consumer, full current-head qualification, release tooling
 and first live bump when its existing run authorization is satisfied.
 

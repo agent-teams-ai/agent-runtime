@@ -204,3 +204,27 @@ request. Published FMS v1.1 provides nesting; it does not prove the separate
 LIBRARY_FIRST extraction criterion delivered. PUBLISH-NATIVE selects prebuilt
 optional artifacts matching the full existing native binding, with typed refusal
 for an unavailable tuple and no weakened JavaScript no-replace fallback.
+
+60. Owner direction, October 20: study Get Modular module communication,
+observation and events deeply and use the important module mechanism according
+to its actual recommendations. Coordinator selection: OBS-ADOPT adds a bounded
+live-operation summary view with an AE producer and Host subscriber/public
+`operations.watchSummary` bridge. This is a new selected inspection capability,
+not an assertion that the baseline already needed reactive replacements.
+Direct durable queries, journal acknowledgement, dispatch/settlement/cancellation
+and the distinct existing `onAccepted` failure semantics remain intact. This
+refines decision 54's blanket deferral while retaining immutable per-Host
+configuration/release and its protected command paths. The implementation card
+must supply its scoped public-contract/CMS successor; this plan changes no
+accepted ADR, installed package pin or runtime source.
+
+61. Verified source refresh, October 20: Observation 0.1.0 is public and its npm
+archive is byte-identical to the retained tested release artifact. Core/Assembly
+0.6.0, resources 0.2.0 and conformance 0.4.0 are published; review this compatible
+train directly for P7a/P7b with native TypeScript 7.0.2. Actual consumer adoption
+and qualification are still required. `watch` coalesces latest state, `load`
+serializes replaceable queries with cooperative cancellation, and `many()` is
+an explicitly ordered static extension point. They do not implement lossless
+events, dynamic registration, readiness authority or distributed notification.
+No new event bus, plugin framework, invented first `load` consumer or local
+copy of a shared mechanism is selected by this direction.

@@ -8,7 +8,7 @@ summary: Self-contained execution brief for the remaining cards of the Agent Run
 
 # Agent Runtime Architecture Program: Execution Brief
 
-Version 3, 2026-10-19. Execute one card from the
+Version 3, updated 2026-10-20. Execute one card from the
 [program plan](agent-runtime-architecture-program-plan.md), using its exact
 [S1](agent-runtime-architecture-program-s1-libraries.md),
 [S2](agent-runtime-architecture-program-s2-operations-storage.md) or
@@ -50,7 +50,10 @@ Only re-read a card's cited code if it changed or its contract is uncertain.
 At this plan's snapshot, agent-runtime is `efd3348f361fa6af84953325af5c0d2d8677d14a`,
 Node 26.11.1 and pnpm 11.18.0. Pinned Foundation remains 1.7.2 and Get Modular
 Core/Assembly 0.3.0. Released upstream versions are separate facts: Foundation
-1.10.0, FMS package 0.1.1 and the 0.5.0 Get Modular train.
+1.10.0 and FMS package 0.1.1. The October 20 upstream refresh selects published
+Core/Assembly 0.6.0, resources 0.2.0, conformance 0.4.0 and Observation 0.1.0 for
+reviewed adoption, with native TypeScript 7.0.2. Verify actual artifacts and
+compiler/resolver behavior; no installed consumer pin changed in this plan.
 Do not change the toolchain/dependencies merely because a newer version exists.
 A dependency addition verifies current official metadata and its actual target
 compatibility, then pins the reviewed choice through the repository policy.
@@ -89,6 +92,20 @@ modify or merge it.
    its Host responsibility there, not in a second mandatory migration PR.
 6. Public operations/Host and packed consumers follow the owners. Publish each
    dependency-complete qualified package when ready; do not wait for all slices.
+7. Land OBS-ADOPT with S5-API: a real AE confirmed-summary producer and Host
+   subscriber serving `operations.watchSummary`, with per-reader scopes and
+   framework-neutral public types. It is a new bounded inspection view, not an
+   excuse to replace direct commands. Preserve journal acknowledgement, durable
+   `observe`, output/cursor delivery and exact `onAccepted` failure behavior.
+
+Before each inter-module link, classify it with the main plan's communication
+table and current CMS authoring guide section 21. Choose a snapshot, query,
+command, latest-state subscription, replaceable query or ordered static
+contribution. A required call with one receiver stays a call. No global bus,
+string lookup, event chain, speculative `load` consumer or dynamic registry.
+Observation 0.1 does not implement lossless events. OBS-ADOPT's race, authority,
+scope, data-leak and failure-isolation cases live in S3-S5; do not substitute a
+package's green CI for this consumer qualification.
 
 Integrator-owned files: root manifests/lockfile/workflows and AGENTS;
 `architecture/**`; shared architecture/CI/docs tooling; accepted-decision
