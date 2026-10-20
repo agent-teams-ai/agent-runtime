@@ -28,6 +28,7 @@ related:
   - ADR-0023
   - ADR-0024
   - ADR-0090
+  - ADR-0091
 blocked_by: []
 code_anchors:
   - enforcement: required
@@ -114,6 +115,10 @@ immutable evidence; a later change uses an explicit superseding decision.
   test dependency, extending ADR-0015's import rule and narrowly
   superseding its no-resource-manager statement for ordinary owners.
 - [ADR-0090: Ordinary user-session Codex execution profile](0090-ordinary-user-session-codex-execution-profile.md)
+- [ADR-0091: Interactive Agent Session synthetic vertical slice](0091-interactive-agent-session-synthetic-vertical-slice.md)
+  accepts the scoped persistent Claude successor, durable input/control owner
+  and synthetic-first C checkpoint; implementation/adoption remain pending and
+  contained-turn authority is unchanged.
 
 ## Superseded
 

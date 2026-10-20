@@ -1,0 +1,64 @@
+{
+  "schemaVersion": 1,
+  "status": "proposed",
+  "reviewedOn": "2026-10-21",
+  "authorityCandidate": "ADR-0091",
+  "repository": "agent-teams-ai/get-modular",
+  "path": "docs/architecture/common-assembly.md",
+  "anchor": "consumer-module-standard",
+  "runtimeBaseCommit": "efd3348f361fa6af84953325af5c0d2d8677d14a",
+  "before": {
+    "commit": "81063add7de50ffe2b91cc74bf7271b298624c21",
+    "sha256": "49d08b6d1762e94308157fb59b3aa82ac1630c91f529f6efcd4915dfffee7ba7",
+    "byteLength": 47402,
+    "evidencePath": "architecture/get-modular/evidence/consumer-module-standard.md"
+  },
+  "candidate": {
+    "commit": "ddf1e0b0053f546f12ca70190b237b4f7e78d09d",
+    "sha256": "c2fe582a14ff6e79620b232ca7ffc914afb0474ec21fd43f208251dd7252f4a3",
+    "byteLength": 81436,
+    "evidencePath": "architecture/interactive-agent-session/evidence/common-assembly-ddf1e0b.md"
+  },
+  "provenance": {
+    "upstreamMainVerification": "git ls-remote origin refs/heads/main returned the exact candidate commit on 2026-10-21; complete document bytes read from that commit in the canonical local get-modular clone",
+    "retrieval": "exact-local-git-object-with-live-remote-ref-verification",
+    "packageRegistryOrArchiveQualification": "not-performed"
+  },
+  "delta": {
+    "path": "architecture/interactive-agent-session/evidence/cms-pin-delta.diff",
+    "sha256": "8f1086448a77e1358843dd45753c33a03d93d0bc2a480410bea95e7da03e0724",
+    "byteLength": 61111,
+    "hunks": 27,
+    "addedLines": 624,
+    "removedLines": 85,
+    "format": "git -c diff.suppressBlankEmpty=true diff --no-ext-diff --no-textconv --no-color --no-renames --text --full-index --diff-algorithm=myers --indent-heuristic --unified=3 --inter-hunk-context=0 81063add7de50ffe2b91cc74bf7271b298624c21 ddf1e0b0053f546f12ca70190b237b4f7e78d09d -- docs/architecture/common-assembly.md",
+    "reviewedChanges": [
+      "ADR-0034 adds optional one-writer observation and subscriber-owned cleanup. A durable operation read remains valid; C needs no additional reactive store or observation dependency.",
+      "ADR-0035 completes required single-provider rows before any factory and admits profileId production preparation. Optional/many/ambiguous rows remain explicit; no runtime resolver reaches factories.",
+      "ADR-0036 replaces bound handles with implement/input entries and static feature groups. Roots list top-level groups and their own entries; one owner per module, one installed library copy per Host.",
+      "ADR-0037 pins providers/roots/noncompleted rows in the independent oracle rather than copying the plan. Existing full-table oracle tests must be migrated when affected.",
+      "New normative authoring requirements cover flat composition contracts/declarations/modules/groups, use-cases and application ports, function-typed port properties, composition-only Get Modular imports, module layout, contract suites, smoke/isolate and size checks.",
+      "FMS v1.1 is referenced as optional selected successor; consumers pinned to v1 do not nest. C uses no sub-features and keeps FMS v1.",
+      "Scope-owned subscription cancellation detaches before cleanup; resource-scope completion still does not prove physical release. Dynamic lifecycle remains optional and is not selected for C."
+    ]
+  },
+  "scopeDisposition": {
+    "newAgentExecutionCore": "proposed-FMS-v1-feature-with-closed-consumer-owned-ports; direct fixture composition is development code outside production Host adoption",
+    "newProductionInteractiveHost": "pending-current-CMS-and-package-adoption-with-actual-conformance",
+    "existingPassiveAndOrdinaryProfiles": "unchanged; no pin or adoption claim migrated by this candidate review",
+    "containedTurn": "frozen-and-unchanged",
+    "providerLibrary": "proposed-ordinary-external-library; type-only consumer-contract-dependency; concrete factory selected only by Host composition",
+    "privateHelpers": "fixed owner-local use cases, queue, normalizer and codecs; no separate Assembly node",
+    "dynamicLifecycle": "not-selected",
+    "reactiveObservationLibrary": "not-selected"
+  },
+  "outstandingBeforeProductionHostAdoption": [
+    "Verify released package artifacts corresponding to the reviewed standard, migrate the shared installed Core/Assembly/resources/conformance pair as necessary, retain actual lock/archive identities and prove existing Host compatibility. Candidate source manifests alone are not release evidence.",
+    "Record the exact interactive root, feature group, declarations, factories, contract descriptors, dependency slots and lifecycle owner in the affected production profiles; preserve every unaffected profile and accepted decision.",
+    "Enforce FMS new feature and curated type-only SPI export through actual source topology, package manifest/compiler/test census and fast/full gate admission, without exclusions or unrelated profile migrations.",
+    "Use current CMS layout in the new scope, arrow-function property ports, composition-owned descriptors and no Get Modular imports in policy/adapters. Existing use-case helpers remain local implementation details.",
+    "Prove zero factories on invalid preparation, exact wrong-slot/revision rejection, independent binding parity, failed/cancelled construction ownership, retained cleanup debt, package public-import isolation and rejecting pin/gate/source-census drift fixtures.",
+    "Update shared canonical CMS guidance only if C requires shared semantic changes. The reviewed current guidance already covers this static scoped composition; no shared standard change is proposed."
+  ],
+  "evidenceDisposition": "Candidate source/pin review only. No production profile, dependency pin, frozen ADR, enforcement command or qualification registry is modified by this file. Adoption remains pending until actual implementation and blocking evidence pass."
+}

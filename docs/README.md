@@ -198,7 +198,7 @@ Document status vocabulary:
 
 Production code must not use an evidence document as its architecture source
 of truth. Accepted ADR-0001 through ADR-0010, ADR-0012 through ADR-0015, and
-ADR-0017 through ADR-0023 and ADR-0090, excluding proposed ADR-0006, proposed ADR-0016, and the unassigned ADR
+ADR-0017 through ADR-0023 and ADR-0090/ADR-0091, excluding proposed ADR-0006, proposed ADR-0016, and the unassigned ADR
 identities, plus the promoted-rule column of the traceability matrix are normative for production
 architecture. ADR-0007 governs deterministic documentation changes.
 Supporting architecture documents are accepted only as amended by the ADRs.
@@ -223,3 +223,9 @@ and [Get Modular adoption](architecture/get-modular-adoption.md). This is author
 groundwork, not delivered adoption or provider qualification.
 
 - [ADR-0090: Ordinary user-session Codex execution profile](decisions/0090-ordinary-user-session-codex-execution-profile.md) accepts the ordinary contract; implementation and qualification remain pending.
+
+Accepted interactive successor, separate from the frozen contained-turn path;
+implementation, Host adoption and qualification remain pending:
+
+- [ADR-0091: Interactive Agent Session synthetic vertical slice](decisions/0091-interactive-agent-session-synthetic-vertical-slice.md)
+- [Interactive session C first slice qualification](spikes/interactive-session-c-first-slice-qualification.md)
