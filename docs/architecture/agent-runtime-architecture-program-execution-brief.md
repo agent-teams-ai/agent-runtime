@@ -47,7 +47,10 @@ classification; and the existing suite that proves the boundary. State readiness
 cancellation and completion separately where they apply. Do not invent a second
 manifest, a base module interface or an ADR for every routine field. The main
 plan's four module-cutover outcomes define the concrete acceptance for P7b/N2
-and each affected slice.
+and each affected slice. Follow its six-decision implementation order: one
+descriptor/revision, owned DTO snapshots, preparation before effects, scoped
+construction with retained failure cleanup, then the single consumer cutover.
+Assembly does not snapshot opaque run input or capability values for the Host.
 
 ## 2. Bounded start check
 

@@ -243,6 +243,11 @@ same mapper; replay/readback cannot grant a new dispatch. Projection failure
 reports through the safe Host error boundary and leaves explicit command results,
 cancellation, evidence and reconciliation semantics intact. The view is advisory;
 `observe` remains the authoritative durable query and fallback.
+The owner-local publisher is a synchronous function property returning
+`undefined`, not a promise or delivery acknowledgement. Its outer adapter catches
+projection/reporting failures; the engine never awaits observers or turns an
+already acknowledged transition into failure. Compare equal summaries by the
+explicit contract fields, not by store revision or a copied durable record.
 Serialize publication through its one owner and compare durable revisions:
 ignore a lower revision, treat equal revision/equal summary as a no-op and report
 equal revision/conflicting summary as an integrity fault without overwriting.
@@ -361,6 +366,62 @@ accepted upstream ADR-0038 even where historical CMS checklist wording still
 names 5.8.3; retain that delta explicitly in the pin review. Missing
 `Resources.path` is an additive diagnostic improvement, not a blocker: use the
 existing safe instance/operation/purpose names and source/subscription/revision.
+
+Apply those six decisions in this order inside each affected card, without a
+separate foundation phase:
+
+1. **Specify the boundary before its adapters.** Put the plain public value/port
+   types with their semantic owner; put `defineContract`, `declareModule` and
+   the feature capability map in composition. The existing feature card names
+   each published/consumed capability, exact revision, provider selection and
+   explicit absence. Republish a nested child's chosen contract at its parent;
+   do not expose its private module identity or add a node for a fixed helper.
+2. **Make changes atomic at that boundary.** Keep the permanent capability ID
+   when changing its value type; advance its revision, including for additive
+   fields, and update provider, consumers, fake and contract suite together.
+   Do not introduce `/v2` IDs, revision ranges or casts to accept an old provider.
+   A package release follows its own SemVer policy; a descriptor change does not
+   imply a persisted schema/profile change. Create new descriptors only for new
+   independently consumed capabilities, not another copy of the same contract.
+3. **Protect the actual snapshot.** Validate/copy caller-owned configuration,
+   release and scope DTOs at ingress using the existing owner rules; TypeScript
+   `readonly` alone does not prevent later caller mutation, and Assembly treats
+   input/capability values and factory closures as opaque. Freeze only the owned
+   plain-data representation where required. Do not recursively freeze,
+   clone or take ownership of borrowed ports, signals, resource scopes or pools.
+   Factory closures keep immutable construction inputs; mutable run-specific
+   values go through declared run inputs. A cache key cannot repair a factory
+   whose captured meaning changes after preparation.
+   Keep authority checks at the operation boundary even when its display state
+   is observed. Retain the selected release for the whole owned operation.
+4. **Prepare, construct, then admit.** Resolve the declared graph and reject
+   missing/ambiguous/wrong-revision bindings before any product factory or loader.
+   Keep entry creation/imports inert; preparation is not a sandbox for arbitrary
+   JavaScript or metadata-adapter effects. Use
+   `implement(..., scoped)` for an owning factory and `resources.setup` for async
+   acquisition; never acquire across an await and then hope `use()` can accept
+   the value after close. Reserve the attempt before the first await. Supply
+   its explicit inputs/signal/scope to `run`, await settlement, and publish its
+   narrow facade only after success and the final Host admission/readiness check.
+   The attempt owner retains cleanup for a returned success that can no longer
+   be published.
+5. **Retain failed ownership explicitly.** On failed/cancelled construction,
+   preserve the actual created journal and any untransferred returned product
+   in the private attempt owner; do not dispose an object twice through journal
+   and scope cleanup. A close request during construction fences publication
+   and requests abort immediately, then closes after run settlement. An incomplete
+   report retains its handle, borrowed-provider custody and explicit retry path;
+   it is not permission to construct again or mark the Host ready. Map safe phase/code/
+   owner facts to the public outcome, keeping raw causes/products private. No
+   diagnostic failure authorizes replaying an effect or converting a required
+   provider failure into optional absence.
+6. **Switch one coherent consumer boundary.** Port the independent behavioral
+   assertions first, implement the replacement against that contract, then
+   switch its root binding, reviewed registry projection, exports and affected
+   callers together. Prove the four outcomes below on that candidate. Remove
+   only its replaced active ordinary path. Reuse existing conformance and
+   adapter tests; a new lifecycle interface, plugin loader or duplicate test
+   framework is not part of this step.
 
 ### Module cutover acceptance: four concrete outcomes
 
@@ -655,3 +716,83 @@ No owner answer is needed to complete this plan. External packages/adoption
 lanes, nonempty legacy-data disposition and execution-time interactive/live
 qualification requirements remain concrete implementation dependencies, not
 unanswered architecture questions or new approval ceremonies.
+
+### 9.1 Optional Get Modular capabilities: bounded cost estimates
+
+The owner requested these estimates on October 20. They describe possible later
+work, not selected runtime cards or new prerequisites. The rewrite already fixes
+the expensive seams: capability/slot ownership, exact revisions, borrowed ports,
+per-instance scopes, state versus occurrences and the future DTO/IPC boundary.
+No factory-wide lifecycle or event envelope is reserved for hypothetical users.
+
+These are estimates of **new handwritten lines**, excluding blank/comment lines,
+generated output, lockfiles, existing reusable source and retained tests.
+Production includes runtime types. Integration counts one real consumer adapter
+and exports/profile/build/release tooling separately; tests include meaningful
+new fixture code. Documentation is not production code. The ranges are not
+measurements, elapsed-time commitments or a completion formula.
+
+| Future capability / estimated scope | New production LOC | Integration/tooling LOC | New tests/fixtures LOC | Docs LOC | Confidence |
+| --- | --- | --- | --- | --- | --- |
+| Typed events: process-local, ephemeral, FIFO, synchronous listeners | 700-1,150 | 120-300 | 1,000-1,800 | 150-300 | 6/10 |
+| Dynamic contributions: one typed extension point, plain metadata plus owned executable invocation | 850-1,400 | 180-350 | 1,300-2,300 | 200-350 | 5/10 |
+| Dynamic plugin Host: one trusted cooperative in-process family, replacement/drain/recovery | 1,400-2,300 | 300-600 | 1,900-3,500 | 250-450 | 4/10 |
+
+Basis: current Assembly/resources/Observation source and the private
+[lifecycle-kernel candidate](https://github.com/agent-teams-ai/get-modular/blob/077434e34d75506a610bc9271f8b5b9d5718c876/packages/lifecycle-kernel/README.md),
+plus the existing
+[TEST Host](https://github.com/agent-teams-ai/modularity-host-test/tree/d0ccb3ee5ceee0f6657c68a68ee39fb87ae5c8cc/src/host).
+The TEST Host admission/inventory/lifetime/replacement/recovery subset contains
+about 1,915 nonblank/noncomment lines, useful as semantic reference and behavioral
+oracles. It is not a released production Host. Reused source is not charged again
+as new LOC, but production adoption/qualification is still required. Do not add
+the three estimates as if their shared integration were three independent jobs.
+
+- **Events:** select only for concrete independent reactors that must distinguish
+  every occurrence. The estimate includes a typed source/read-only facet,
+  immutable payloads, finite count/byte bounds, explicit overflow refusal,
+  per-source FIFO without coalescing, scope-owned subscriptions, listener-error
+  isolation and close/drain accounting. Define membership at emission and removal
+  during queued delivery. Acceptance into memory does not acknowledge a listener
+  or promise survival of close/crash; no replay, retry or interprocess delivery.
+  Test duplicate payload occurrences, order/overflow, detach during delivery,
+  throwing siblings and retained cleanup. Current journal/output contracts stay
+  authoritative. Crash survival, subscriber acknowledgement and durable replay
+  would add roughly 3-6k production, 0.6-1.2k integration and 4-8k test lines for
+  one chosen storage/transport; that is a separate owner delivery subsystem.
+- **Contributions:** select when a real extension point must change membership
+  without rebuilding its prepared Host. The estimate includes named identities,
+  explicit deterministic order, duplicate/partial-registration refusal, finite
+  inventories and contributor-scope cleanup. Observation can publish **plain
+  metadata only**; it rejects functions/class instances/Map, so executable ports
+  never live in its store. A separate typed acquisition/invocation facade retains
+  calls. Removal immediately fences new calls, drains held work before release
+  and cannot revive a stale handle when the same display ID is registered again.
+  Test add/remove races, explicit ordering, stale generation/handle, retained
+  invocation and failed cleanup. `many()` stays static and the compiled graph
+  stays immutable; no generic lookup registry. Data-only contributions without
+  executable calls/drain reduce the mechanism to about 350-650 production lines.
+- **Plugin Host:** select when enabling/disabling/replacing one plugin family
+  without a Host restart has a concrete product use. The estimate includes inert
+  whole-selection validation before imports, attempt custody, candidate readiness,
+  single-flight replacement and atomic routing, typed call admission/rechecks,
+  quiesce/drain/retire/close and retained recovery. Test failed candidate preserving
+  the old route, retirement across await, late acquisition and cleanup retry.
+  Use shared mechanisms rather than modifying Core/Assembly into a manager; the
+  private kernel requires explicit qualification/adoption or release if selected.
+  Trusted code can still perform arbitrary JavaScript effects: this is not a
+  security boundary or ESM unloading. Artifact distribution/signatures, OS sandbox,
+  cross-process RPC and persisted generation recovery are excluded. Full terminal
+  streams can add 400-800 production and 600-1,100 test lines if existing TEST
+  blocks cannot be reused. One selected isolated backend with an existing trusted
+  artifact-admission system can add 3-6k production, 0.7-1.5k integration and 4-8k
+  test lines; building trust/distribution/OS containment is not included or
+  credibly priced without that actual product scope.
+
+The material future product choices are delivery persistence/acknowledgement,
+data-only versus executable contributions, and trusted versus isolated plugins.
+Resolve them with the first selected consumer, then re-estimate that card.
+None is an unanswered requirement of the current rewrite; no owner answer is
+needed to continue it. Before adding one, verify its current package/API state
+again and update the owning scoped standard/adoption rather than implementing
+a consumer-local copy of a shared module mechanism.

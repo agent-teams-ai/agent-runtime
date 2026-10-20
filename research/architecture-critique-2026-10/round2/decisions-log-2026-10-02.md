@@ -246,3 +246,23 @@ commands. Optional events, plugin isolation, dynamic registries and hot
 replacement remain additive work for a selected consumer, not blanket module
 requirements. This records planning choices only; no Get Modular or runtime
 implementation is claimed.
+
+63. Owner request, October 20: make the six pre-rewrite decisions executable
+and estimate the three optional module capabilities. Coordinator refinements
+specify one descriptor/exact revision with coordinated contract updates, owned
+DTO snapshots (Assembly leaves values opaque), inert preparation, scoped async
+acquisition, admission before facade publication and retained construction
+failure/recovery. A synchronous non-acknowledging summary publication adapter
+cannot change the already confirmed command result. Existing feature cards,
+behavioral oracles and the one consumer cutover retain ownership; there is no
+new prerequisite phase or module-wide lifecycle interface.
+The main plan records separate estimated new production, integration, tests and
+documentation ranges for ephemeral typed events, executable dynamic
+contributions and a trusted cooperative in-process plugin Host. Their bounds
+and exclusions are estimation assumptions, not accepted future API designs or
+authorization to implement them now. Dynamic contribution metadata is plain
+data; executable invocation needs a separate owned facade and removal/drain
+contract. Durable/replay delivery and isolated plugins are larger distinct
+scopes. No new blocking product question was found for the selected runtime
+rewrite. Revisit those product choices only when a real consumer selects the
+future capability.
