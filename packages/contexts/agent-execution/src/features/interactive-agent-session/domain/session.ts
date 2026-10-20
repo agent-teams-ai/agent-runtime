@@ -23,18 +23,18 @@ export interface SessionReply {readonly status: SessionOutcome; readonly receipt
 export interface SessionView extends SessionRef {
   readonly revision: number;
   readonly status: SessionStatus;
-  readonly inputs: readonly {readonly inputId: string; readonly operationId: string; readonly status: "admitted" | "dispatching" | "sdk_consumed" | "succeeded" | "failed" | "cancelled" | "reconcile_required"; readonly delivery: "admitted" | "dispatching" | "sdk_consumed" | "known_not_sent" | "unknown"; readonly cancellationRequested: boolean}[];
+  readonly inputs: readonly {readonly inputId: string; readonly operationId: string; readonly status: "admitted" | "dispatching" | "client_consumed" | "succeeded" | "failed" | "cancelled" | "reconcile_required"; readonly delivery: "admitted" | "dispatching" | "client_consumed" | "known_not_sent" | "unknown"; readonly cancellationRequested: boolean}[];
   readonly events: readonly SessionEvent[];
 }
 
 
-export type InputStatus = "admitted" | "dispatching" | "sdk_consumed" | "succeeded" | "failed" | "cancelled" | "reconcile_required";
+export type InputStatus = "admitted" | "dispatching" | "client_consumed" | "succeeded" | "failed" | "cancelled" | "reconcile_required";
 export interface SessionInput {
   readonly inputId: string;
   readonly operationId: string;
   readonly content: string;
   readonly status: InputStatus;
-  readonly delivery: "admitted" | "dispatching" | "sdk_consumed" | "known_not_sent" | "unknown";
+  readonly delivery: "admitted" | "dispatching" | "client_consumed" | "known_not_sent" | "unknown";
   readonly cancellationRequested: boolean;
 }
 export interface Interaction {
@@ -82,8 +82,8 @@ export function utf8Bytes(value: string): number {
 const id = (value: string): boolean => typeof value === "string" && /^[A-Za-z0-9:._-]{1,128}$/u.test(value);
 function invalidContents(record: SessionRecord): boolean {
   return record.inputs.some(input => !id(input.inputId) || !id(input.operationId) || typeof input.content !== "string" || utf8Bytes(input.content) > record.limits.inputBytes ||
-        !["admitted", "dispatching", "sdk_consumed", "succeeded", "failed", "cancelled", "reconcile_required"].includes(input.status) ||
-        !["admitted", "dispatching", "sdk_consumed", "known_not_sent", "unknown"].includes(input.delivery) || typeof input.cancellationRequested !== "boolean") ||
+        !["admitted", "dispatching", "client_consumed", "succeeded", "failed", "cancelled", "reconcile_required"].includes(input.status) ||
+        !["admitted", "dispatching", "client_consumed", "known_not_sent", "unknown"].includes(input.delivery) || typeof input.cancellationRequested !== "boolean") ||
       record.commands.some(command => !id(command.commandId) || typeof command.fingerprint !== "string" || !["accepted", "complete", "unknown"].includes(command.disposition)) ||
       record.interactions.some(interaction => !id(interaction.interactionId) || !Number.isSafeInteger(interaction.generation) || interaction.generation < 1 || interaction.generation > record.generation || !Number.isFinite(interaction.expiresAt) ||
         !["permission", "question"].includes(interaction.kind) || !["pending", "replying", "replied", "cancelled", "unknown"].includes(interaction.state) ||

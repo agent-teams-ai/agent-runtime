@@ -34,7 +34,7 @@ export type DriverObservation = {
   readonly operationId?: string; readonly inputId?: string; readonly data: JsonValue;
 } | {
   readonly kind: "result"; readonly operationId: string; readonly inputId: string;
-  readonly outcome: "succeeded" | "failed" | "unknown";
+  readonly outcome: "succeeded" | "failed" | "cancelled" | "unknown";
 } | {
   readonly kind: "interaction"; readonly operationId?: string; readonly inputId?: string;
   readonly interactionId: string; readonly requestKind: "permission" | "question"; readonly expiresAt: number; readonly data?: JsonValue;

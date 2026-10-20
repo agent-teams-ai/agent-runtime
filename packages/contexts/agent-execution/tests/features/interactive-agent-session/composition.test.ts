@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type {Event} from "../../../dist/interactive-contracts.js";
+import type {Event, Reply} from "../../../dist/interactive-contracts.js";
 import {createInteractiveSessionFeature} from "../../../dist/features/interactive-agent-session/composition/interactive-session-factory.js";
 import {deferred, fixture, ref} from "./support.ts";
 
@@ -35,7 +35,7 @@ test("canonical handoff mismatched CID is uncertain; explicit known-not-sent rem
   f.driver.submit = async () => ({ok: false, code: "backpressure", delivery: "known-not-sent"});
   assert.equal((await feature.control.dispatch(ref)).status, "accepted");
   assert.equal((await feature.session.read(ref))!.inputs[0]!.delivery, "known_not_sent");
-  f.driver.submit = async () => ({ok: true, value: {inputId: "foreign", operationRef: admitted.receipt!.operationId, delivery: "sdk-consumed", providerAcceptance: "unknown"}});
+  f.driver.submit = async () => ({ok: true, value: {inputId: "foreign", operationRef: admitted.receipt!.operationId, delivery: "client-consumed", providerAcceptance: "unknown"}});
   assert.equal((await feature.control.dispatch(ref)).status, "unknown");
   assert.equal((await feature.session.read(ref))!.status, "reconcile_required");
 });
@@ -84,4 +84,53 @@ test("timed-out construction retains and tears down a late handle without requir
   pending.resolve({driver: f.driver, capabilities: []}); await closed.promise;
   // The provider handle is closed by the owner independently from a public denied close.
   assert.equal(f.calls.closes, 1); assert.equal((await feature.session.close(ref)).status, "denied");
+});
+
+test("an asynchronous interaction response stays pending independently of the full prompt queue", async () => {
+  const f = fixture(); const feature = createInteractiveSessionFeature(f.deps);
+  await feature.session.open(ref, "open", "config", []);
+  const input = await feature.session.submit(ref, {commandId: "first", inputId: "first", content: "TEST"});
+  await feature.session.submit(ref, {commandId: "second", inputId: "second", content: "TEST queued"}); await feature.control.dispatch(ref);
+  f.driver.observe = async function* () {yield {sessionRef: f.driver.sessionRef, operationRef: input.receipt!.operationId, inputId: "first",
+    kind: "interaction", interactionRef: "async-permission", request: {kind: "permission", tool: "TEST", input: {}}};};
+  await feature.control.pumpOutput(ref);
+  const response = deferred<Reply<void>>(); const entered = deferred<void>();
+  f.driver.respondToInteraction = async id => {f.calls.replies.push(id); entered.resolve(); return response.promise;};
+  const replying = feature.session.reply(ref, "async-answer", "async-permission", {kind: "permission", decision: "allow"});
+  await entered.promise; assert.equal((await f.store.read(ref))!.interactions[0]!.state, "replying");
+  response.resolve({ok: true, value: undefined}); assert.equal((await replying).status, "accepted");
+  assert.equal((await f.store.read(ref))!.interactions[0]!.state, "replied");
+  assert.deepEqual(f.calls.replies, ["async-permission"]); await feature.session.close(ref);
+});
+
+for (const result of ["rejected", "unknown"] as const) {
+  test(`asynchronous ${result} interaction response stays uncertain and is never replayed`, async () => {
+    const f = fixture(); const feature = createInteractiveSessionFeature(f.deps); await feature.session.open(ref, "open", "config", []);
+    f.driver.observe = async function* () {yield {sessionRef: f.driver.sessionRef, kind: "interaction", interactionRef: "async-permission",
+      request: {kind: "permission", tool: "TEST", input: {}}};}; await feature.control.pumpOutput(ref);
+    f.driver.respondToInteraction = async id => {f.calls.replies.push(id);
+      if (result === "rejected") {throw new Error("TEST uncertain HTTP response");} return {ok: false, code: "unknown"};};
+    const answer = {kind: "permission" as const, decision: "allow" as const};
+    assert.equal((await feature.session.reply(ref, "async-answer", "async-permission", answer)).status, "unknown");
+    assert.equal((await feature.session.reply(ref, "async-answer", "async-permission", answer)).status, "unknown");
+    const stored = (await f.store.read(ref))!; assert.equal(stored.status, "reconcile_required");
+    assert.equal(stored.interactions[0]!.state, "unknown"); assert.deepEqual(f.calls.replies, ["async-permission"]);
+    await feature.session.close(ref);
+  });
+}
+
+test("native cancelled result is terminal only after output normalization and admits the next sequential input", async () => {
+  const f = fixture(); const feature = createInteractiveSessionFeature(f.deps); await feature.session.open(ref, "open", "config", []);
+  const first = await feature.session.submit(ref, {commandId: "first", inputId: "first", content: "TEST"});
+  const second = await feature.session.submit(ref, {commandId: "second", inputId: "second", content: "TEST queued"});
+  await feature.control.dispatch(ref);
+  assert.equal((await feature.session.read(ref))!.inputs[0]!.delivery, "client_consumed");
+  assert.equal((await feature.session.interrupt(ref, "cancel-first", first.receipt!.operationId)).status, "accepted");
+  assert.equal((await feature.control.dispatch(ref)).status, "unavailable"); // ACK alone is not terminal.
+  f.driver.observe = async function* () {yield {sessionRef: f.driver.sessionRef, operationRef: first.receipt!.operationId, inputId: "first", kind: "result", outcome: "cancelled"};};
+  assert.equal((await feature.control.pumpOutput(ref)).status, "accepted");
+  const terminal = (await feature.session.read(ref))!;
+  assert.equal(terminal.inputs[0]!.status, "cancelled"); assert.deepEqual(terminal.events.at(-1)!.data, {outcome: "cancelled"});
+  assert.equal((await feature.control.dispatch(ref)).status, "accepted");
+  assert.deepEqual(f.calls.handoffs, [first.receipt!.operationId, second.receipt!.operationId]); await feature.session.close(ref);
 });

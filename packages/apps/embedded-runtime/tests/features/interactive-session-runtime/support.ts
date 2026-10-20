@@ -19,7 +19,7 @@ export function fixture(shared = new Map<string, RecordState>()) {
   };
   const driver: Session = {
     sessionRef: "TEST-private-provider-session",
-    submit: async input => ({ok: true, value: {inputId: input.inputId, operationRef: input.operationRef, delivery: "sdk-consumed", providerAcceptance: "unknown"}}),
+    submit: async input => ({ok: true, value: {inputId: input.inputId, operationRef: input.operationRef, delivery: "client-consumed", providerAcceptance: "unknown"}}),
     observe: async function* () {while (queue.length) {yield queue.shift()!;}},
     respondToInteraction: () => ({ok: true, value: undefined}),
     interrupt: async () => ({ok: true, value: {requested: true, terminal: "unconfirmed"}}),

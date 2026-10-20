@@ -38,7 +38,7 @@ export function fixture(store: InteractiveSessionStore = new MemorySessionStore(
     async *observe() {},
     async checkReadiness() {return {ok: true, value: undefined};},
     checkpoint() {return {ok: true, value: "TEST-private-checkpoint"};},
-    async submit(input) {calls.handoffs.push(input.operationRef); return {ok: true, value: {...input, delivery: "sdk-consumed", providerAcceptance: "unknown"}};},
+    async submit(input) {calls.handoffs.push(input.operationRef); return {ok: true, value: {...input, delivery: "client-consumed", providerAcceptance: "unknown"}};},
     respondToInteraction(id) {calls.replies.push(id); return {ok: true, value: undefined};},
     async interrupt(id) {calls.interrupts.push(id); return {ok: true, value: {requested: true, terminal: "unconfirmed"}};},
     async close() {calls.closes++; return {logicallyClosed: true, cleanup: "confirmed"};},

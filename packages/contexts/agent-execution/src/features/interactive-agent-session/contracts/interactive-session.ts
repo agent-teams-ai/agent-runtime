@@ -23,7 +23,7 @@ export interface SessionReply {readonly status: SessionOutcome; readonly receipt
 export interface SessionView extends SessionRef {
   readonly revision: number;
   readonly status: SessionStatus;
-  readonly inputs: readonly {readonly inputId: string; readonly operationId: string; readonly status: "admitted" | "dispatching" | "sdk_consumed" | "succeeded" | "failed" | "cancelled" | "reconcile_required"; readonly delivery: "admitted" | "dispatching" | "sdk_consumed" | "known_not_sent" | "unknown"; readonly cancellationRequested: boolean}[];
+  readonly inputs: readonly {readonly inputId: string; readonly operationId: string; readonly status: "admitted" | "dispatching" | "client_consumed" | "succeeded" | "failed" | "cancelled" | "reconcile_required"; readonly delivery: "admitted" | "dispatching" | "client_consumed" | "known_not_sent" | "unknown"; readonly cancellationRequested: boolean}[];
   readonly events: readonly SessionEvent[];
 }
 

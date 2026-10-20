@@ -12,7 +12,7 @@ const staleTarget = (record: SessionRecord, observation: DriverObservation): boo
   const input = record.inputs.find(item => item.operationId === observation.operationId);
   return !input || terminal(input.status) || input.inputId !== observation.inputId || input.delivery === "admitted";
 };
-const active = (record: SessionRecord): boolean => record.inputs.some(input => ["dispatching", "sdk_consumed", "reconcile_required"].includes(input.status));
+const active = (record: SessionRecord): boolean => record.inputs.some(input => ["dispatching", "client_consumed", "reconcile_required"].includes(input.status));
 const key = (ref: SessionRef): string => JSON.stringify([ref.tenantId, ref.projectId, ref.sessionId, ref.generation]);
 const validId = (value: string): boolean => typeof value === "string" && /^[A-Za-z0-9:._-]{1,128}$/u.test(value);
 
@@ -159,11 +159,11 @@ export class InteractiveSessionOwner {
     });
     if (!admission.pending || !admission.operationId) {return admission.reply;}
     const operationId = admission.operationId;
-    let disposition: "sdk_consumed" | "known_not_sent" | "unknown" = "unknown";
+    let disposition: "client_consumed" | "known_not_sent" | "unknown" = "unknown";
     try {
       const handoff = await admission.pending;
       disposition = handoff.ok ? handoff.value.operationRef === operationId && handoff.value.inputId === admission.inputId &&
-        handoff.value.delivery === "sdk-consumed" && handoff.value.providerAcceptance === "unknown" ? "sdk_consumed" : "unknown"
+        handoff.value.delivery === "client-consumed" && handoff.value.providerAcceptance === "unknown" ? "client_consumed" : "unknown"
         : handoff.delivery === "known-not-sent" ? "known_not_sent" : "unknown";
     } catch { /* Acceptance is unknown. */ }
     return (await mutateSession(this.#deps, ref, current => {
@@ -172,7 +172,7 @@ export class InteractiveSessionOwner {
       if (!latest || terminal(latest.status)) {return accepted();}
       return {record: {...current, status: disposition === "unknown" ? "reconcile_required" : current.status,
         inputs: current.inputs.map(item => item.operationId === operationId ? {...item, delivery: disposition,
-          status: disposition === "unknown" ? "reconcile_required" : disposition === "known_not_sent" ? item.cancellationRequested ? "cancelled" : "admitted" : "sdk_consumed"} : item)}, reply: {status: disposition === "unknown" ? "unknown" : "accepted"}};
+          status: disposition === "unknown" ? "reconcile_required" : disposition === "known_not_sent" ? item.cancellationRequested ? "cancelled" : "admitted" : "client_consumed"} : item)}, reply: {status: disposition === "unknown" ? "unknown" : "accepted"}};
     })).reply;
   }
 
