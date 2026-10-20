@@ -294,6 +294,8 @@ export function registerProductSourceCustodyTests(): void {
 test('physical root custody rejects Git-ignored test/type/native/config helpers and symlink ancestry', async t => {
   for (const path of ['experiments/runtime-profile-behavior/test/extra.test.ts',
     'experiments/runtime-profile-behavior/src/extra.ts', 'experiments/rust-system-boundaries/client/extra.ts',
+    'experiments/interactive-provider-contract/src/extra.ts', 'experiments/interactive-provider-contract/test/extra.test.ts',
+    'experiments/unregistered-proof/dist/source.ts',
     'scripts/native-helper/extra.mjs', 'scripts/foundation/extra.mjs', 'architecture/foundation/extra.yaml',
     'tsconfig.extra.json', '.oxlintrc.extra.json']) {
     await t.test(path, async sub => {
@@ -318,7 +320,8 @@ test('physical root custody rejects Git-ignored test/type/native/config helpers 
   await t.test('deliberate generated dependency/build exclusions preserve custody', async sub => {
     const {root, tracked, expected} = await fixture(); sub.after(() => rm(root, {recursive:true,force:true}));
     for (const path of [`${packageRoots['agent-execution']}/dist/generated.ts`, `${packageRoots['provider-access']}/.cache/output.json`,
-      `${packageRoots['embedded-runtime']}/node_modules/installed.ts`, 'experiments/rust-system-boundaries/target/generated.rs']) {
+      `${packageRoots['embedded-runtime']}/node_modules/installed.ts`, 'experiments/rust-system-boundaries/target/generated.rs',
+      'experiments/interactive-provider-contract/dist/generated.ts', 'experiments/interactive-provider-contract/.cache/output.json']) {
       await mkdir(join(root, path, '..'), {recursive:true}); await writeFile(join(root, path), '// generated TEST');
     }
     assert.deepEqual((await readProductSource(root, tracked)).inputs, expected.inputs);

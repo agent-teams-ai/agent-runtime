@@ -3,6 +3,7 @@ workspace:
   kind: pnpm
   manifest: pnpm-workspace.yaml
 packageRoots:
+- experiments/interactive-provider-contract
 - packages/apps/embedded-runtime
 - packages/contexts/agent-execution
 - packages/contexts/provider-access
@@ -11,8 +12,11 @@ packageRoots:
 - packages/platform/filesystem-custody
 rootPackage: true
 governedRoots:
+- experiments/interactive-provider-contract
 - packages/platform/filesystem-custody/native
-- experiments
+- experiments/runtime-profile-behavior
+- experiments/rust-system-boundaries
+- experiments/sandbox-backend-hosting
 - packages/apps/embedded-runtime/src
 - packages/apps/embedded-runtime/tests
 - packages/contexts/agent-execution/scripts
@@ -3125,4 +3129,70 @@ boundaries:
     - node:test
     - node:test/reporters
     - node:url
+    runtimeReferences: []
+
+- id: experiments.interactive-draft-contracts
+  dependencyMode: development
+  roots:
+  - experiments/interactive-provider-contract/src/draft-contracts
+  entrypoints:
+  - experiments/interactive-provider-contract/src/draft-contracts/index.ts
+  allow:
+    boundaries: []
+    packages: []
+    builtins: []
+    runtimeReferences: []
+- id: experiments.interactive-claude-driver
+  dependencyMode: development
+  roots:
+  - experiments/interactive-provider-contract/src/claude
+  entrypoints:
+  - experiments/interactive-provider-contract/src/claude/index.ts
+  allow:
+    boundaries:
+    - experiments.interactive-draft-contracts
+    packages:
+    - '@anthropic-ai/claude-agent-sdk'
+    builtins:
+    - node:crypto
+    runtimeReferences: []
+- id: experiments.interactive-harness
+  dependencyMode: development
+  roots:
+  - experiments/interactive-provider-contract/test
+  - experiments/interactive-provider-contract/harness
+  entrypoints: []
+  allow:
+    boundaries:
+    - experiments.interactive-draft-contracts
+    - experiments.interactive-claude-driver
+    packages:
+    - '@anthropic-ai/claude-agent-sdk'
+    - zod
+    builtins:
+    - node:assert/strict
+    - node:child_process
+    - node:crypto
+    - node:fs
+    - node:fs/promises
+    - node:http
+    - node:module
+    - node:net
+    - node:os
+    - node:readline
+    - node:path
+    - node:test
+    - node:timers/promises
+    - node:url
+    runtimeReferences: []
+
+- id: experiments.sandbox-backend-hosting
+  dependencyMode: development
+  roots:
+  - experiments/sandbox-backend-hosting
+  entrypoints: []
+  allow:
+    boundaries: []
+    packages: []
+    builtins: []
     runtimeReferences: []

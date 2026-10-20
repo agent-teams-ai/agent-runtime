@@ -50,7 +50,10 @@ export interface ExpectedEvidence extends ProductSource {
 }
 
 async function assertPhysicalCustody(root: string, tracked: readonly string[], roots: readonly string[]): Promise<void> {
-  const generated = (path: string) => roots.some(base =>
+  // The development proof builds its own output without joining the fixed
+  // six-package product universe. All of its source remains under custody.
+  const generatedRoots = [...roots, 'experiments/interactive-provider-contract'];
+  const generated = (path: string) => generatedRoots.some(base =>
     ['dist', '.cache', 'node_modules'].some(dir => path === `${base}/${dir}` || path.startsWith(`${base}/${dir}/`)));
   // Root tests/type projects, typed source policy and native helpers read these
   // finite source/config/fixture roots. Preserve all tracked hashes separately.

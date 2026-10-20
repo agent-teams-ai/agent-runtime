@@ -22,7 +22,7 @@ export const productPhases = {
 } as const;
 
 export const groups = {
-  quick: ['lint', 'check:node-compat', 'typecheck:ci', 'test:ci'],
+  quick: ['lint', 'check:node-compat', 'typecheck:ci', 'test:ci', 'check:interactive-provider'],
   foundation: ['foundation:check', 'foundation:scaffold:check'],
   architecture: ['sdk-growth:profile', 'test:sdk-growth:profile', 'test:sdk-growth:packed',
     'test:sdk-growth:source', 'architecture:get-modular-adoption', 'test:get-modular-adoption',
@@ -50,7 +50,31 @@ export function assertRevision(actual: string, expected: string): void {
 
 const identities = (entries: readonly Command[]) => entries.map(entry => JSON.stringify(entry)).toSorted();
 
+// Additive TEST-package successor; the frozen production census is unchanged.
+const interactiveProof = {
+  script: 'check:interactive-provider',
+  command: 'pnpm --filter @agent-teams/interactive-provider-contract-experiment check',
+} as const;
+
+export function assertInteractiveProviderPackage(manifest: unknown): void {
+  assert.ok(manifest !== null && typeof manifest === 'object' && !Array.isArray(manifest));
+  assert.equal(Reflect.get(manifest, 'name'), '@agent-teams/interactive-provider-contract-experiment');
+  assert.equal(Reflect.get(manifest, 'private'), true, 'interactive proof is a private TEST candidate');
+  const scripts: unknown = Reflect.get(manifest, 'scripts');
+  assert.ok(scripts !== null && typeof scripts === 'object' && !Array.isArray(scripts));
+  assert.equal(Reflect.get(scripts, 'check'), 'pnpm build && pnpm typecheck && pnpm test', 'interactive proof phase order');
+  const commands = {
+    build: 'tsc -p tsconfig.build.json',
+    typecheck: 'tsc -p tsconfig.json',
+    test: 'node --test test/session.test.ts test/failures.test.ts test/fixture-host.test.ts test/live-preflight.test.ts',
+  } as const;
+  for (const [name, command] of Object.entries(commands)) {
+    assert.equal(Reflect.get(scripts, name), command, `interactive proof ${name} must execute its real scope`);
+  }
+}
+
 export function assertFullInventory(scripts: Scripts, baseline: Scripts): void {
+  assert.equal(scripts[interactiveProof.script], interactiveProof.command, 'exact interactive proof package route');
   assert.equal(scripts['typecheck:ci'], 'tsc --project scripts/ci/tsconfig.json --noEmit --pretty false', 'CI helper typechecking must remain blocking');
   assert.equal(scripts['test:ci'], 'node --test scripts/ci/contracts.test.ts && node scripts/ci/conformance.ts', 'CI policy enforcement must remain blocking');
   assert.equal(scripts['docs:protocol:check'], 'pnpm docs:check && pnpm docs:governance', 'Docs semantic gate retains check and governance');
@@ -73,9 +97,9 @@ export function assertFullInventory(scripts: Scripts, baseline: Scripts): void {
   const observation = { script: 'test:consumer-modules', command: 'node --test scripts/architecture/check-cms-pin.test.mjs' };
   const mandatory = 'agent-teams-node-test --contract architecture/foundation/mandatory-node-tests.json -- scripts/architecture/check-cms-pin.test.mjs';
   assert.equal(scripts['test:consumer-modules'], baseline['test:consumer-modules']?.replace(mandatory, `${observation.command} && ${mandatory}`), 'CMS observation immediately before mandatory CLI');
-  assert.deepEqual(identities(actual), identities([...expected, observation]), 'full command inventory drift');
+  assert.deepEqual(identities(actual), identities([...expected, observation, interactiveProof]), 'full command inventory drift');
   const fast = commandInventory(scripts, 'check:fast').filter(entry => entry.script !== 'typecheck:ci' && entry.script !== 'test:ci');
-  assert.deepEqual(identities(fast), identities([...commandInventory(baseline, 'check:fast'), observation]), 'fast command inventory drift');
+  assert.deepEqual(identities(fast), identities([...commandInventory(baseline, 'check:fast'), observation, interactiveProof]), 'fast command inventory drift');
   const product = routedScripts(scripts, 'check:ci:product');
   assert.deepEqual(product, ['product:check', 'typecheck', 'test', 'lint:typed', 'quality:native'].map(name => `pnpm ${name}`),
     'product build prerequisites');

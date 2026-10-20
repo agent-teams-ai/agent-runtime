@@ -12,7 +12,7 @@
   "scripts": {
     "check": "pnpm check:ci:quick && pnpm check:ci:foundation && pnpm check:ci:architecture && pnpm check:ci:docs && pnpm check:ci:product",
     "check:changed": "agent-teams-foundation agent-workflow changed --consumer .",
-    "check:fast": "pnpm lint && pnpm check:node-compat && pnpm typecheck:ci && pnpm test:ci && pnpm sdk-growth:profile && pnpm test:sdk-growth:profile && pnpm test:sdk-growth:packed && pnpm test:sdk-growth:source && pnpm architecture:get-modular-adoption && pnpm test:get-modular-adoption && pnpm foundation:check && pnpm foundation:scaffold:check && pnpm docs:protocol:check && pnpm docs:qualification && pnpm test:feature-modules && pnpm architecture:feature-modules:active && pnpm test:consumer-modules && pnpm architecture:consumer-modules && pnpm architecture:registry && pnpm architecture:operation-oracle && pnpm product:build && pnpm typecheck && pnpm quality:coverage:scope",
+    "check:fast": "pnpm check:interactive-provider && pnpm lint && pnpm check:node-compat && pnpm typecheck:ci && pnpm test:ci && pnpm sdk-growth:profile && pnpm test:sdk-growth:profile && pnpm test:sdk-growth:packed && pnpm test:sdk-growth:source && pnpm architecture:get-modular-adoption && pnpm test:get-modular-adoption && pnpm foundation:check && pnpm foundation:scaffold:check && pnpm docs:protocol:check && pnpm docs:qualification && pnpm test:feature-modules && pnpm architecture:feature-modules:active && pnpm test:consumer-modules && pnpm architecture:consumer-modules && pnpm architecture:registry && pnpm architecture:operation-oracle && pnpm product:build && pnpm typecheck && pnpm quality:coverage:scope",
     "check:node-compat": "node --test scripts/ci/node-engine-compatibility.test.mjs scripts/ci/node-runtime-compatibility.test.mjs",
     "audit:node-engine": "node scripts/ci/audit-node-engine-compatibility.mjs",
     "audit:node-engine:check": "node scripts/ci/audit-node-engine-compatibility.mjs --check",
@@ -94,7 +94,7 @@
     "docs:qualification:typecheck": "tsc --project tsconfig.docs-qualification.json --noEmit --pretty false",
     "docs:qualification:serial": "node --test --test-concurrency=1 scripts/docs/docs-protocol-adoption.test.mjs scripts/docs/consumer-migration.test.mjs scripts/docs/managed-target-contract.test.mjs scripts/docs/managed-installed-target.test.mjs scripts/docs/portable-authoring-policy.test.mts",
     "docs:qualification:portable": "node --import=./scripts/docs/portable-authoring-policy.mts --test --test-concurrency=2 --test-reporter=tap --test-reporter=./scripts/docs/portable-authoring-reporter.mts --test-reporter-destination=stdout --test-reporter-destination=stderr scripts/docs/portable-authoring-index.test.mts scripts/docs/portable-authoring-architecture.test.mts scripts/docs/portable-authoring-adr.test.mts scripts/docs/portable-authoring-evidence.test.mts scripts/docs/portable-authoring-qualification-plan.test.mts",
-    "check:ci:quick": "pnpm lint && pnpm check:node-compat && pnpm typecheck:ci && pnpm test:ci",
+    "check:ci:quick": "pnpm lint && pnpm check:node-compat && pnpm typecheck:ci && pnpm test:ci && pnpm check:interactive-provider",
     "check:ci:foundation": "pnpm foundation:check && pnpm foundation:scaffold:check",
     "check:ci:architecture": "pnpm sdk-growth:profile && pnpm test:sdk-growth:profile && pnpm test:sdk-growth:packed && pnpm test:sdk-growth:source && pnpm architecture:get-modular-adoption && pnpm test:get-modular-adoption && pnpm test:feature-modules && pnpm architecture:feature-modules:active && pnpm test:consumer-modules && pnpm architecture:consumer-modules && pnpm test:ar2-contract && pnpm architecture:registry && pnpm architecture:operation-oracle",
     "check:ci:docs": "pnpm docs:protocol:check && pnpm docs:qualification",
@@ -104,7 +104,8 @@
     "check:ci:product:packages": "pnpm product:check",
     "check:ci:product:root": "pnpm typecheck && pnpm test",
     "check:ci:product:typed": "pnpm lint:typed",
-    "check:ci:product:native": "pnpm quality:native"
+    "check:ci:product:native": "pnpm quality:native",
+    "check:interactive-provider": "pnpm --filter @agent-teams/interactive-provider-contract-experiment check"
   },
   "dependencies": {
     "zod": "catalog:"

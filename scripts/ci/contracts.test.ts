@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import { parse } from 'yaml';
-import { assertAggregate, assertFullInventory, assertRevision, productPhases, requiredJobs } from './policy.ts';
+import { assertAggregate, assertFullInventory, assertInteractiveProviderPackage, assertRevision, productPhases, requiredJobs } from './policy.ts';
 import { commandInventory, routedScripts } from './script-routing.ts';
 import type { Scripts } from './script-routing.ts';
 import { readScripts } from './inventory.ts';
@@ -129,6 +129,40 @@ test('the original command inventory survives routing and rejects lost leaves an
     const changed = { ...scripts };
     mutate(changed);
     assert.throws(() => assertFullInventory(changed, baseline.scripts));
+  }
+});
+
+test('interactive TEST proof is additive, mandatory once, and executes the real package checks', async () => {
+  const manifest: unknown = JSON.parse(await readFile(new URL('../../experiments/interactive-provider-contract/package.json', import.meta.url), 'utf8'));
+  assertInteractiveProviderPackage(manifest);
+  const rootFaults: Array<(value: Record<string, string>) => void> = [
+    value => { delete value['check:interactive-provider']; },
+    value => { value['check:interactive-provider'] = 'true'; },
+    value => { value['check:interactive-provider'] = 'pnpm --filter @agent-teams/agent-execution check'; },
+    value => { value['check:ci:quick'] = value['check:ci:quick']!.replace(' && pnpm check:interactive-provider', ''); },
+    value => { value['check:ci:quick'] += ' && pnpm check:interactive-provider'; },
+    value => { value['check:fast'] = value['check:fast']!.replace('pnpm check:interactive-provider && ', ''); },
+    value => { value['check:fast'] += ' && pnpm check:interactive-provider'; },
+  ];
+  for (const mutate of rootFaults) {
+    const changed = { ...scripts }; mutate(changed);
+    assert.throws(() => assertFullInventory(changed, baseline.scripts));
+  }
+  const original = workflowObject(manifest);
+  const packageFaults: Array<(value: Record<string, unknown>) => void> = [
+    value => { value.name = '@agent-teams/agent-execution'; },
+    value => { value.private = false; },
+    value => { workflowObject(value.scripts).check = 'pnpm typecheck && pnpm test'; },
+    value => { workflowObject(value.scripts).check = 'pnpm build && pnpm test && pnpm typecheck'; },
+    value => { workflowObject(value.scripts).check = 'pnpm build && pnpm typecheck && pnpm test && pnpm test'; },
+    value => { workflowObject(value.scripts).build = 'true'; },
+    value => { workflowObject(value.scripts).typecheck = 'tsc -p tsconfig.build.json'; },
+    value => { workflowObject(value.scripts).test = 'node --test test/session.test.ts'; },
+    value => { delete workflowObject(value.scripts).test; },
+  ];
+  for (const mutate of packageFaults) {
+    const changed = structuredClone(original); mutate(changed);
+    assert.throws(() => assertInteractiveProviderPackage(changed));
   }
 });
 
