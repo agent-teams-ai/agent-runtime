@@ -144,7 +144,10 @@ test('all original leaf bodies, assertions, CLI options and cleanup remain byte-
   assert.equal([...original.matchAll(/\bassert\.\w+\(/gu)].length, 133);
   const expected = original.replace('import test, { describe } from "node:test";', 'import { describe } from "node:test";\nimport { fixtureRegistration } from "../ci/foundation-fixture-sharding.ts";')
     .replace('import { parseSync } from "oxc-parser";', 'import { parseSync } from "oxc-parser";\n\nconst fixtures = fixtureRegistration(process.env);\nconst test = fixtures.test;')
-    .replace('  registerCompositionChecks();\n', '  registerCompositionChecks();\n  const registration = fixtures.finish();\n  if (registration) {\n    console.log(registration);\n  }\n');
+    .replace('  registerCompositionChecks();\n', '  registerCompositionChecks();\n  const registration = fixtures.finish();\n  if (registration) {\n    console.log(registration);\n  }\n')
+    // Add only the TEST package topology; every original leaf body stays exact.
+    .replace('    "packages/platform/filesystem-custody": true,\n', '    "packages/platform/filesystem-custody": true,\n    "experiments/interactive-provider-contract": true,\n')
+    .replace('      \'  - "packages/platform/*"\',\n', '      \'  - "packages/platform/*"\',\n      \'  - "experiments/*"\',\n');
   assert.equal(await readFile(join(root, boundary), 'utf8'), expected);
 });
 

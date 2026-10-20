@@ -42,18 +42,27 @@ const trusted = {
 };
 const facts = { node: 'v26.11.1', pnpm: '11.18.0', platform: 'linux', arch: 'x64', glibc: '2.39', execArgv: [] as string[] };
 
-async function fixture(t: test.TestContext) {
+async function fixture(t: test.TestContext, includeInteractiveProof = false) {
   const root = await mkdtemp(join(tmpdir(), 'ar-pr-regressions-TEST-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   const env = { ...process.env, GIT_CONFIG_NOSYSTEM: '1', GIT_AUTHOR_NAME: 'TEST', GIT_AUTHOR_EMAIL: 'test@example.invalid',
     GIT_COMMITTER_NAME: 'TEST', GIT_COMMITTER_EMAIL: 'test@example.invalid' };
   const git = (...args: string[]) => execFileSync('git', args, { cwd: root, env, encoding: 'utf8' }).trim();
   git('clone', '--quiet', '--shared', repository, '.');
+  // Classifier unit fixtures retain the original fixed-six admission envelope.
+  // The current repository's seventh, development-only package must stay FULL;
+  // it is retained separately for the actual current conformance case below.
+  if (!includeInteractiveProof) { await rm(join(root, 'experiments/interactive-provider-contract'), { recursive: true, force: true }); }
   // Seed the new common policy at both immutable TEST revisions. First adoption
   // is tested separately; these fixtures model the next package-only PR.
   for (const path of ['package.json', 'pnpm-lock.yaml', 'architecture/foundation/ci-pr-regressions.json', 'architecture/foundation/source-dependencies.yaml',
-    'scripts/ci/pr-regression-inputs.ts', 'scripts/ci/pr-regression-inputs.test.ts', 'scripts/ci/pr-regression-command.ts', 'scripts/ci/conformance.ts',
+    'scripts/ci/pr-regression-inputs.ts', 'scripts/ci/pr-regression-inputs.test.ts', 'scripts/ci/pr-regression-command.ts', 'scripts/ci/conformance.ts', 'scripts/ci/policy.ts',
     '.github/workflows/ci-foundation-route.yml', '.github/workflows/ci-pr-regressions.yml']) {
+    await cp(join(repository, path), join(root, path));
+  }
+  if (includeInteractiveProof) {
+    const path = 'experiments/interactive-provider-contract/package.json';
+    await mkdir(dirname(join(root, path)), { recursive: true });
     await cp(join(repository, path), join(root, path));
   }
   const freeze = () => {
@@ -76,6 +85,11 @@ async function fixture(t: test.TestContext) {
 
 export function registerPrRegressionTests(): void {
   registerFoundationPrExecutionTests();
+  test('the experimental seventh manifest remains FULL for later package-only changes', async t => {
+    const f = await fixture(t, true);
+    await f.body(rc);
+    assert.equal((await f.plan(f.freeze())).mode, 'full', 'new development scope does not inherit fixed-six deferrals');
+  });
   test('real immutable RC and ER body snapshots defer whole regressions with their independent closures', async t => {
     const f = await fixture(t);
     await f.body(rc);
@@ -192,6 +206,7 @@ export function registerPrRegressionTests(): void {
       { id: 'typecheck:ci', command: 'pnpm typecheck:ci' },
       { id: 'ci-selftests', command: 'node --test scripts/ci/contracts.test.ts', regression: 'ci-selftests' },
       { id: 'ci-conformance', command: 'node scripts/ci/conformance.ts' },
+      { id: 'check:interactive-provider', command: 'pnpm check:interactive-provider' },
     ];
     assert.deepEqual(prObligations('quick'), expected);
     // Explicit unit receipt; this is validation of dispositions, not execution
@@ -200,9 +215,11 @@ export function registerPrRegressionTests(): void {
       ? { ...item, disposition: 'deferred-unchanged-regression-inputs', tests: [] }
       : { ...item, disposition: 'executed', execution: { code: 0, signal: null, tests: [], mandatory: [] } });
     assertPrObligations(expected, observed, ['ci-selftests']);
-    assert.throws(() => assertPrObligations(expected, observed.slice(0, -1), ['ci-selftests']));
+    const conformance = observed.findIndex(item => item.id === 'ci-conformance');
+    assert.ok(conformance >= 0);
+    assert.throws(() => assertPrObligations(expected, observed.toSpliced(conformance, 1), ['ci-selftests']));
     const lost = structuredClone(observed);
-    Object.assign(lost.at(-1)!, { disposition: 'deferred-unchanged-regression-inputs', regression: 'ci-selftests', tests: [] });
+    Object.assign(lost[conformance]!, { disposition: 'deferred-unchanged-regression-inputs', regression: 'ci-selftests', tests: [] });
     assert.throws(() => assertPrObligations(expected, lost, ['ci-selftests']));
     for (const invented of [{ tests: [{ name: 'invented pass', status: 'passed' }] }, { passed: 1 }, { execution: { code: 0 } }]) {
       const proof = structuredClone(observed); Object.assign(proof[3]!, invented);
@@ -213,7 +230,7 @@ export function registerPrRegressionTests(): void {
   // Old: there is no live conformance obligation outside the combined test:ci
   // process. New: observe the actual standalone process and reject its failure.
   test('actual current conformance remains blocking when the CI selftests defer', async t => {
-    const f = await fixture(t);
+    const f = await fixture(t, true);
     await symlink(join(repository, 'node_modules'), join(f.root, 'node_modules'));
     const obligation = prObligations('quick').find(item => item.id === 'ci-conformance');
     assert.deepEqual(obligation, { id: 'ci-conformance', command: 'node scripts/ci/conformance.ts' });
