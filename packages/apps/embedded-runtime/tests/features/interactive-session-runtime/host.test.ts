@@ -2,15 +2,17 @@ import assert from "node:assert/strict";
 import {mkdtemp, rm} from "node:fs/promises";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
-import test from "node:test";
+import test, {after} from "node:test";
 import {assemblyFor, entriesOf} from "@get-modular/assembly";
-import {checkNamespaces, checkWiring, isolate, smoke, type WiringOracle} from "@get-modular/conformance";
+import {checkNamespaces, checkWiring, guardHandles, isolate, smoke, type WiringOracle} from "@get-modular/conformance";
 import {constructInteractiveSessionHost, createInteractiveSessionHost} from "../../../dist/composition/interactive-session-host.js";
 import {composeInteractiveSessionHost, interactiveHostModules} from "../../../dist/composition/interactive-session-host.root.js";
 import {hostModule, type InteractiveHostCapabilities} from "../../../dist/features/interactive-session-runtime/internal.js";
 import {storeInput, providerInput, authorityInput, custodyInput, contextInput, ownershipInput} from "../../../dist/features/interactive-session-runtime/composition/interactive-session-runtime.inputs.js";
 import {fixture, ref} from "./support.ts";
 import {registerHostContractSuite} from "./host-contract-suite.ts";
+
+const handles = guardHandles();
 
 registerHostContractSuite(test);
 
@@ -150,3 +152,5 @@ test("a mutable caller reference cannot replace the captured provider and cleanu
   assert.equal((await opening).status, "accepted"); await host.dispose();
   assert.equal((await api.read(ref))!.status, "closed"); assert.deepEqual(f.counts(), {opens: 1, closes: 1, released: 1});
 });
+
+after(() => handles.check());

@@ -1,15 +1,15 @@
-import type {QueryConfig} from "pg";
 import type {InteractiveSessionStore, StoreWrite} from "../../application/ports/outbound/interactive-session-ports.js";
 import {sameScope, validateRecord, type SessionRecord, type SessionScope} from "../../domain/session.js";
 
-const query = (text: string, values: unknown[] = []): QueryConfig & {readonly query_timeout: number} => ({text, values, query_timeout: 5000});
+interface InteractivePostgresQuery {readonly text: string; readonly values: unknown[]; readonly query_timeout: number}
+const query = (text: string, values: unknown[] = []): InteractivePostgresQuery => ({text, values, query_timeout: 5000});
 export const INTERACTIVE_SESSION_SCHEMA = `CREATE TABLE IF NOT EXISTS interactive_session_v1 (
  tenant_id text NOT NULL, project_id text NOT NULL, session_id text NOT NULL,
  generation bigint NOT NULL CHECK (generation > 0), revision bigint NOT NULL CHECK (revision >= 0),
  state jsonb NOT NULL, PRIMARY KEY (tenant_id, project_id, session_id)
 )`;
 export interface InteractivePostgresClient {
-  readonly query: (config: QueryConfig) => Promise<{readonly rows: Record<string, unknown>[]; readonly rowCount: number | null}>;
+  readonly query: (config: InteractivePostgresQuery) => Promise<{readonly rows: Record<string, unknown>[]; readonly rowCount: number | null}>;
   readonly release: (discard?: boolean) => void;
 }
 export interface InteractivePostgresPool {readonly connect: () => Promise<InteractivePostgresClient>}

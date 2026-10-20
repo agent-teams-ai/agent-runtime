@@ -325,6 +325,8 @@ function registerPolicyChecks() {
   test("Embedded Runtime Node utility permission belongs to exact Host composition and ordinary adapter paths", () => {
     const composition = boundariesById.get("composition.embedded-runtime");
     assert.deepEqual(composition.roots, [
+      "packages/apps/embedded-runtime/src/composition/interactive-session-host.ts",
+      "packages/apps/embedded-runtime/src/composition/interactive-session-host.root.ts",
       "packages/apps/embedded-runtime/src/composition.ts",
       "packages/apps/embedded-runtime/src/composition/agent-runtime-host-creation-error.ts",
       "packages/apps/embedded-runtime/src/composition/default-agent-runtime-host.ts",
@@ -353,6 +355,7 @@ function registerPolicyChecks() {
       "composition.embedded-runtime.contained-turn-routing",
       "composition.embedded-runtime.agent-runtime-host",
       "core.embedded-runtime.access-contracts",
+      "composition.embedded-runtime.interactive-host-feature",
     ]);
     // Ordinary Host validation and its observation journal add path/util/fs to
     // the existing crypto permission. Scoped FMS still rejects inward builtin
@@ -364,6 +367,7 @@ function registerPolicyChecks() {
     // in composition.embedded-runtime.agent-runtime-host with the planners.
     assert.deepEqual(production.allowedBoundaries, [
       "core.embedded-runtime.access-contracts",
+      "core.embedded-runtime.interactive-host",
     ]);
     // Digest computation stays behind OpaqueReferenceDigest in the
     // agent-runtime-host role; the package barrel does not import Node builtins.
@@ -673,7 +677,7 @@ function registerCompositionChecks() {
 
   test("Get Modular belongs only to Embedded Runtime composition, including type imports", async () => {
     const packages = ["@get-modular/core", "@get-modular/assembly"];
-    const owners = new Set(["composition.embedded-runtime", "test.embedded-runtime"]);
+    const owners = new Set(["composition.embedded-runtime", "composition.embedded-runtime.interactive-host-feature", "test.embedded-runtime"]);
     for (const boundary of policy.boundaries) {
       assert.deepEqual(boundary.allowedPackages.filter(name => packages.includes(name)).toSorted(),
         owners.has(boundary.id) ? packages.toSorted() : [], boundary.id);
