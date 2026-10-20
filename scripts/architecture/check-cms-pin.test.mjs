@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import { test } from "node:test";
 
-import { exactCmsDelta, loadCmsPinInputs, retainedEvidencePath, verifyCmsPin } from "./check-cms-pin.mjs";
+import { exactCmsDelta, loadCmsPinInputs, retainedEvidencePath, verifyCmsPin, verifyCmsPinHistory } from "./check-cms-pin.mjs";
 
+const readEvidence = path => readFile(new URL('../../' + path, import.meta.url));
 const sha256 = bytes => createHash("sha256").update(bytes).digest("hex");
 const fresh = async () => {
   const inputs = await loadCmsPinInputs();
@@ -33,17 +35,17 @@ test("retains exact CMS delta bytes under conflicting Git inter-hunk context", (
     const { loadCmsPinInputs, verifyCmsPin } = await import(${JSON.stringify(new URL("./check-cms-pin.mjs", import.meta.url).href)});
     const inputs = await loadCmsPinInputs();
     const sha256 = bytes => createHash("sha256").update(bytes).digest("hex");
-    const digest = "670810e035da54ae00b1b7f45c5516851232439e58673fecc12a83b129be2c99";
+    const digest = "598b4a4b4592cd8e49786685cd846287b507458805c1c3886aa563055b4274a7";
     console.log(JSON.stringify({ byteLength: inputs.exactDeltaBytes.length,
       hunks: inputs.exactDeltaBytes.toString("utf8").split("\\n").filter(line => line.startsWith("@@ ")).length,
       sha256: sha256(inputs.exactDeltaBytes) }));
-    assert.equal(inputs.deltaBytes.length, 36534);
+    assert.equal(inputs.deltaBytes.length, 61093);
     assert.equal(sha256(inputs.deltaBytes), digest, "independent retained delta digest");
     assert.equal(sha256(inputs.exactDeltaBytes), digest, "Git must preserve the retained delta digest");
     assert.deepEqual(inputs.exactDeltaBytes, inputs.deltaBytes);
     assert.deepEqual(verifyCmsPin(inputs), {
-      commit: "81063add7de50ffe2b91cc74bf7271b298624c21",
-      sha256: "49d08b6d1762e94308157fb59b3aa82ac1630c91f529f6efcd4915dfffee7ba7",
+      commit: "ddf1e0b0053f546f12ca70190b237b4f7e78d09d",
+      sha256: "c2fe582a14ff6e79620b232ca7ffc914afb0474ec21fd43f208251dd7252f4a3",
     });
   `], { env, encoding: "utf8", timeout: 30_000, maxBuffer: 1024 * 1024 });
   assert.equal(result.error, undefined);
@@ -71,7 +73,25 @@ test("accepts a later pin step without any checker edit", async () => {
     sha256: sha256(deltaBytes), byteLength: deltaBytes.length,
     hunks: 1, removedLines: 0, addedLines: 2 };
   Object.assign(next.review.provenance, { beforeCommit: next.review.before.commit, afterCommit: commit });
+  if (next.review.provenance.gitObservation) {
+    Object.assign(next.review.provenance.gitObservation, { commit,
+      documentBlob: createHash('sha1').update(`blob ${standardBytes.length}\0`).update(standardBytes).digest('hex') });
+  }
   assert.deepEqual(verifyCmsPin({ ...next, standardBytes, deltaBytes, exactDeltaBytes: deltaBytes }), { commit, sha256: digest });
+});
+
+test("authenticated later CMS reviews bridge the historical head without a new hardcoded step", async () => {
+  const {review} = await fresh();
+  const predecessor = await readEvidence(review.predecessorReview.path);
+  const previous = JSON.parse(predecessor);
+  await verifyCmsPinHistory(review, previous.before, readEvidence);
+  await assert.rejects(() => verifyCmsPinHistory(review, previous.before,
+    path => path === review.predecessorReview.path ? Buffer.from('{}') : readEvidence(path)), /review digest drift/u);
+  const detached = Buffer.from(JSON.stringify({...previous, after: {...previous.after, commit: 'c'.repeat(40)}}));
+  await assert.rejects(() => verifyCmsPinHistory({...review, predecessorReview: {...review.predecessorReview, sha256: sha256(detached)}}, previous.before,
+    path => path === review.predecessorReview.path ? detached : readEvidence(path)), /linkage drift/u);
+  await assert.rejects(() => verifyCmsPinHistory(review, previous.before,
+    path => path === previous.delta.path ? Buffer.from('fabricated') : readEvidence(path)), /delta digest drift/u);
 });
 
 test("rejects split profile pins", async () => {
@@ -147,7 +167,7 @@ test("rejects corrupted predecessor, false linkage, fabricated delta and unsuppo
     x => { x.deltaBytes = Buffer.from("fabricated delta\n");
       Object.assign(x.review.delta, { sha256: sha256(x.deltaBytes), byteLength: x.deltaBytes.length }); },
     x => { x.review.provenance.afterCommit = "main"; },
-    x => { x.review.provenance.independentRetrieval = true; },
+    x => { x.review.provenance.independentRetrieval = !x.review.provenance.independentRetrieval; },
     x => { delete x.review.applicability; },
     x => { x.review.adoption.containedTurn = "active"; },
     x => { x.review.successorProductionConformance = "established"; },

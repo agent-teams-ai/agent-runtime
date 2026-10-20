@@ -8,8 +8,8 @@
     "path": "docs/architecture/common-assembly.md",
     "anchor": "consumer-module-standard",
     "decision": "ADR-0026",
-    "commit": "81063add7de50ffe2b91cc74bf7271b298624c21",
-    "sha256": "49d08b6d1762e94308157fb59b3aa82ac1630c91f529f6efcd4915dfffee7ba7",
+    "commit": "ddf1e0b0053f546f12ca70190b237b4f7e78d09d",
+    "sha256": "c2fe582a14ff6e79620b232ca7ffc914afb0474ec21fd43f208251dd7252f4a3",
     "evidencePath": "architecture/get-modular/evidence/consumer-module-standard.md"
   },
   "authority": {
@@ -6285,21 +6285,21 @@
   "packages": [
     {
       "name": "@get-modular/core",
-      "version": "0.3.0",
-      "archiveSha256": "bd84c087c7d6842907d08a1a2f6dc0afd250e297f9456e0f77b87630e0f5093e",
-      "archivePath": "architecture/get-modular/evidence/get-modular-core-0.3.0.tgz"
+      "version": "0.6.0",
+      "archiveSha256": "a1a64aeaadf5ae0f9143cf26038853cf42d90b060e083f5ff2f4acf7e2e8d1b0",
+      "archivePath": "architecture/get-modular/evidence/get-modular-core-0.6.0.tgz"
     },
     {
       "name": "@get-modular/assembly",
-      "version": "0.3.0",
-      "archiveSha256": "3a4312465485269971db08efb10759fb3a3d4d23266c7f5d9fe8069b4bb411c8",
-      "archivePath": "architecture/get-modular/evidence/get-modular-assembly-0.3.0.tgz"
+      "version": "0.6.0",
+      "archiveSha256": "3330afe53ab9615a1dc81273cf9c45b8b9fb68b1d95571af060971e58a9be606",
+      "archivePath": "architecture/get-modular/evidence/get-modular-assembly-0.6.0.tgz"
     },
     {
       "name": "@get-modular/resources",
-      "version": "0.1.0",
-      "archiveSha256": "1172c89d9f863d0e1763293eb6153d0835c609fc01ea730004fcee293872cc7a",
-      "archivePath": "architecture/get-modular/evidence/get-modular-resources-0.1.0.tgz"
+      "version": "0.2.0",
+      "archiveSha256": "2d1aaab67b0002a426fda69b01bda9f7697662ea9685a990b33a12d18658f46b",
+      "archivePath": "architecture/get-modular/evidence/get-modular-resources-0.2.0.tgz"
     }
   ],
   "enforcement": {

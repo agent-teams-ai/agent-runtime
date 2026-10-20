@@ -17,7 +17,7 @@ import { verifyCmsPinReview } from "../ci/cms-pin-review.ts";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 
-export const cmsPinReviewPath = "architecture/get-modular/evidence/smart-ci-cms-pin-review.json";
+export const cmsPinReviewPath = "architecture/get-modular/evidence/interactive-session-cms-pin-review.json";
 export const passiveProfilePath = "architecture/get-modular/consumer-profile.json";
 export const containedProfilePath = "architecture/consumer-module-standard/contained-turn-profile.json";
 
@@ -30,6 +30,39 @@ export const retainedEvidencePath = path => {
 };
 
 const identity = ({ repository, path, anchor }) => ({ repository, path, anchor });
+const documentIdentity = pin => ({ commit: pin?.commit, sha256: pin?.sha256, byteLength: pin?.byteLength });
+
+/** Walk authenticated retained predecessors to the separately verified historical head.
+ * This compares source evidence only; it does not promote any composition scope.
+ */
+export async function verifyCmsPinHistory(review, expectedHead, readBytes) {
+  let current = review;
+  const seen = new Set();
+  for (let step = 0; step < 64; step++) {
+    if (JSON.stringify(documentIdentity(current.before)) === JSON.stringify(documentIdentity(expectedHead))) {return;}
+    const predecessor = current.predecessorReview;
+    assert.ok(predecessor && !seen.has(predecessor.path), 'CMS predecessor history is missing or cyclic');
+    seen.add(predecessor.path);
+    const bytes = await readBytes(retainedEvidencePath(predecessor.path));
+    assert.equal(sha256(bytes), predecessor.sha256, 'CMS historical predecessor review digest drift');
+    const previous = JSON.parse(bytes.toString('utf8'));
+    assert.deepEqual(documentIdentity(previous.after), documentIdentity(current.before), 'CMS historical predecessor linkage drift');
+    // The successor retains its predecessor's after bytes under a fixed name;
+    // preserve historical review bytes even when their old after path was mutable.
+    const standardBytes = await readBytes(retainedEvidencePath(current.before.evidencePath));
+    const beforeBytes = await readBytes(retainedEvidencePath(previous.before.evidencePath));
+    const deltaBytes = await readBytes(retainedEvidencePath(previous.delta.path));
+    assert.equal(sha256(standardBytes), previous.after.sha256, 'CMS historical successor bytes drift');
+    assert.equal(sha256(deltaBytes), previous.delta.sha256, 'CMS historical delta digest drift');
+    verifyCmsPinReview({ review: previous, standardBytes, beforeBytes, deltaBytes,
+      predecessorReviewBytes: await readBytes(retainedEvidencePath(previous.predecessorReview.path)),
+      exactDeltaBytes: await exactCmsDelta(previous.before.evidencePath, previous.after.evidencePath, beforeBytes, standardBytes),
+      adoption: { passiveAndOrdinary: previous.adoption.passiveAndOrdinary, containedTurn: previous.adoption.containedTurn,
+        sdkExternalAuthority: previous.adoption.sdkExternalAuthority } });
+    current = previous;
+  }
+  assert.fail('CMS predecessor history exceeds its bounded retained chain');
+}
 
 /**
  * `standard` is the passive consumer profile pin, `contained` the contained-turn

@@ -13,7 +13,7 @@ const { loadCapabilityConfig } = await import(foundationModule('dist/capabilitie
 const { loadStrictYamlFile } = await import(foundationModule('dist/features/configuration-input/node.js'));
 const { assertSchema } = await import(foundationModule('dist/schema-catalog.js'));
 import { checkAdoption, digest, validateProfile, verifyAdoption } from './check-get-modular-adoption.mjs';
-import { loadCmsPinInputs, verifyCmsPin } from './check-cms-pin.mjs';
+import { loadCmsPinInputs, verifyCmsPin, verifyCmsPinHistory } from './check-cms-pin.mjs';
 
 const loadSourcePolicy = (root, configPath = 'architecture/foundation/source-dependencies.yaml') =>
   loadCapabilityConfig({ readYaml: loadStrictYamlFile, assertSchema }, root, configPath);
@@ -153,6 +153,7 @@ architecture/get-modular/consumer-profile.json
     'runtime-profile-cms-pin-review.json', 'creation-cleanup-cms-pin-review.json',
     'creation-cleanup-cms-pin-delta.diff',
     'consumer-module-standard-9c722ce.md', 'smart-ci-cms-pin-review.json', 'smart-ci-cms-pin-delta.diff',
+    'consumer-module-standard-81063add.md', 'interactive-session-cms-pin-review.json', 'interactive-session-cms-pin-delta.diff',
   ]) {
     const path = 'architecture/get-modular/evidence/' + name;
     await write(path, await readFile(new URL('../../' + path, import.meta.url), 'utf8'));
@@ -442,8 +443,7 @@ legacy conversion and shared checker extraction require separate scope.`;
   assert.equal(current.delta.documentBytesChanged, false);
   assert.equal(current.after.sha256, review.after.sha256);
   const step = await loadCmsPinInputs(); verifyCmsPin(step);
-  assert.equal(step.review.before.commit, current.after.commit);
-  assert.equal(step.review.before.sha256, current.after.sha256);
+  await verifyCmsPinHistory(step.review, current.after, path => readFile(new URL('../../' + path, import.meta.url)));
   assert.equal(pending.standard.commit, step.review.after.commit);
   assert.equal(pending.standard.sha256, step.review.after.sha256);
   assert.equal(digest(bytes), current.after.sha256);
@@ -491,8 +491,7 @@ test('current candidate-only pin rejects prior identities and prior complete byt
   const reconstructed = bytes.replace(relationLine, '').replace(bytes.slice(start, end), '');
   assert.equal(reconstructed, prior, 'reviewed additions must exactly bridge prior and current bytes');
   const step = await loadCmsPinInputs(); verifyCmsPin(step);
-  assert.equal(step.review.before.commit, review.after.commit);
-  assert.equal(step.review.before.sha256, review.after.sha256);
+  await verifyCmsPinHistory(step.review, review.after, path => readFile(new URL('../../' + path, import.meta.url)));
   assert.equal(pending.standard.commit, step.review.after.commit);
   assert.equal(pending.standard.sha256, step.review.after.sha256);
   const {profile, evidence} = fixture();
@@ -519,7 +518,7 @@ test('ordinary loader rejects losing either reviewed CMS branch', async t => {
 
 test('ordinary loader rejects missing successor evidence, stale coupled pins and false review claims', async t => {
   const f = await diskFixture(t);
-  for (const name of ['smart-ci-cms-pin-review.json', 'smart-ci-cms-pin-delta.diff', 'consumer-module-standard-9c722ce.md']) {
+  for (const name of ['smart-ci-cms-pin-review.json', 'smart-ci-cms-pin-delta.diff', 'consumer-module-standard-9c722ce.md', 'consumer-module-standard-81063add.md', 'interactive-session-cms-pin-review.json', 'interactive-session-cms-pin-delta.diff']) {
     const path = 'architecture/get-modular/evidence/' + name, bytes = await readFile(join(f.root, path));
     await rm(join(f.root, path));
     try { await assert.rejects(checkAdoption(f.root), /ENOENT/u); }

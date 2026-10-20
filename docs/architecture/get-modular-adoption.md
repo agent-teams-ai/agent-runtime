@@ -8,13 +8,36 @@ summary: Records scoped passive setup and ordinary session Assembly adoption wit
 
 # Get Modular adoption
 
+## Current package and standard compatibility checkpoint
+
+Under [ADR-0091](../decisions/0091-interactive-agent-session-synthetic-vertical-slice.md),
+the existing passive/ordinary composition moves to Core/Assembly 0.6.0,
+resources 0.2.0 and development-only conformance 0.4.0. TypeScript remains the
+existing 7.0.2 pin. The actual factories use `implement`, `prepare({ modules })`
+and the `scoped` adapter, with the same declarations, profiles, slots, independent
+binding oracle, ownership and cleanup behavior. This is API compatibility,
+not a redesign or qualification of the new interactive Host.
+
+The [current pin review](../../architecture/get-modular/evidence/interactive-session-cms-pin-review.json)
+retains the independently read exact upstream document and registry archive
+identities. Retrieval records a canonical Git object and observed main ref;
+it does not relabel them as historical Root-supplied packets. The checker
+authenticates the retained predecessor chain back to the separately verified
+historical head and rejects a detached digest or link.
+
+The new interactive core and Host retain their own pending implementation and
+scoped FMS/CMS adoption obligations. Existing passive/ordinary scope is preserved;
+full successor layout/group conversion of legacy modules is not certified here.
+Contained-turn remains frozen and its Assembly profile stays pending. Optional
+observation, lifecycle-kernel and dynamic graph capabilities are not selected.
+
 ## Ordinary session scoped adoption
 
 [ADR-0090](../decisions/0090-ordinary-user-session-codex-execution-profile.md)
 authorizes the additive `user-session-v1` composition. The
 [consumer profile](../../architecture/get-modular/consumer-profile.json)
 retains ADR-0015 as its passive authority and records ADR-0090 on the ordinary
-composition itself. Accepted ADR-0016 custody adoption remains pending; ordinary
+composition itself. ADR-0016 custody adoption remains proposed; ordinary
 execution does not establish contained-turn security or qualification.
 
 The existing Runtime Setup Assembly remains the single construction root.
@@ -79,8 +102,8 @@ needed no data migration.
 | `agent-runtime/ordinary/provider` | `agent-runtime/ordinary/provider/codex` | `agent-runtime/ordinary/provider`, `agent-runtime/ordinary/prepare-launch` | none |
 | `agent-runtime/ordinary/turn` | `agent-runtime/ordinary/turn/default` | `agent-runtime/ordinary/turn` | `operation-store`, `security`, `provider-access`, `workspace`, `artifacts`, `process`, `provider` |
 
-The composition root is a function of `Assembly`: `composeRuntimeSetup` binds
-every factory through the api it receives. The ordinary feature exports its
+The composition root is a function of `Assembly`: `composeRuntimeSetup` prepares
+the closed entries through the api it receives. The ordinary feature exports its
 declarations and unbound module factories and does not import the Host's
 capability map. `pnpm architecture:get-modular-adoption` checks the literal
 descriptors and declarations of the ordinary feature and the Host handoff, and
@@ -97,7 +120,7 @@ attempt, and observed closure plus durable reconciliation releases the flight.
 The Host retains its resource owners and writable observation journal until the
 Host drain, including the feature's disposal, succeeds. Owners (security, Provider
 Access, Codex) live in an `owners` scope under an `ordinary-host` scope that also
-holds the journal; the owning modules are bound with `scoped()` and receive the
+holds the journal; the owning entries use `implement(..., scoped)` and receive the
 `owners` resources as the run scope. Owners release in reverse construction order
 and continue past a failed owner; a failed release is a debt named by implementation
 ID, retried by the next disposal without repeating successful releases. The journal
@@ -158,22 +181,24 @@ bounded contract. ADR-0008 and its historical evidence remain immutable;
 ADR-0013 continues to govern exactly its three active FMS features.
 
 The central authority is Get Modular's accepted ADR-0026 and the exact pinned
-[consumer module standard](https://github.com/agent-teams-ai/get-modular/blob/81063add7de50ffe2b91cc74bf7271b298624c21/docs/architecture/common-assembly.md#consumer-module-standard).
-The [current successor review](../../architecture/get-modular/evidence/smart-ci-cms-pin-review.json)
-bridges the historical `9c722` head to this reviewed document. Both the
+[consumer module standard](https://github.com/agent-teams-ai/get-modular/blob/ddf1e0b0053f546f12ca70190b237b4f7e78d09d/docs/architecture/common-assembly.md#consumer-module-standard).
+The [current successor review](../../architecture/get-modular/evidence/interactive-session-cms-pin-review.json)
+bridges the prior `81063add` pin to this reviewed document. Its authenticated
+predecessor is the [Smart CI review](../../architecture/get-modular/evidence/smart-ci-cms-pin-review.json),
+which bridges the historical `9c722` head. Both the
 [zero-delta review](../../architecture/get-modular/evidence/runtime-profile-cms-pin-review.json)
 and parallel [creation-cleanup review](../../architecture/get-modular/evidence/creation-cleanup-cms-pin-review.json)
 remain independently enforced history against retained predecessor bytes.
 
 - Repository: `agent-teams-ai/get-modular`.
-- Commit: `81063add7de50ffe2b91cc74bf7271b298624c21`.
+- Commit: `ddf1e0b0053f546f12ca70190b237b4f7e78d09d`.
 - Path: `docs/architecture/common-assembly.md`; anchor: `consumer-module-standard`.
-- Complete document SHA-256: `49d08b6d1762e94308157fb59b3aa82ac1630c91f529f6efcd4915dfffee7ba7` (47,402 bytes).
+- Complete document SHA-256: `c2fe582a14ff6e79620b232ca7ffc914afb0474ec21fd43f208251dd7252f4a3` (81,436 bytes).
 - Retained bytes are recorded by the consumer profile; they are evidence, not a second authority.
 
 Document identity, package versions/archive integrity, Core compatibility token,
 and local adoption authority are distinct. The profile retains the approved published
-Core and Assembly 0.3.0 archives, verifies their SHA-256 and lock integrity,
+Core and Assembly 0.6.0 plus resources 0.2.0 archives, verifies their SHA-256 and lock integrity,
 and requires exact catalog versions. It records actual blocking commands,
 without `conformant: true` for the repository. The A3 and dynamic Host migrations
 remain reviewed below. The historical zero-delta review applies to retained
@@ -184,13 +209,19 @@ The consumed release archives are distinct from the standard pin:
 
 | Published root | Version | Retained archive SHA-256 |
 | --- | --- | --- |
-| `@get-modular/core` | `0.3.0` | `bd84c087c7d6842907d08a1a2f6dc0afd250e297f9456e0f77b87630e0f5093e` |
-| `@get-modular/assembly` | `0.3.0` | `3a4312465485269971db08efb10759fb3a3d4d23266c7f5d9fe8069b4bb411c8` |
+| `@get-modular/core` | `0.6.0` | `a1a64aeaadf5ae0f9143cf26038853cf42d90b060e083f5ff2f4acf7e2e8d1b0` |
+| `@get-modular/assembly` | `0.6.0` | `3330afe53ab9615a1dc81273cf9c45b8b9fb68b1d95571af060971e58a9be606` |
+| `@get-modular/resources` | `0.2.0` | `2d1aaab67b0002a426fda69b01bda9f7697662ea9685a990b33a12d18658f46b` |
+| `@get-modular/conformance` (development only) | `0.4.0` | `2182cf9702879b2ab78928646db59d91d8a7b128ee870c4b0a2283f51e0d352a` |
 
-The consumer profile retains both complete published archives and exact
+The consumer profile retains the three production archives and exact
 lockfile integrity. The historical 0.1.0 stage1 entry digest belongs to its
 earlier release evidence and does not identify the current archive.
-The archives are the Get Modular 0.3.0 release, commit
+The conformance archive is retained as development evidence. All four current
+archives were downloaded from the exact npm registry coordinates and verified
+against the registry SHA-512 integrity; they are not locally rebuilt tarballs.
+
+Historical 0.3.0 release evidence remains retained: commit
 `bb364ac8ca461b5e8277eeb3f7867b26187f99e8`
 ([get-modular#150](https://github.com/agent-teams-ai/get-modular/pull/150)),
 taken from the retained bundle `get-modular-0.3.0-train-r1a`, which was packed
@@ -210,8 +241,9 @@ These identities do not assert whole-runtime conformance.
 
 ## Ownership and composition scope
 
-Only default embedded passive setup is admitted. Its one async default factory
-uses seven handles and eight required slots; Codex and Claude capabilities are
+The profile covers default embedded passive setup and the scoped ordinary
+extension described above. The passive variant's async default factory
+uses seven entries and eight required slots; Codex and Claude capabilities are
 siblings, both closed before access binding. The internal sync leaf remains a
 test reference seam and is also used by the retained Host-custodied contained-turn
 owner. That existing contained-turn boundary is not adopted or qualified by this

@@ -1,6 +1,6 @@
 import {failedCreationRecovery, terminalCreationCleanupUncertainty} from './runtime-setup-creation-cleanup.fixture.ts';
 import { compileComposition, defineModule } from "@get-modular/core";
-import { assemblyFor } from "@get-modular/assembly";
+import { assemblyFor, implement } from "@get-modular/assembly";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -249,13 +249,13 @@ for (const fault of ["missing-handle", "extra-handle", "duplicate-handle", "miss
       claudePlanner: async () => { productCalls += 1; return factories.claudePlanner(); },
       host: (dependencies) => { productCalls += 1; return factories.host(dependencies); },
     }, () => { throw new Error("preparation created Host"); });
-    const extra = api.bindFactory(defineModule({ ...runtimeSetupDeclarations[6],
+    const extra = implement<RuntimeSetupCapabilities>()(defineModule({ ...runtimeSetupDeclarations[6],
       moduleId: "agent-runtime/extra", implementationId: "agent-runtime/extra", slots: [],
     }), async () => { productCalls += 1; return { instance: undefined, capabilities: {} }; });
     const result = await api.prepare({ composition,
-      factories: fault === "extra-handle" ? [...bindings.factories, extra] : fault === "missing-handle" ? bindings.factories.slice(1)
-        : fault === "duplicate-handle" ? [...bindings.factories, bindings.roots.host] : bindings.factories,
-      roots: fault === "missing-root" ? {} : fault === "wrong-root" ? { host: bindings.factories[0]! } : bindings.roots,
+      modules: fault === "extra-handle" ? [...bindings.modules, extra] : fault === "missing-handle" ? bindings.modules.slice(1)
+        : fault === "duplicate-handle" ? [...bindings.modules, bindings.roots.host] : bindings.modules,
+      roots: fault === "missing-root" ? {} : fault === "wrong-root" ? { host: bindings.modules[0]! } : bindings.roots,
     });
     assert.equal(result.status, "failed");
     assert.equal(productCalls, 0);
@@ -700,7 +700,7 @@ for (const fault of ["missing-binding", "wrong-implementation", "capability", "c
         dependencyOrder: fault === "order" ? composition.plan.dependencyOrder.toReversed() : composition.plan.dependencyOrder,
       },
     };
-    const result = await api.prepare({ composition: changed, factories: bindings.factories, roots: bindings.roots });
+    const result = await api.prepare({ composition: changed, modules: bindings.modules, roots: bindings.roots });
     assert.equal(result.status, "failed");
     assert.equal(calls, 0);
   });
