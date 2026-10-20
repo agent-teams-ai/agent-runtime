@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 
 interface DocumentPin { commit: string; sha256: string; byteLength: number; evidencePath: string }
 export interface CmsPinReview {
+  repository: string;
   schemaVersion: number;
   before: DocumentPin; after: DocumentPin;
   predecessorReview: { path: string; sha256: string };
@@ -11,6 +12,7 @@ export interface CmsPinReview {
     supplier: string; retrieval: string; independentRetrieval: boolean;
     beforeCommit: string; afterCommit: string;
     runtime: { repository: string; baseCommit: string; baseTree: string };
+    gitObservation?: { repository: string; ref: string; commit: string; documentBlob: string };
   };
   documentNormativeChange: boolean; consumerBehaviorChanged: boolean;
   successorProductionConformance: string;
@@ -24,6 +26,28 @@ export interface CmsReviewInputs {
 }
 const hash = (bytes: Uint8Array) => createHash('sha256').update(bytes).digest('hex');
 const documentIdentity = ({ commit, sha256, byteLength }: DocumentPin) => ({ commit, sha256, byteLength });
+
+function verifyRetrieval(review: CmsPinReview, standardBytes: Uint8Array): void {
+  const source = review.provenance;
+  assert.equal(source.beforeCommit, review.before.commit, 'CMS retrieval predecessor drift');
+  assert.equal(source.afterCommit, review.after.commit, 'CMS retrieval successor drift');
+  if (source.retrieval === 'supplied-source-packets') {
+    assert.equal(source.supplier, 'Root', 'CMS supplied packet owner drift');
+    assert.equal(source.independentRetrieval, false, 'supplied packets cannot claim independent retrieval');
+    assert.equal(source.gitObservation, undefined, 'supplied packets cannot claim a live Git observation');
+    return;
+  }
+  assert.equal(source.retrieval, 'exact-git-object-and-live-upstream-ref', 'unsupported CMS retrieval provenance');
+  assert.match(source.supplier, /^[a-z][a-z0-9-]{1,63}$/u, 'CMS independent retriever needs an explicit actor');
+  assert.equal(source.independentRetrieval, true, 'CMS Git retrieval must be explicit');
+  const observation = source.gitObservation;
+  assert.ok(observation, 'CMS Git retrieval requires retained observation');
+  assert.equal(observation.repository, review.repository, 'CMS Git repository drift');
+  assert.equal(observation.ref, 'refs/heads/main', 'CMS observed ref drift');
+  assert.equal(observation.commit, review.after.commit, 'CMS observed commit drift');
+  const blob = createHash('sha1').update(`blob ${standardBytes.byteLength}\0`).update(standardBytes).digest('hex');
+  assert.equal(observation.documentBlob, blob, 'CMS retained Git blob differs from the observed document');
+}
 
 // The IO boundary supplies Git's deterministic no-index diff, computed from the
 // actual retained documents. This contract neither parses nor applies patches.
@@ -51,11 +75,7 @@ export function verifyCmsPinReview(inputs: CmsReviewInputs): void {
     removedLines: lines.filter(line => line.startsWith('-') && !line.startsWith('--- ')).length,
   }, 'CMS exact delta summary drift');
   const source = review.provenance;
-  assert.deepEqual({ supplier: source.supplier, retrieval: source.retrieval, independentRetrieval: source.independentRetrieval,
-    beforeCommit: source.beforeCommit, afterCommit: source.afterCommit }, {
-    supplier: 'Root', retrieval: 'supplied-source-packets', independentRetrieval: false,
-    beforeCommit: review.before.commit, afterCommit: review.after.commit,
-  }, 'CMS retrieval provenance contradicts the reviewed packets');
+  verifyRetrieval(review, standardBytes);
   assert.equal(source.runtime.repository, 'agent-teams-ai/agent-runtime', 'CMS Runtime repository drift');
   for (const revision of [source.runtime.baseCommit, source.runtime.baseTree]) {
     assert.match(revision, /^[a-f0-9]{40}$/u, 'CMS Runtime provenance requires exact base/tree');

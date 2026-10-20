@@ -1,0 +1,89 @@
+{
+  "schemaVersion": 1,
+  "reviewedOn": "2026-10-21",
+  "repository": "agent-teams-ai/get-modular",
+  "path": "docs/architecture/common-assembly.md",
+  "anchor": "consumer-module-standard",
+  "before": {
+    "commit": "81063add7de50ffe2b91cc74bf7271b298624c21",
+    "sha256": "49d08b6d1762e94308157fb59b3aa82ac1630c91f529f6efcd4915dfffee7ba7",
+    "byteLength": 47402,
+    "evidencePath": "architecture/get-modular/evidence/consumer-module-standard-81063add.md"
+  },
+  "after": {
+    "commit": "ddf1e0b0053f546f12ca70190b237b4f7e78d09d",
+    "sha256": "c2fe582a14ff6e79620b232ca7ffc914afb0474ec21fd43f208251dd7252f4a3",
+    "byteLength": 81436,
+    "evidencePath": "architecture/get-modular/evidence/consumer-module-standard.md"
+  },
+  "predecessorReview": {
+    "path": "architecture/get-modular/evidence/smart-ci-cms-pin-review.json",
+    "sha256": "6646e085b6f59ac2e56905f7951bbc3bf2a6901941b3c1671dcc71420d3d9a9d"
+  },
+  "provenance": {
+    "supplier": "runtime-interactive-admission",
+    "retrieval": "exact-git-object-and-live-upstream-ref",
+    "independentRetrieval": true,
+    "beforeCommit": "81063add7de50ffe2b91cc74bf7271b298624c21",
+    "afterCommit": "ddf1e0b0053f546f12ca70190b237b4f7e78d09d",
+    "gitObservation": {
+      "repository": "agent-teams-ai/get-modular",
+      "ref": "refs/heads/main",
+      "commit": "ddf1e0b0053f546f12ca70190b237b4f7e78d09d",
+      "documentBlob": "ae6792543bd19acc948e177e8d55632c9d51134e"
+    },
+    "runtime": {
+      "repository": "agent-teams-ai/agent-runtime",
+      "baseCommit": "1b51970255c1d0f63131351eea9b6e030a6c5dc1",
+      "baseTree": "981bc93f648a2440d3c096d51f7256c51b60e768"
+    },
+    "review": "Exact canonical Git objects read and remote main ref checked independently. npm registry releases and all four downloaded archive SHA512 identities verified; no real-provider qualification."
+  },
+  "delta": {
+    "path": "architecture/get-modular/evidence/interactive-session-cms-pin-delta.diff",
+    "sha256": "598b4a4b4592cd8e49786685cd846287b507458805c1c3886aa563055b4274a7",
+    "byteLength": 61093,
+    "hunks": 27,
+    "addedLines": 624,
+    "removedLines": 85,
+    "format": "Git no-index, text, full index, myers, indent heuristic, three context lines, a/ and b/ prefixes, suppressBlankEmpty=true; exact retained before/after bytes."
+  },
+  "documentNormativeChange": true,
+  "consumerBehaviorChanged": false,
+  "successorProductionConformance": "not-established",
+  "applicability": {
+    "status": "APPLICABLE_MIGRATION_REQUIRED",
+    "passiveCiHelpers": {
+      "descriptors": false,
+      "resources": false,
+      "runInputs": false,
+      "lifecycle": false
+    }
+  },
+  "adoption": {
+    "passiveAndOrdinary": "active",
+    "containedTurn": "pending",
+    "dynamicAgentRuntime": "not-certified",
+    "sdkExternalAuthority": "pending-authority-qualification"
+  },
+  "scope": "Existing passive/ordinary composition API compatibility and coupled current CMS/package pins only. Module identities, declarations, selected bindings, owners and operation behavior remain unchanged. New interactive Host adoption stays pending its own actual source/profile evidence.",
+  "outstandingWork": [
+    "Current CMS layout and group adoption for the new interactive Host belongs to the interactive delivery; this API compatibility checkpoint does not claim successor-wide conformance of every legacy layout.",
+    "Contained-turn Assembly migration, dynamic lifecycle and SDK external authority remain pending under existing owners."
+  ],
+  "checksPlanned": [
+    "pnpm product:build",
+    "pnpm typecheck",
+    "focused existing Assembly/ordinary/reference tests",
+    "pnpm test:consumer-modules",
+    "pnpm architecture:consumer-modules",
+    "pnpm test:get-modular-adoption",
+    "pnpm architecture:get-modular-adoption",
+    "pnpm test:sdk-growth:packed",
+    "pnpm check:fast",
+    "pnpm check"
+  ],
+  "checkDisposition": "Execution results are recorded separately; the review does not turn planned commands into passing evidence.",
+  "compositionApiMigrated": true,
+  "authority": "ADR-0091"
+}

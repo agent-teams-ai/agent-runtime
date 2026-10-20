@@ -70,6 +70,9 @@ const cmsInputPaths = [cmsFile, cmsContract, 'scripts/architecture/check-cms-pin
   'architecture/get-modular/evidence/consumer-module-standard-9c722ce.md',
   'architecture/get-modular/evidence/smart-ci-cms-pin-review.json',
   'architecture/get-modular/evidence/smart-ci-cms-pin-delta.diff',
+  'architecture/get-modular/evidence/consumer-module-standard-81063add.md',
+  'architecture/get-modular/evidence/interactive-session-cms-pin-review.json',
+  'architecture/get-modular/evidence/interactive-session-cms-pin-delta.diff',
   'architecture/get-modular/evidence/runtime-profile-cms-pin-review.json',
   'architecture/get-modular/evidence/creation-cleanup-cms-pin-review.json',
   'architecture/get-modular/evidence/creation-cleanup-cms-pin-delta.diff'];
