@@ -1,3 +1,4 @@
+await import("./interactive-host-scope.test.mjs");
 import assert from "node:assert/strict";
 import {interactiveSpiBridgeTest, interactiveSpiInterpretationTest} from "./interactive-session-scope.test.ts";
 void interactiveSpiBridgeTest;

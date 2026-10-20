@@ -1,0 +1,38 @@
+/** Host-owned transport DTOs, mapped to Agent Execution at composition. No provider/native identity. */
+export interface SessionScope {readonly tenantId: string; readonly projectId: string}
+export interface SessionRef extends SessionScope {readonly sessionId: string; readonly generation: number}
+export type JsonValue = null | boolean | number | string | readonly JsonValue[] | {readonly [key: string]: JsonValue};
+export type SessionOutcome = "accepted" | "duplicate" | "conflict" | "stale" | "unavailable" | "backpressure" | "unknown" | "unsupported" | "denied";
+export interface SessionReply {readonly status: SessionOutcome; readonly receipt?: {readonly inputId: string; readonly operationId: string}}
+export type InteractionAnswer = {readonly kind: "permission"; readonly decision: "allow" | "deny"} |
+  {readonly kind: "question"; readonly answers: Readonly<Record<string, string>>};
+export interface SessionView extends SessionRef {
+  readonly revision: number;
+  readonly status: "opening" | "ready" | "unavailable" | "closing" | "closed" | "reconcile_required";
+  readonly inputs: readonly {readonly inputId: string; readonly operationId: string;
+    readonly status: "admitted" | "dispatching" | "sdk_consumed" | "succeeded" | "failed" | "cancelled" | "reconcile_required";
+    readonly delivery: "admitted" | "dispatching" | "sdk_consumed" | "known_not_sent" | "unknown"; readonly cancellationRequested: boolean}[];
+  readonly events: readonly {readonly sequence: number; readonly generation: number; readonly operationId?: string; readonly inputId?: string;
+    readonly kind: "text" | "tool" | "tool-result" | "usage" | "result" | "interaction" | "diagnostic"; readonly data: JsonValue}[];
+}
+export interface InteractiveSessionApi {
+  readonly open: (ref: SessionRef, commandId: string, configRevision: string, requiredCapabilities: readonly string[]) => Promise<SessionReply>;
+  readonly read: (ref: SessionRef) => Promise<SessionView | undefined>;
+  readonly submit: (ref: SessionRef, input: {readonly commandId: string; readonly inputId: string; readonly content: string}) => Promise<SessionReply>;
+  readonly reply: (ref: SessionRef, commandId: string, interactionId: string, answer: InteractionAnswer) => Promise<SessionReply>;
+  readonly interrupt: (ref: SessionRef, commandId: string, operationId: string) => Promise<SessionReply>;
+  readonly close: (ref: SessionRef) => Promise<SessionReply>;
+  readonly restore: (ref: SessionRef, commandId: string, configRevision: string) => Promise<SessionReply>;
+}
+
+/** A separate technical Host. Construction and scheduling remain trusted composition authority. */
+export interface InteractiveSessionHost {
+  readonly bindAccess: (scope: SessionScope) => InteractiveSessionApi;
+  readonly control: {
+    readonly dispatch: (ref: SessionRef) => Promise<SessionReply>;
+    readonly pumpOutput: (ref: SessionRef) => Promise<SessionReply>;
+    readonly recover: (ref: SessionRef) => Promise<SessionReply>;
+    readonly checkpoint: (ref: SessionRef) => Promise<SessionReply>;
+  };
+  readonly dispose: () => Promise<void>;
+}

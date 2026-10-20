@@ -332,6 +332,10 @@ const registerPackageNames = ({ packageJson, packageRoot, productionRoot, names,
   const compositionTarget = exportedTarget(packageJson, "./composition", packageRoot, productionRoot) ?? `${productionRoot}/composition.ts`;
   names.set(packageJson.name, rootTarget);
   names.set(`${packageJson.name}/composition`, compositionTarget);
+  if (declared.id === "agent-execution" && declared.curatedExports.includes("./interactive-contracts")) {
+    const spiTarget = exportedTarget(packageJson, "./interactive-contracts", packageRoot, productionRoot);
+    if (spiTarget === "packages/contexts/agent-execution/src/interactive-contracts.js") {names.set(`${packageJson.name}/interactive-contracts`, spiTarget);}
+  }
 };
 
 export const readLocalPackageImports = async ({ root, productionRoots, issue, pathIndex, declaredModules = new Map() }) => {

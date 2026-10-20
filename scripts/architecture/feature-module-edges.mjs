@@ -51,6 +51,9 @@ const moduleForPath = (declaredModules, path) => [...declaredModules.values()]
 // curated assembly entries, only from a layer that is allowed to hold outward
 // integrations, and only across a declared module edge. Anything else stays an
 // undeclared local dependency.
+const invalidInteractiveSpiUse = (target, path, imported) => target.id === "agent-execution"
+  && path === "packages/contexts/agent-execution/src/interactive-contracts.ts" && imported.kind !== "type";
+
 export const curatedModuleImportIssues = (context) => {
   const { declaredModules, imported, isAssembly, issue, layerForPath, path, sourceFeature, targetPath, declaredModuleEdges, observedModuleEdges, moduleEdgeLocations } = context;
   const target = moduleForPath(declaredModules, targetPath);
@@ -58,6 +61,9 @@ export const curatedModuleImportIssues = (context) => {
   if (!target || !source || target.id === source.id) {return;}
   const curatedTargets = target.curatedExports.map((entry) => `${target.sourceRoot}/${entry === "." ? "index.ts" : `${entry.slice(2)}.ts`}`);
   const issues = [];
+  if (invalidInteractiveSpiUse(target, targetPath, imported)) {
+    issues.push(issue("FM_INVALID_LAYER_DIRECTION", path, imported.line, "interactive provider SPI is a type-only curated contract"));
+  }
   if (!curatedTargets.includes(targetPath)) {
     issues.push(issue("FM_MODULE_DEEP_IMPORT", path, imported.line, `${source.id} must consume ${target.id} through a curated assembly entry`));
   }

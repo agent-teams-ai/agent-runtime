@@ -152,3 +152,5 @@ export type {
   SubmitRuntimeContainedTurnInput,
   SubmitRuntimeContainedTurnOutcome,
 } from "./composition/contained-turn-runtime-access.js";
+
+export {createInteractiveSessionHost, type InteractiveSessionHostOptions} from "./composition/interactive-session-host.js";

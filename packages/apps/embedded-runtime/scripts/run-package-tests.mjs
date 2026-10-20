@@ -73,6 +73,7 @@ export const testProcesses = [
     "tests/features/ordinary-session-runtime/ordinary-observation-journal.unit.test.ts",
     "tests/features/ordinary-session-runtime/ordinary-store-contract.test.ts",
     "tests/features/ordinary-session-runtime/ordinary-store-contract.postgres.test.ts",
+    "tests/features/interactive-session-runtime/host.test.ts",
     "tests/package/capability-bundle-contract.test.ts",
     "tests/package/codex-setup.e2e.test.ts",
     "tests/package/claude-code-setup.e2e.test.ts",

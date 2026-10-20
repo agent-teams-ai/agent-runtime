@@ -36,6 +36,7 @@ export const REVIEWED_FEATURES = Object.freeze({
   "linux-codex-deployment": hostFeature("linux-codex-deployment", ["adapters"]),
   "linux-codex-node-recipe": hostFeature("linux-codex-node-recipe", ["adapters"]),
   "ordinary-session-runtime": hostFeature("ordinary-session-runtime", ["contracts", "adapters", "composition"]),
+  "interactive-session-runtime": hostFeature("interactive-session-runtime", STANDARD_ROLES),
   "setup-inspection-planning": hostFeature("setup-inspection-planning", ["contracts", "adapters"]),
   "trusted-runtime-access-scope": hostFeature("trusted-runtime-access-scope", ["contracts", "adapters"]),
 });

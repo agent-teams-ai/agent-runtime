@@ -845,6 +845,8 @@ boundaries:
 - id: composition.embedded-runtime
   dependencyMode: runtime
   roots:
+  - packages/apps/embedded-runtime/src/composition/interactive-session-host.ts
+  - packages/apps/embedded-runtime/src/composition/interactive-session-host.root.ts
   - packages/apps/embedded-runtime/src/composition.ts
   - packages/apps/embedded-runtime/src/composition/agent-runtime-host-creation-error.ts
   - packages/apps/embedded-runtime/src/composition/default-agent-runtime-host.ts
@@ -860,6 +862,8 @@ boundaries:
   - packages/apps/embedded-runtime/src/features/ordinary-session-runtime/index.ts
   - packages/apps/embedded-runtime/src/features/ordinary-session-runtime/internal.ts
   entrypoints:
+  - packages/apps/embedded-runtime/src/composition/interactive-session-host.ts
+  - packages/apps/embedded-runtime/src/composition/interactive-session-host.root.ts
   - packages/apps/embedded-runtime/src/composition.ts
   - packages/apps/embedded-runtime/src/composition/ordinary-agent-runtime-host.ts
   - packages/apps/embedded-runtime/src/composition/ordinary-runtime-assembly.ts
@@ -878,6 +882,7 @@ boundaries:
     - composition.embedded-runtime.contained-turn-routing
     - composition.embedded-runtime.agent-runtime-host
     - core.embedded-runtime.access-contracts
+    - composition.embedded-runtime.interactive-host-feature
     packages:
     - '@agent-teams/agent-execution'
     - '@agent-teams/provider-access'
@@ -933,6 +938,7 @@ boundaries:
   allow:
     boundaries:
     - core.embedded-runtime.access-contracts
+    - core.embedded-runtime.interactive-host
     packages: []
     builtins: []
     runtimeReferences: []
@@ -1432,6 +1438,9 @@ boundaries:
     - adapter.runtime-security.ordinary
     - core.runtime-security.ordinary
     - composition.runtime-security.ordinary
+    - core.embedded-runtime.interactive-host
+    - adapter.embedded-runtime.interactive-host
+    - composition.embedded-runtime.interactive-host-feature
     packages:
     - '@agent-teams/agent-execution'
     - '@agent-teams/docs-protocol'
@@ -3178,4 +3187,61 @@ boundaries:
     - node:test
     - node:test/reporters
     - node:url
+    runtimeReferences: []
+- id: core.embedded-runtime.interactive-host
+  dependencyMode: runtime
+  roots:
+  - packages/apps/embedded-runtime/src/features/interactive-session-runtime/domain
+  - packages/apps/embedded-runtime/src/features/interactive-session-runtime/application
+  - packages/apps/embedded-runtime/src/features/interactive-session-runtime/contracts
+  - packages/apps/embedded-runtime/src/features/interactive-session-runtime/index.ts
+  entrypoints:
+  - packages/apps/embedded-runtime/src/features/interactive-session-runtime/domain/session-host.ts
+  - packages/apps/embedded-runtime/src/features/interactive-session-runtime/index.ts
+  - packages/apps/embedded-runtime/src/features/interactive-session-runtime/contracts/interactive-session-host.ts
+  - packages/apps/embedded-runtime/src/features/interactive-session-runtime/application/ports/outbound/interactive-host-ports.ts
+  - packages/apps/embedded-runtime/src/features/interactive-session-runtime/application/use-cases/create-session-host.ts
+  allow:
+    boundaries: []
+    packages: []
+    builtins: []
+    runtimeReferences: []
+- id: adapter.embedded-runtime.interactive-host
+  dependencyMode: runtime
+  roots:
+  - packages/apps/embedded-runtime/src/features/interactive-session-runtime/adapters
+  entrypoints:
+  - packages/apps/embedded-runtime/src/features/interactive-session-runtime/adapters/outbound/agent-execution-session.ts
+  - packages/apps/embedded-runtime/src/features/interactive-session-runtime/adapters/outbound/provider-generation-fence.ts
+  - packages/apps/embedded-runtime/src/features/interactive-session-runtime/adapters/outbound/directory-host-ownership.ts
+  allow:
+    boundaries:
+    - core.embedded-runtime.interactive-host
+    packages:
+    - '@agent-teams/agent-execution'
+    - "@agent-teams/filesystem-custody"
+    builtins:
+    - node:fs
+    - node:fs/promises
+    runtimeReferences: []
+- id: composition.embedded-runtime.interactive-host-feature
+  dependencyMode: runtime
+  roots:
+  - packages/apps/embedded-runtime/src/features/interactive-session-runtime/composition
+  - packages/apps/embedded-runtime/src/features/interactive-session-runtime/internal.ts
+  entrypoints:
+  - packages/apps/embedded-runtime/src/features/interactive-session-runtime/internal.ts
+  - packages/apps/embedded-runtime/src/features/interactive-session-runtime/composition/host.module.ts
+  - packages/apps/embedded-runtime/src/features/interactive-session-runtime/composition/interactive-session-runtime.contracts.ts
+  - packages/apps/embedded-runtime/src/features/interactive-session-runtime/composition/interactive-session-runtime.inputs.ts
+  allow:
+    boundaries:
+    - core.embedded-runtime.interactive-host
+    - adapter.embedded-runtime.interactive-host
+    packages:
+    - "@agent-teams/agent-execution"
+    - "@get-modular/assembly"
+    - "@get-modular/core"
+    - "@get-modular/resources"
+    builtins: []
     runtimeReferences: []

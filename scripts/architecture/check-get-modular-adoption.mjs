@@ -6,7 +6,7 @@ import {
 } from './consumer-module-standard-pin.mjs';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { readFile, realpath, stat } from 'node:fs/promises';
+import { glob, readFile, realpath, stat } from 'node:fs/promises';
 import { resolve, relative, isAbsolute } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import Ajv from 'ajv';
@@ -15,6 +15,8 @@ import { loadCmsPinInputs, verifyCmsPin, verifyCmsPinHistory } from './check-cms
 import {ordinaryCompositionPath, ordinaryAuthorityPath, verifyOrdinaryGraph, verifyOrdinaryHostOwnership} from './ordinary-composition-evidence.mjs';
 import {checkOrdinaryFeatureScope} from './check-ordinary-feature-scope.mjs';
 import { foundationModule, readSourceCensus, requireSourceDiagnostics, verifySourceCensus } from './get-modular-source-census.mjs';
+
+import {hostEvidencePaths, hostFeature, hostRoot, verifyInteractiveHostComposition} from './interactive-host-composition-evidence.mjs';
 
 const schema = JSON.parse(await readFile(new URL('../../architecture/get-modular/consumer-profile.schema.json', import.meta.url)));
 const validate = new Ajv({ allErrors: true, strict: true }).compile(schema);
@@ -41,11 +43,16 @@ export function validateProfile(profile) {
   if (profile.boundaries.some(b => b.roots.some(path => path.includes('/ordinary-session-runtime/')))) {
     assert.equal(profile.compositions.filter(c => c.authority === 'ADR-0090').length, 1, 'ordinary source requires one explicitly authorized composition');
   }
+  if (profile.boundaries.some(b => b.roots.some(path => path.includes('/interactive-session-runtime/')))) {
+    assert.equal(profile.compositions.filter(c => c.authority === 'ADR-0091').length, 1, 'interactive Host source requires one explicitly authorized composition');
+  }
   return { status: 'active' };
 }
 
-function verifyOrdinaryComposition(composition, decisions, get) {
-    if (composition.authority !== undefined) {
+function verifyOrdinaryComposition(composition, decisions, get, files) {
+    if (composition.authority === 'ADR-0091') {
+      verifyInteractiveHostComposition(composition, decisions, get, [...files.keys()]);
+    } else if (composition.authority !== undefined) {
       assert.equal(composition.authority, 'ADR-0090', 'ordinary authority drift');
       assert.ok(decisions.some(d => d.id === composition.authority && d.path === ordinaryAuthorityPath), 'ordinary accepted authority missing');
       assert.equal(composition.scopedFms, 'architecture/feature-module-standard/ordinary-scope.json', 'ordinary FMS mapping missing');
@@ -101,7 +108,7 @@ export function verifyAdoption(profile, evidence) {
     assert.ok(profile.boundaries.some(b => b.id === composition.boundary && b.status === 'adopted' && b.entrypoints.includes(composition.entrypoint)), 'mapping boundary mismatch');
     [composition.entrypoint, ...(composition.implementation ? [composition.implementation] : []), composition.declarations, composition.profile, composition.factories, ...composition.tests].forEach(get);
     assert.ok(composition.tests.length, 'mapping tests missing');
-    verifyOrdinaryComposition(composition, decisions, get);
+    verifyOrdinaryComposition(composition, decisions, get, files);
   }
   for (const exception of profile.exceptions) {
     assert.ok(profile.boundaries.some(b => b.id === exception.boundary), 'stale exception boundary');
@@ -199,6 +206,10 @@ export async function checkAdoption(root) {
     ? await loadStrictYamlFile(consumerRoot, 'pnpm-workspace.yaml', 'consumer-adoption-workspace') : {};
   const artifacts = await Promise.all(profile.packages.map(pkg => readPackageArtifact(pkg, embedded, lock, bytes, workspace)));
   const paths = new Set([profile.authority.path, profile.fms.profile]);
+  if (profile.compositions.some(c => c.implementation === hostRoot)) {
+    hostEvidencePaths.forEach(path => paths.add(path));
+    for await (const path of glob(hostFeature + '/**/*.ts', {cwd: consumerRoot})) {paths.add(path);}
+  }
   if ((await bytes(profile.authority.path)).toString('utf8').includes('../architecture/get-modular-adoption.md')) {
     paths.add('docs/architecture/get-modular-adoption.md');
   }

@@ -30,3 +30,5 @@ export type {
   SubmitRuntimeContainedTurnInput,
   SubmitRuntimeContainedTurnOutcome,
 } from "./features/contained-turn-runtime-access/index.js";
+
+export type {InteractiveSessionHost} from "./features/interactive-session-runtime/index.js";
