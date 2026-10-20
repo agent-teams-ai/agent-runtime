@@ -1,7 +1,33 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { openClaudeSession } from '../src/claude/index.ts';
+import type { InteractionReply } from '../src/draft-contracts/index.ts';
 import { config, FakeQuery, input, latch, observe, opened, tick } from './support.ts';
+
+test('malformed JavaScript interaction replies fail closed without consuming the pending request', async () => {
+  const { session, fake } = await opened(); const events = observe(session);
+  try {
+    await session.submit(input()); await tick();
+    for (const tool of ['Read', 'AskUserQuestion']) {
+      let settled = false;
+      const pending = fake.options.canUseTool?.(tool, {}, { signal: new AbortController().signal, requestId: tool, toolUseID: tool });
+      void pending?.then((result) => { settled = true; return result; }); await tick();
+      const interaction = events.filter((event) => event.kind === 'interaction').at(-1); assert(interaction?.kind === 'interaction');
+      const invalid = [null, undefined, [], {}, 'allow', { kind: 'unknown' }, { kind: 'permission', decision: 'invalid' },
+        { kind: 'permission', decision: true }, { kind: 'question', answers: null }, { kind: 'question', answers: [] },
+        { kind: 'question', answers: { choice: 1 } }, { kind: 'question', answers: new Date() },
+        { kind: 'question', answers: Object.create({ choice: 'inherited' }) },
+        { kind: 'question', answers: { get choice() { throw new Error('must not read accessor'); } } }];
+      for (const reply of invalid) { assert.deepEqual(session.respondToInteraction(interaction.interactionRef, reply as InteractionReply), { ok: false, code: 'unsupported' }); }
+      await tick(); assert.equal(settled, false);
+      const reply: InteractionReply = tool === 'Read' ? { kind: 'permission', decision: 'deny' } : { kind: 'question', answers: { choice: 'A' } };
+      assert(session.respondToInteraction(interaction.interactionRef, reply).ok);
+      const result = await pending; assert.equal(result?.behavior, tool === 'Read' ? 'deny' : 'allow');
+      if (result?.behavior === 'allow') { assert.deepEqual(result.updatedInput?.answers, { choice: 'A' }); }
+    }
+    fake.result(); await tick();
+  } finally { await session.close(); }
+});
 
 test('two isolated sessions, serial turns and real normalized text/tool/result contract', async () => {
   const { session: a, fake } = await opened(); const { session: b, fake: fb } = await opened(new FakeQuery(), config('runtime-session-B'));

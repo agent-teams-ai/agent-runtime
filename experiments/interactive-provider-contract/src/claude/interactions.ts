@@ -3,6 +3,25 @@ import type { CanUseTool, PermissionResult } from '@anthropic-ai/claude-agent-sd
 import type { EventPayload, InteractionReply, Reply } from '../draft-contracts/index.ts';
 import { fail } from './primitives.ts';
 type Pending = { kind: 'question' | 'permission'; input: Record<string, unknown>; finish: (result: PermissionResult) => void };
+function plainData(value: unknown): Record<string, unknown> | undefined {
+  if (!value || typeof value !== 'object') { return undefined; }
+  const prototype = Object.getPrototypeOf(value);
+  if (prototype !== Object.prototype && prototype !== null) { return undefined; }
+  const entries = Object.getOwnPropertyDescriptors(value);
+  if (Reflect.ownKeys(entries).some((key) => typeof key !== 'string' || !('value' in entries[key]!))) { return undefined; }
+  return Object.fromEntries(Object.entries(entries).map(([key, descriptor]) => [key, descriptor.value]));
+}
+function validatedReply(value: unknown): InteractionReply | undefined {
+  try {
+    const reply = plainData(value);
+    if (reply?.kind === 'permission' && (reply.decision === 'allow' || reply.decision === 'deny')) { return { kind: 'permission', decision: reply.decision }; }
+    if (reply?.kind === 'question') {
+      const answers = plainData(reply.answers);
+      if (answers && Object.values(answers).every((answer) => typeof answer === 'string')) { return { kind: 'question', answers: answers as Record<string, string> }; }
+    }
+  } catch { /* Untrusted JavaScript accessors or proxies are unsupported. */ }
+  return undefined;
+}
 export class Interactions {
   private pending = new Map<string, Pending>();
   private sealed = false;
@@ -33,9 +52,10 @@ export class Interactions {
     if (this.sealed) {return fail('unavailable');}
     const pending = this.pending.get(ref);
     if (!pending) {return fail('stale');}
-    if (reply.kind !== pending.kind) {return fail('unsupported');}
-    const updatedInput = reply.kind === 'question' ? { ...pending.input, answers: reply.answers } : pending.input;
-    pending.finish(reply.kind === 'permission' && reply.decision === 'deny' ? { behavior: 'deny', message: 'Denied by authority' } : { behavior: 'allow', updatedInput });
+    const validated = validatedReply(reply);
+    if (!validated || validated.kind !== pending.kind) {return fail('unsupported');}
+    const updatedInput = validated.kind === 'question' ? { ...pending.input, answers: validated.answers } : pending.input;
+    pending.finish(validated.kind === 'permission' && validated.decision === 'deny' ? { behavior: 'deny', message: 'Denied by authority' } : { behavior: 'allow', updatedInput });
     return { ok: true, value: undefined };
   }
   cancel(): void { for (const p of this.pending.values()) {p.finish({ behavior: 'deny', message: 'Interaction cancelled' });} }
