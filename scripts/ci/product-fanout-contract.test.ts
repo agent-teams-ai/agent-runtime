@@ -33,6 +33,9 @@ async function fixture() {
   await put('.node-version', '26.11.1');
   await put('.github/workflows/ci-product.yml', '# disposable fixture');
   await put('scripts/ci/package-execution.ts', await readFile(new URL('./package-execution.ts', import.meta.url), 'utf8'));
+  for (const file of ['policy.ts', 'script-routing.ts']) {
+    await put(`scripts/ci/${file}`, await readFile(new URL(`./${file}`, import.meta.url), 'utf8'));
+  }
   await put('scripts/ci/product-workflow-contract.ts', await readFile(new URL('./product-workflow-contract.ts', import.meta.url), 'utf8'));
   await put('scripts/ci/package-native-observation.ts', await readFile(new URL('./package-native-observation.ts', import.meta.url), 'utf8'));
   await put('scripts/ci/er-process-observer.ts', await readFile(new URL('./er-process-observer.ts', import.meta.url), 'utf8'));
@@ -79,6 +82,22 @@ async function fixture() {
   return { root, tracked, expected };
 }
 const phaseEvent = (suite = 'fixture') => ({ suite, name: 'observed TEST boundary', ancestry: [], depth: 0, status: 'passed', kind: 'test' as const });
+
+test('the experimental manifest joins source custody without joining production runners', async t => {
+  const f = await fixture(); t.after(() => rm(f.root, { recursive: true, force: true }));
+  const path = 'experiments/interactive-provider-contract/package.json';
+  await mkdir(join(f.root, path, '..'), { recursive: true });
+  const manifest = await readFile(new URL('../../experiments/interactive-provider-contract/package.json', import.meta.url), 'utf8');
+  await writeFile(join(f.root, path), manifest); f.tracked.push(path);
+  const rootPath = join(f.root, 'package.json'), root = JSON.parse(await readFile(rootPath, 'utf8'));
+  await assert.rejects(readProductSource(f.root, f.tracked), /unregistered experimental package/);
+  root.scripts['check:interactive-provider'] = 'pnpm --filter @agent-teams/interactive-provider-contract-experiment check';
+  await writeFile(rootPath, JSON.stringify(root));
+  const source = await readProductSource(f.root, f.tracked);
+  assert.ok(source.manifests[path]); assert.deepEqual(source.runners, f.expected.runners);
+  await writeFile(join(f.root, path), JSON.stringify({ ...JSON.parse(manifest), private: false }));
+  await assert.rejects(readProductSource(f.root, f.tracked), /private TEST candidate/);
+});
 // Unit receipt metadata names the disposable fixture. Command proofs and observations
 // are the unmodified actual v3 producer output, never current-suite qualification.
 async function packageReports(root: string, expected: ExpectedEvidence, requested: readonly ShardId[] = shardIds): Promise<PackageReceipt[]> {
@@ -294,6 +313,8 @@ export function registerProductSourceCustodyTests(): void {
 test('physical root custody rejects Git-ignored test/type/native/config helpers and symlink ancestry', async t => {
   for (const path of ['experiments/runtime-profile-behavior/test/extra.test.ts',
     'experiments/runtime-profile-behavior/src/extra.ts', 'experiments/rust-system-boundaries/client/extra.ts',
+    'experiments/interactive-provider-contract/src/extra.ts', 'experiments/interactive-provider-contract/test/extra.test.ts',
+    'experiments/unregistered-proof/dist/source.ts',
     'scripts/native-helper/extra.mjs', 'scripts/foundation/extra.mjs', 'architecture/foundation/extra.yaml',
     'tsconfig.extra.json', '.oxlintrc.extra.json']) {
     await t.test(path, async sub => {
@@ -318,7 +339,8 @@ test('physical root custody rejects Git-ignored test/type/native/config helpers 
   await t.test('deliberate generated dependency/build exclusions preserve custody', async sub => {
     const {root, tracked, expected} = await fixture(); sub.after(() => rm(root, {recursive:true,force:true}));
     for (const path of [`${packageRoots['agent-execution']}/dist/generated.ts`, `${packageRoots['provider-access']}/.cache/output.json`,
-      `${packageRoots['embedded-runtime']}/node_modules/installed.ts`, 'experiments/rust-system-boundaries/target/generated.rs']) {
+      `${packageRoots['embedded-runtime']}/node_modules/installed.ts`, 'experiments/rust-system-boundaries/target/generated.rs',
+      'experiments/interactive-provider-contract/dist/generated.ts', 'experiments/interactive-provider-contract/.cache/output.json']) {
       await mkdir(join(root, path, '..'), {recursive:true}); await writeFile(join(root, path), '// generated TEST');
     }
     assert.deepEqual((await readProductSource(root, tracked)).inputs, expected.inputs);

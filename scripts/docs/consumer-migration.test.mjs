@@ -59,6 +59,15 @@ test("projected direct tooling pins and disabled release-age waiting preserve th
     "@get-modular/assembly@0.6.0",
     "@get-modular/resources@0.2.0",
     "@get-modular/conformance@0.4.0",
+    "@anthropic-ai/claude-agent-sdk@0.3.305",
+    "@anthropic-ai/claude-agent-sdk-darwin-arm64@0.3.305",
+    "@anthropic-ai/claude-agent-sdk-darwin-x64@0.3.305",
+    "@anthropic-ai/claude-agent-sdk-linux-arm64-musl@0.3.305",
+    "@anthropic-ai/claude-agent-sdk-linux-arm64@0.3.305",
+    "@anthropic-ai/claude-agent-sdk-linux-x64-musl@0.3.305",
+    "@anthropic-ai/claude-agent-sdk-linux-x64@0.3.305",
+    "@anthropic-ai/claude-agent-sdk-win32-arm64@0.3.305",
+    "@anthropic-ai/claude-agent-sdk-win32-x64@0.3.305",
   ]);
   assert.match(await read("scripts/architecture/feature-module-config.mjs"), /const FOUNDATION_VERSION = "1\.7\.2";/u);
 });

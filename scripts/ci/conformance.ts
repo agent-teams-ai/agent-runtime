@@ -6,7 +6,7 @@ import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parse } from 'yaml';
-import { assertFullInventory, productPhases, requiredJobs } from './policy.ts';
+import { assertFullInventory, assertInteractiveProviderPackage, productPhases, requiredJobs } from './policy.ts';
 import { readScripts } from './inventory.ts';
 import type { Scripts } from './script-routing.ts';
 import { validateNightlyWorkflow } from './nightly-contract.ts';
@@ -255,6 +255,7 @@ export async function authenticatePlatformPredecessor(root: string): Promise<voi
 export async function conformance(root: string): Promise<void> {
   const read = (path: string) => readFile(resolve(root, path), 'utf8');
   const scripts = await readScripts(resolve(root, 'package.json'));
+  assertInteractiveProviderPackage(JSON.parse(await read('experiments/interactive-provider-contract/package.json')) as unknown);
   assert.equal((await read('.node-version')).trim(), '26.11.1');
   validateBenchmark(parse(await read('.github/workflows/ci-benchmark.yml')));
   type Snapshot = { baseCommit: string; packageSha256: string; sourcePolicySha256: string };

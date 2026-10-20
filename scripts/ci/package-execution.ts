@@ -6,6 +6,7 @@ import { basename, join, relative, resolve } from 'node:path';
 import type { TestEvent } from 'node:test/reporters';
 import { fileURLToPath } from 'node:url';
 import { observeEmbeddedProcesses, captureStream, assertCapturedIdentity } from './er-process-observer.ts';
+import { assertInteractiveProviderPackage, interactiveProviderPackageRoot } from './policy.ts';
 
 import { validatePlatform, workflowIdentity, verifySource } from './product-workflow-contract.ts';
 import type { ExecutionTarget, WorkflowIdentity } from './product-workflow-contract.ts';
@@ -112,6 +113,12 @@ export function selectPackage(name: unknown): Package {
   return selected;
 }
 export function validateInventory(entries: readonly { root: string; manifest: unknown }[], rootManifest: unknown): void {
+  const proof = entries.filter(item => item.root === interactiveProviderPackageRoot);
+  const rootScripts = object(object(rootManifest).scripts);
+  const requiresProof = rootScripts['check:interactive-provider'] !== undefined;
+  assert.equal(proof.length, requiresProof ? 1 : 0, 'exact experimental package census');
+  for (const entry of proof) { assertInteractiveProviderPackage(entry.manifest); }
+  entries = entries.filter(item => item.root !== interactiveProviderPackageRoot);
   assert.deepEqual(entries.map(item => item.root).toSorted(), packages.map(item => item.root).toSorted(), 'fixed six roots mismatch');
   const names = entries.map(item => object(item.manifest).name);
   assert.equal(new Set(names).size, 6, 'duplicate package name');

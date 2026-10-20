@@ -268,6 +268,24 @@ test('source inventory rejects missing sixth build, added package, test change a
   assert.throws(() => validateInventory(hook, root), /lifecycle hook/);
 });
 
+test('the named TEST package extends manifest custody while preserving the six production runners', async () => {
+  const clean = `node -e "const fs=require('node:fs'); for (const path of ['dist','.cache']) fs.rmSync(path, { recursive: true, force: true })"`;
+  const entries = packages.map(p => ({ root: p.root, manifest: { name: p.name, scripts: { clean, build: p.build, test: p.test } } }));
+  const root = JSON.parse(await readFile(new URL('../../package.json', import.meta.url), 'utf8'));
+  const manifest = JSON.parse(await readFile(new URL('../../experiments/interactive-provider-contract/package.json', import.meta.url), 'utf8'));
+  const proof = { root: 'experiments/interactive-provider-contract', manifest };
+  validateInventory([...entries, proof], root);
+  assert.throws(() => validateInventory(entries, root), /experimental package census/);
+  assert.throws(() => validateInventory([...entries, proof, proof], root), /experimental package census/);
+  assert.throws(() => validateInventory([...entries, { ...proof, root: 'experiments/other' }], root));
+  assert.throws(() => validateInventory([...entries, { ...proof, manifest: { ...manifest, private: false } }], root));
+  for (const key of ['build', 'typecheck', 'test', 'check']) {
+    const changed = structuredClone(proof); changed.manifest.scripts[key] = 'true';
+    assert.throws(() => validateInventory([...entries, changed], root));
+  }
+  assert.equal(packages.length, 6); assert.equal(shardIds.length, 8);
+});
+
 test('actual Node full run and three partitions preserve file completion, identities/statuses and process isolation', async t => {
   const f = await fixture(); t.after(() => rm(f.root, { recursive: true, force: true }));
   const universe = await enumerateExecutionFiles(f.root);
