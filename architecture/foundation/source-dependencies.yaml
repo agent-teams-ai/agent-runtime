@@ -37,6 +37,48 @@ governedRoots:
 - packages/contexts/provider-access/scripts
 - packages/contexts/runtime-security/scripts
 boundaries:
+- id: core.agent-execution.interactive-session
+  dependencyMode: runtime
+  roots:
+  - packages/contexts/agent-execution/src/features/interactive-agent-session/application
+  - packages/contexts/agent-execution/src/features/interactive-agent-session/contracts
+  - packages/contexts/agent-execution/src/features/interactive-agent-session/domain
+  entrypoints:
+  - packages/contexts/agent-execution/src/features/interactive-agent-session/application/ports/outbound/interactive-provider-driver.ts
+  - packages/contexts/agent-execution/src/features/interactive-agent-session/application/ports/outbound/interactive-session-ports.ts
+  - packages/contexts/agent-execution/src/features/interactive-agent-session/application/use-cases/interactive-session-owner.ts
+  - packages/contexts/agent-execution/src/features/interactive-agent-session/application/use-cases/normalize-provider-event.ts
+  - packages/contexts/agent-execution/src/features/interactive-agent-session/application/use-cases/session-mutation.ts
+  - packages/contexts/agent-execution/src/features/interactive-agent-session/contracts/interactive-provider-driver.ts
+  - packages/contexts/agent-execution/src/features/interactive-agent-session/contracts/interactive-session.ts
+  - packages/contexts/agent-execution/src/features/interactive-agent-session/domain/session.ts
+  allow:
+    boundaries: []
+    packages: []
+    builtins: []
+    runtimeReferences: []
+- id: adapter.agent-execution.interactive-postgres
+  dependencyMode: runtime
+  roots:
+  - packages/contexts/agent-execution/src/features/interactive-agent-session/adapters
+  entrypoints:
+  - packages/contexts/agent-execution/src/features/interactive-agent-session/adapters/outbound/postgres-session-store.ts
+  allow:
+    boundaries: [core.agent-execution.interactive-session]
+    packages: [pg]
+    builtins: []
+    runtimeReferences: []
+- id: composition.agent-execution.interactive-session
+  dependencyMode: runtime
+  roots:
+  - packages/contexts/agent-execution/src/features/interactive-agent-session/composition
+  entrypoints:
+  - packages/contexts/agent-execution/src/features/interactive-agent-session/composition/interactive-session-factory.ts
+  allow:
+    boundaries: [core.agent-execution.interactive-session]
+    packages: []
+    builtins: []
+    runtimeReferences: []
 - id: core.agent-execution.contained-turn
   dependencyMode: runtime
   roots:
@@ -450,6 +492,9 @@ boundaries:
 - id: production.agent-execution
   dependencyMode: runtime
   roots:
+  - packages/contexts/agent-execution/src/features/interactive-agent-session/index.ts
+  - packages/contexts/agent-execution/src/features/interactive-agent-session/internal.ts
+  - packages/contexts/agent-execution/src/interactive-contracts.ts
   - packages/contexts/agent-execution/src/composition.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/codex-native-files/codex-native-broker-file-installer.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-artifact-custody.ts
@@ -553,6 +598,7 @@ boundaries:
   - packages/contexts/agent-execution/src/features/runtime-installation-discovery/internal.ts
   - packages/contexts/agent-execution/src/index.ts
   entrypoints:
+  - packages/contexts/agent-execution/src/interactive-contracts.ts
   - packages/contexts/agent-execution/src/index.ts
   - packages/contexts/agent-execution/src/composition.ts
   - packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/contained-turn-filesystem-custody.ts
@@ -561,6 +607,9 @@ boundaries:
   - packages/contexts/agent-execution/src/features/contained-agent-turn/composition/node-kernel-workspace-authority.ts
   allow:
     boundaries:
+    - core.agent-execution.interactive-session
+    - adapter.agent-execution.interactive-postgres
+    - composition.agent-execution.interactive-session
     - adapter.agent-execution.claude-agent-sdk
     - adapter.agent-execution.codex-app-server
     - adapter.agent-execution.docker-custody
@@ -593,6 +642,7 @@ boundaries:
     - node:timers/promises
     runtimeReferences: []
   packageExports:
+  - ./interactive-contracts
   - .
   - ./composition
 - id: production.provider-access
@@ -1462,6 +1512,9 @@ boundaries:
   entrypoints: []
   allow:
     boundaries:
+    - core.agent-execution.interactive-session
+    - adapter.agent-execution.interactive-postgres
+    - composition.agent-execution.interactive-session
     - adapter.agent-execution.claude-agent-sdk
     - adapter.agent-execution.codex-app-server
     - adapter.agent-execution.codex-data

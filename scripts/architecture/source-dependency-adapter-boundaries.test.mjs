@@ -208,6 +208,19 @@ function registerPolicyChecks() {
     assert.ok(rules(await analyzeFixture({
       [paths.core]: "import type {} from '@anthropic-ai/claude-agent-sdk';\n",
     })).includes("architecture.source-dependencies.forbidden-package-dependency"));
+    const interactive = "packages/contexts/agent-execution/src/features/interactive-agent-session";
+    const selected = boundariesById.get("core.agent-execution.interactive-session");
+    assert.deepEqual(selected.allow, {boundaries: [], packages: [], builtins: [], runtimeReferences: []});
+    for (const [source, expected] of [
+      ["import 'node:fs';", "architecture.source-dependencies.forbidden-builtin-dependency"],
+      ["import type {} from '@anthropic-ai/claude-agent-sdk';", "architecture.source-dependencies.forbidden-package-dependency"],
+      ["import type {} from '@get-modular/assembly';", "architecture.source-dependencies.forbidden-package-dependency"],
+      ["import '../../adapters/outbound/postgres-session-store.js';", "architecture.source-dependencies.forbidden-boundary-dependency"],
+    ]) {
+      const diagnostics = await analyzeFixture({[`${interactive}/application/use-cases/negative-fixture.ts`]: source});
+      assert.ok(rules(diagnostics).includes(expected), JSON.stringify(diagnostics));
+      assert.ok(!rules(diagnostics).includes("architecture.source-dependencies.unclassified-source-file"));
+    }
   });
 
   test("Filesystem Custody source collector keeps policy inside its scoped tooling boundary", async () => {
@@ -407,6 +420,9 @@ function registerAdapterChecks() {
     assert.deepEqual(composition.allowedBuiltins, ["node:util"]);
     assert.deepEqual(composition.allowedRuntimeReferences, []);
     assert.deepEqual(production.allowedBoundaries, [
+      "core.agent-execution.interactive-session",
+      "adapter.agent-execution.interactive-postgres",
+      "composition.agent-execution.interactive-session",
       "adapter.agent-execution.claude-agent-sdk",
       "adapter.agent-execution.codex-app-server",
       "adapter.agent-execution.docker-custody",

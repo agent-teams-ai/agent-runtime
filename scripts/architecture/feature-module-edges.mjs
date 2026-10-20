@@ -56,7 +56,7 @@ export const curatedModuleImportIssues = (context) => {
   const target = moduleForPath(declaredModules, targetPath);
   const source = moduleForPath(declaredModules, path);
   if (!target || !source || target.id === source.id) {return;}
-  const curatedTargets = target.curatedExports.map((entry) => `${target.sourceRoot}/${entry === "." ? "index.ts" : "composition.ts"}`);
+  const curatedTargets = target.curatedExports.map((entry) => `${target.sourceRoot}/${entry === "." ? "index.ts" : `${entry.slice(2)}.ts`}`);
   const issues = [];
   if (!curatedTargets.includes(targetPath)) {
     issues.push(issue("FM_MODULE_DEEP_IMPORT", path, imported.line, `${source.id} must consume ${target.id} through a curated assembly entry`));

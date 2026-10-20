@@ -18,7 +18,7 @@ const SOURCE_EXTENSIONS = new Set([".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx",
 const TEST_FILE = /(?:^|\/)[^/]+\.(?:test|spec)\.(?:[cm]?[jt]sx?)$/u;
 const compareText = (left, right) => left < right ? -1 : left > right ? 1 : 0;
 
-const EXPORT_STEMS = Object.freeze({ ".": "index", "./composition": "composition" });
+const EXPORT_STEMS = Object.freeze({ ".": "index", "./composition": "composition", "./interactive-contracts": "interactive-contracts" });
 
 const curatedPackageExports = (exports, curated) => {
   if (!exports || !curated?.length) {return false;}

@@ -39,3 +39,5 @@ export type {
   SubmitContainedTurnOptions,
   SubmitContainedTurnOutcome,
 } from "./features/contained-agent-turn/index.js";
+
+export type {InteractiveSessionApi, SessionEvent, SessionLimits, SessionOutcome, SessionRef, SessionReply, SessionScope, SessionStatus, SessionView} from "./features/interactive-agent-session/index.js";
