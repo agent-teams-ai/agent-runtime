@@ -10,6 +10,7 @@ export interface InteractiveSessionFeature {
     readonly pumpOutput: (ref: SessionRef) => Promise<SessionReply>;
     readonly recover: (ref: SessionRef) => Promise<SessionReply>;
     readonly checkpoint: (ref: SessionRef) => Promise<SessionReply>;
+    readonly cleanup: (ref: SessionRef) => Promise<SessionReply>;
   };
 }
 export function createInteractiveSessionFeature(dependencies: InteractiveSessionDependencies): InteractiveSessionFeature {
@@ -17,5 +18,5 @@ export function createInteractiveSessionFeature(dependencies: InteractiveSession
   const owner = new InteractiveSessionOwner(dependencies);
   return {session: {open: owner.open.bind(owner), read: owner.read.bind(owner), submit: owner.submit.bind(owner),
     reply: owner.reply.bind(owner), interrupt: owner.interrupt.bind(owner), close: owner.close.bind(owner), restore: owner.restore.bind(owner)},
-  control: {dispatch: owner.dispatch.bind(owner), pumpOutput: owner.pumpOutput.bind(owner), recover: owner.recover.bind(owner), checkpoint: owner.checkpoint.bind(owner)}};
+  control: {dispatch: owner.dispatch.bind(owner), pumpOutput: owner.pumpOutput.bind(owner), recover: owner.recover.bind(owner), checkpoint: owner.checkpoint.bind(owner), cleanup: owner.cleanup.bind(owner)}};
 }

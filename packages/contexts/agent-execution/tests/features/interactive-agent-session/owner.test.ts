@@ -231,3 +231,79 @@ test("interaction validation snapshots data without caller get traps and contain
   assert.equal((await f.owner.reply(ref, "proxy-valid", "approval-proxy", caller as never)).status, "accepted");
   assert.equal(reads, 0); assert.deepEqual(observed, {kind: "permission", decision: "allow"});
 });
+
+test("lost-owner closure requires independent exact-generation logical and grant proof before compatible idle restore", async () => {
+  const f = fixture(); await open(f); await f.owner.checkpoint(ref);
+  const recovered = new InteractiveSessionOwner(f.deps);
+  await recovered.recover(ref);
+  const absentOrWrong = [
+    undefined,
+    {session: {...ref, generation: 2}, logicalClosed: true, grantsClosed: true},
+    {session: {...ref, tenantId: "foreign"}, logicalClosed: true, grantsClosed: true},
+    {session: {...ref, sessionId: "foreign"}, logicalClosed: true, grantsClosed: true},
+    {session: ref, logicalClosed: false, grantsClosed: true},
+    {session: ref, logicalClosed: true, grantsClosed: false},
+  ];
+  for (const ownerClosure of absentOrWrong) {
+    f.deps.custody.close = async () => ({outputDrained: true, resourcesStopped: true, ...(ownerClosure === undefined ? {} : {ownerClosure})} as never);
+    assert.equal((await recovered.close(ref)).status, "unknown");
+    assert.equal((await recovered.restore(ref, "restore", "config-1")).status, "unsupported");
+  }
+  f.deps.custody.close = async () => ({outputDrained: true, resourcesStopped: true,
+    ownerClosure: {session: ref, logicalClosed: true, grantsClosed: true}});
+  assert.equal((await recovered.close(ref)).status, "accepted");
+  assert.equal(f.calls.closes, 0, "no lost native handle may be fabricated");
+  assert.equal((await recovered.restore(ref, "restore", "config-1")).status, "accepted");
+  assert.equal((await recovered.read({...ref, generation: 2}))!.status, "ready");
+  assert.equal(f.calls.opened, 2);
+});
+
+test("physical lost-owner closure cannot replay or restore an uncertain active handoff", async () => {
+  const f = fixture(); await open(f); await f.owner.checkpoint(ref); await submit(f); await f.owner.dispatch(ref);
+  const recovered = new InteractiveSessionOwner(f.deps); await recovered.recover(ref);
+  f.deps.custody.close = async () => ({outputDrained: true, resourcesStopped: true,
+    ownerClosure: {session: ref, logicalClosed: true, grantsClosed: true}});
+  assert.equal((await recovered.close(ref)).status, "accepted");
+  assert.equal((await recovered.read(ref))!.inputs[0]!.status, "reconcile_required");
+  assert.equal((await recovered.restore(ref, "restore", "config-1")).status, "unsupported");
+  assert.equal(f.calls.opened, 1); assert.equal(f.calls.handoffs.length, 1);
+});
+
+test("restored provider may reuse its local interaction ID while old-generation authority stays revoked", async () => {
+  const f = fixture(); await open(f); await f.owner.checkpoint(ref);
+  await f.owner.record(ref, {kind: "interaction", interactionId: "local-permission-1", requestKind: "permission", expiresAt: 200});
+  await f.owner.close(ref); await f.owner.restore(ref, "restore", "config-1");
+  const successor = {...ref, generation: 2};
+  assert.equal((await f.owner.record(successor, {kind: "interaction", interactionId: "local-permission-1", requestKind: "permission", expiresAt: 200})).status, "accepted");
+  assert.equal((await f.owner.reply(ref, "old-grant", "local-permission-1", {kind: "permission", decision: "allow"})).status, "unavailable");
+  assert.equal((await f.owner.reply(successor, "new-grant", "local-permission-1", {kind: "permission", decision: "allow"})).status, "accepted");
+  const interactions = (await f.store.read(successor))!.interactions;
+  assert.equal(interactions.find(item => item.generation === 1)!.state, "cancelled");
+  assert.equal(interactions.find(item => item.generation === 2)!.state, "replied");
+});
+
+test("trusted factory disposal retains cleanup authority after public close permission is revoked", async () => {
+  const {createInteractiveSessionFeature} = await import("../../../dist/features/interactive-agent-session/composition/interactive-session-factory.js");
+  const f = fixture(undefined, {authorize: async action => action !== "close"});
+  const feature = createInteractiveSessionFeature(f.deps);
+  await feature.session.open(ref, "open", "config", []);
+  assert.equal((await feature.session.close(ref)).status, "denied");
+  assert.equal((await feature.control.cleanup({...ref, tenantId: "foreign"})).status, "denied");
+  assert.equal(f.calls.closes, 0);
+  assert.equal((await feature.control.cleanup(ref)).status, "accepted");
+  assert.equal((await feature.session.read(ref))!.status, "closed");
+  assert.equal(f.calls.closes, 1);
+});
+
+test("a late factory handle is retired after independent custody closure without a post-cutoff readiness probe", async () => {
+  const f = fixture(); const pending = deferred<{driver: typeof f.driver; capabilities: string[]}>(); const entered = deferred<void>();
+  let readiness = 0; f.driver.checkReadiness = async () => {readiness++; return {ok: true, value: undefined};};
+  const deps = {...f.deps, drivers: {open: async () => {entered.resolve(); return pending.promise;}},
+    custody: {close: async () => ({outputDrained: true, resourcesStopped: true, ownerClosure: {session: ref, logicalClosed: true as const, grantsClosed: true as const}})}};
+  const owner = new InteractiveSessionOwner(deps);
+  const opening = owner.open(ref, "open", "config", []); await entered.promise;
+  assert.equal((await owner.cleanup(ref)).status, "accepted");
+  pending.resolve({driver: f.driver, capabilities: []}); assert.equal((await opening).status, "unavailable");
+  assert.equal(f.calls.closes, 1); assert.equal(readiness, 0);
+  assert.equal((await owner.read(ref))!.status, "closed");
+});

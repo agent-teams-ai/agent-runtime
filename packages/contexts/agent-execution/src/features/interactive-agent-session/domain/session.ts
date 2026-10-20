@@ -39,6 +39,7 @@ export interface SessionInput {
 }
 export interface Interaction {
   readonly interactionId: string;
+  readonly generation: number;
   readonly operationId?: string;
   readonly kind: "permission" | "question";
   readonly expiresAt: number;
@@ -84,7 +85,7 @@ function invalidContents(record: SessionRecord): boolean {
         !["admitted", "dispatching", "sdk_consumed", "succeeded", "failed", "cancelled", "reconcile_required"].includes(input.status) ||
         !["admitted", "dispatching", "sdk_consumed", "known_not_sent", "unknown"].includes(input.delivery) || typeof input.cancellationRequested !== "boolean") ||
       record.commands.some(command => !id(command.commandId) || typeof command.fingerprint !== "string" || !["accepted", "complete", "unknown"].includes(command.disposition)) ||
-      record.interactions.some(interaction => !id(interaction.interactionId) || !Number.isFinite(interaction.expiresAt) ||
+      record.interactions.some(interaction => !id(interaction.interactionId) || !Number.isSafeInteger(interaction.generation) || interaction.generation < 1 || interaction.generation > record.generation || !Number.isFinite(interaction.expiresAt) ||
         !["permission", "question"].includes(interaction.kind) || !["pending", "replying", "replied", "cancelled", "unknown"].includes(interaction.state) ||
         interaction.operationId !== undefined && !record.inputs.some(input => input.operationId === interaction.operationId)) ||
       record.events.some((event, index) => event.sequence !== index + 1 || !Number.isSafeInteger(event.generation) || event.generation < 1 || event.generation > record.generation);
@@ -103,7 +104,7 @@ export function validateRecord(record: SessionRecord): void {
       new Set(record.inputs.map(input => input.inputId)).size !== record.inputs.length ||
       new Set(record.inputs.map(input => input.operationId)).size !== record.inputs.length ||
       new Set(record.commands.map(command => command.commandId)).size !== record.commands.length ||
-      new Set(record.interactions.map(interaction => interaction.interactionId)).size !== record.interactions.length ||
+      new Set(record.interactions.map(interaction => JSON.stringify([interaction.generation, interaction.interactionId]))).size !== record.interactions.length ||
       invalidContents(record)) {
     throw new TypeError("interactive_session_record_invalid");
   }

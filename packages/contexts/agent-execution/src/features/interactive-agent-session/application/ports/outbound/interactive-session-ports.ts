@@ -14,7 +14,12 @@ export interface InteractiveSessionDependencies {
   readonly store: InteractiveSessionStore;
   readonly drivers: DriverFactory;
   readonly authorize: (action: "open" | "submit" | "dispatch" | "reply" | "interrupt" | "close" | "restore", ref: SessionRef) => Promise<boolean>;
-  readonly custody: {readonly close: (ref: SessionRef) => Promise<{readonly outputDrained: boolean; readonly resourcesStopped: boolean}>};
+  readonly custody: {readonly close: (ref: SessionRef) => Promise<{
+    readonly outputDrained: boolean;
+    readonly resourcesStopped: boolean;
+    /** Independent exact-generation custody evidence, never inferred from a stopped process. */
+    readonly ownerClosure?: {readonly session: SessionRef; readonly logicalClosed: true; readonly grantsClosed: true};
+  }>};
   readonly clock: {readonly now: () => number};
   readonly interactionTimeoutMs: number;
   /** Existing trusted Host/provider checkpoint storage; bytes never enter caller snapshots. */
