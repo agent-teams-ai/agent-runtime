@@ -3,12 +3,24 @@ id: runtime.architecture.rust-custody-migration-follow-up
 type: architecture
 status: active
 owner: architecture
-summary: Records the deferred Rust Host Custody migration discussion, research conclusions and decision points outside PR69.
+summary: Retains historical Rust custody research and points to the current external native-team boundary for the new runtime.
 ---
 
 # Rust custody migration follow-up
 
 ## Purpose
+
+**October 20 coordination update:** the owner supplied a new native-team
+handoff, now recorded in the
+[runtime/native coordination contract](agent-runtime-architecture-program-plan.md#native-team-coordination-contract-native-integration).
+It supersedes the planning deferral below for the new runtime integration:
+separate proposed keeper/init repositories own native custody, protocols, the
+generic TS client and artifacts; Agent Runtime owns the TS product port/adapter.
+Repository names remain provisional until the native owner supplies them. The
+Linux+Docker integration needs its own profile/credential/receipt successor and
+qualification; this does not revive or migrate frozen contained PR #69 code.
+The September notes/estimates below remain historical, not a second active plan
+or an instruction for this repository to implement Rust/TS custody again.
 
 **TODO: discuss and plan the Rust Host Custody migration as separate work after
 PR #69.** The owner explicitly deferred the migration on 2026-09-06 after reviewing
