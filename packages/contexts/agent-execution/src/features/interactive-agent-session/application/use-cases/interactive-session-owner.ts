@@ -162,7 +162,8 @@ export class InteractiveSessionOwner {
     let disposition: "sdk_consumed" | "known_not_sent" | "unknown" = "unknown";
     try {
       const handoff = await admission.pending;
-      disposition = handoff.ok ? handoff.value.operationRef === operationId && handoff.value.inputId === admission.inputId ? "sdk_consumed" : "unknown"
+      disposition = handoff.ok ? handoff.value.operationRef === operationId && handoff.value.inputId === admission.inputId &&
+        handoff.value.delivery === "sdk-consumed" && handoff.value.providerAcceptance === "unknown" ? "sdk_consumed" : "unknown"
         : handoff.delivery === "known-not-sent" ? "known_not_sent" : "unknown";
     } catch { /* Acceptance is unknown. */ }
     return (await mutateSession(this.#deps, ref, current => {

@@ -214,3 +214,20 @@ test("question reply fingerprint is independent of dictionary insertion order an
   assert.equal((await f.owner.reply(ref, "answer", "question", {answers: {a: "one", b: "two"}, kind: "question"})).status, "duplicate");
   assert.deepEqual(f.calls.replies, ["question"]);
 });
+
+test("interaction validation snapshots data without caller get traps and contains reflective Proxy failures", async () => {
+  const f = fixture(); await open(f); const input = await submit(f); await f.owner.dispatch(ref);
+  await f.owner.record(ref, {kind: "interaction", ...input, interactionId: "approval-proxy", requestKind: "permission", expiresAt: 200});
+  const before = (await f.store.read(ref))!.commands.length;
+  for (const malformed of [
+    new Proxy({}, {getPrototypeOf() {throw new Error("TEST reflection failure");}}),
+    new Proxy({kind: "permission", decision: "allow"}, {getOwnPropertyDescriptor() {throw new Error("TEST descriptor failure");}}),
+    {kind: "permission", get decision() {throw new Error("TEST accessor must not run");}},
+  ]) {assert.equal((await f.owner.reply(ref, "proxy-invalid", "approval-proxy", malformed as never)).status, "unsupported");}
+  assert.equal((await f.store.read(ref))!.commands.length, before); assert.deepEqual(f.calls.replies, []);
+  let reads = 0; let observed: unknown;
+  f.driver.respondToInteraction = (_id, answer) => {observed = answer; return {ok: true, value: undefined};};
+  const caller = new Proxy({kind: "permission", decision: "allow"}, {get() {reads++; return "invalid-after-read";}});
+  assert.equal((await f.owner.reply(ref, "proxy-valid", "approval-proxy", caller as never)).status, "accepted");
+  assert.equal(reads, 0); assert.deepEqual(observed, {kind: "permission", decision: "allow"});
+});

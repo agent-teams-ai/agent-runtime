@@ -1,19 +1,30 @@
 import type {InteractionReply} from "../ports/outbound/interactive-provider-driver.js";
 
-const object = (value: unknown): value is Record<string, unknown> => value !== null && typeof value === "object"
-  && [Object.prototype, null].includes(Object.getPrototypeOf(value)) && !Reflect.ownKeys(value).some(key => typeof key !== "string");
-const fields = (value: Record<string, unknown>, expected: readonly string[]): boolean => Object.keys(value).length === expected.length
-  && expected.every(key => Object.getOwnPropertyDescriptor(value, key)?.enumerable && "value" in Object.getOwnPropertyDescriptor(value, key)!);
+/** Snapshot plain own data once; never re-read caller getters or Proxy get traps. */
+function dataRecord(value: unknown): Record<string, unknown> | undefined {
+  try {
+    if (value === null || typeof value !== "object" || ![Object.prototype, null].includes(Object.getPrototypeOf(value))) {return;}
+    const properties = Object.getOwnPropertyDescriptors(value);
+    if (Reflect.ownKeys(properties).some(key => typeof key !== "string")) {return;}
+    const detached: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
+    for (const [key, property] of Object.entries(properties)) {
+      if (!property.enumerable || !("value" in property)) {return;}
+      detached[key] = property.value;
+    }
+    return detached;
+  } catch {return;}
+}
 
 /** Validate and detach untrusted JS before any durable decision intent or callback grant. */
 export function interactionAnswer(value: unknown): InteractionReply | undefined {
-  if (!object(value) || !Object.getOwnPropertyDescriptor(value, "kind") || !("value" in Object.getOwnPropertyDescriptor(value, "kind")!)) {return;}
-  if (value.kind === "permission" && fields(value, ["kind", "decision"]) && ["allow", "deny"].includes(value.decision as string)) {
-    return {kind: "permission", decision: value.decision as "allow" | "deny"};
+  const data = dataRecord(value);
+  if (!data || Object.keys(data).length !== 2) {return;}
+  if (data.kind === "permission" && (data.decision === "allow" || data.decision === "deny")) {
+    return {kind: "permission", decision: data.decision};
   }
-  if (value.kind !== "question" || !fields(value, ["kind", "answers"]) || !object(value.answers)) {return;}
-  const answers = value.answers;
-  if (Object.keys(answers).some(key => {const property = Object.getOwnPropertyDescriptor(answers, key); return !property || !("value" in property) || typeof property.value !== "string";})) {return;}
+  if (data.kind !== "question") {return;}
+  const answers = dataRecord(data.answers); if (!answers) {return;}
+  if (Object.values(answers).some(answer => typeof answer !== "string")) {return;}
   return {kind: "question", answers: Object.fromEntries(Object.keys(answers).toSorted().map(key => [key, answers[key] as string]))};
 }
 export function answerFingerprint(interactionId: string, answer: InteractionReply): string {
