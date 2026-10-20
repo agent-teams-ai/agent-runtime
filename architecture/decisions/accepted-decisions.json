@@ -111,6 +111,11 @@
       "id": "ADR-0090",
       "path": "docs/decisions/0090-ordinary-user-session-codex-execution-profile.md",
       "immutableDigest": "sha256:ce26ce717bd00701b2ddf4d073999591cda8b9f0e08b3238290e6646bfe02bf1"
+    },
+    {
+      "id": "ADR-0091",
+      "path": "docs/decisions/0091-interactive-agent-session-synthetic-vertical-slice.md",
+      "immutableDigest": "sha256:73d645ffcb2f8da5fe99a4e2810a46c767a1e8d36e59e8016267204725e25efd"
     }
   ]
 }
