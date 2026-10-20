@@ -10,6 +10,7 @@ import type { ExecutionTarget, WorkflowIdentity } from './package-execution.ts';
 import { assertObservedStreams } from './product-test-observation.ts';
 import { commandInventory } from './script-routing.ts';
 import type { Command, Scripts } from './script-routing.ts';
+import { assertInteractiveProviderPackage, interactiveProviderPackageRoot } from './policy.ts';
 
 // Runtime owns this fixed full-product policy. Reports are observations, never permits.
 export const packageRoots = {
@@ -101,10 +102,16 @@ export async function readProductSource(root: string, tracked: readonly string[]
     assert.ok((await lstat(join(root, path))).isFile(), `non-file tracked input: ${path}`);
     inputs[path] = hash(await readFile(join(root, path)));
   }
-  const manifests = Object.fromEntries(['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', '.node-version',
-    ...roots.map(base => `${base}/package.json`)].toSorted().map(path => [path, inputs[path]!]));
   assert.equal((await readFile(join(root, '.node-version'), 'utf8')).trim(), '26.11.1', 'pinned Node drift');
   const scripts: Scripts = object(JSON.parse(await readFile(join(root, 'package.json'), 'utf8')).scripts) as Scripts;
+  const proofManifest = `${interactiveProviderPackageRoot}/package.json`;
+  if (scripts['check:interactive-provider'] !== undefined) {
+    assert.ok(tracked.includes(proofManifest), 'missing experimental package manifest');
+    assertInteractiveProviderPackage(JSON.parse(await readFile(join(root, proofManifest), 'utf8')));
+  } else { assert.ok(!tracked.includes(proofManifest), 'unregistered experimental package'); }
+  const manifests = Object.fromEntries(['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', '.node-version',
+    ...roots.map(base => `${base}/package.json`), ...(tracked.includes(proofManifest) ? [proofManifest] : [])]
+    .toSorted().map(path => [path, inputs[path]!]));
   const baseline: { scripts: Scripts } = JSON.parse(await readFile(join(root, 'scripts/ci/full-contract.json'), 'utf8'));
   for (const name of ['product:check', 'product:build', ...phaseScripts.flat()]) {
     assert.equal(scripts[name], baseline.scripts[name], `original product script drift: ${name}`);

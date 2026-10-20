@@ -55,6 +55,7 @@ const interactiveProof = {
   script: 'check:interactive-provider',
   command: 'pnpm --filter @agent-teams/interactive-provider-contract-experiment check',
 } as const;
+export const interactiveProviderPackageRoot = 'experiments/interactive-provider-contract';
 
 export function assertInteractiveProviderPackage(manifest: unknown): void {
   assert.ok(manifest !== null && typeof manifest === 'object' && !Array.isArray(manifest));
