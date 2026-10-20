@@ -139,7 +139,58 @@ test("stable31 managed bytes stay exact and the current Foundation source policy
   // Reconstruct the prior CI policy, retaining its fixed whole-document oracle.
   // Get Modular train 1 (AR-1c) admits resources and conformance; reverse only these lines.
   const getModularAdditions = ["    - '@get-modular/resources'\n", "    - '@get-modular/conformance'\n"];
-  const currentSourcePolicyBytes = await read("architecture/foundation/source-dependencies.yaml");
+  // ADR-0091 admits only these exact C policy insertions. Reconstruct a reviewed predecessor before every historic reversal.
+  // Longest groups retire complete new boundaries first; no prior line or historical digest is replaced.
+  const interactivePolicyAdditions = [
+    [
+      "- id: core.embedded-runtime.interactive-host\n  dependencyMode: runtime\n  roots:\n  - packages/apps/embedded-runtime/src/features/interactive-session-runtime/domain\n  - packages/apps/embedded-runtime/src/features/interactive-session-runtime/application\n  - packages/apps/embedded-runtime/src/features/interactive-session-runtime/contracts\n  - packages/apps/embedded-runtime/src/features/interactive-session-runtime/index.ts\n  entrypoints:\n  - packages/apps/embedded-runtime/src/features/interactive-session-runtime/domain/session-host.ts\n  - packages/apps/embedded-runtime/src/features/interactive-session-runtime/index.ts\n  - packages/apps/embedded-runtime/src/features/interactive-session-runtime/contracts/interactive-session-host.ts\n  - packages/apps/embedded-runtime/src/features/interactive-session-runtime/application/ports/outbound/interactive-host-ports.ts\n  - packages/apps/embedded-runtime/src/features/interactive-session-runtime/application/use-cases/create-session-host.ts\n  allow:\n    boundaries: []\n    packages: []\n    builtins: []\n    runtimeReferences: []\n- id: adapter.embedded-runtime.interactive-host\n  dependencyMode: runtime\n  roots:\n  - packages/apps/embedded-runtime/src/features/interactive-session-runtime/adapters\n  entrypoints:\n  - packages/apps/embedded-runtime/src/features/interactive-session-runtime/adapters/outbound/agent-execution-session.ts\n  - packages/apps/embedded-runtime/src/features/interactive-session-runtime/adapters/outbound/provider-generation-fence.ts\n  - packages/apps/embedded-runtime/src/features/interactive-session-runtime/adapters/outbound/directory-host-ownership.ts\n  allow:\n    boundaries:\n    - core.embedded-runtime.interactive-host\n    packages:\n    - '@agent-teams/agent-execution'\n    - \"@agent-teams/filesystem-custody\"\n    builtins:\n    - node:fs\n    - node:fs/promises\n    runtimeReferences: []\n- id: composition.embedded-runtime.interactive-host-feature\n  dependencyMode: runtime\n  roots:\n  - packages/apps/embedded-runtime/src/features/interactive-session-runtime/composition\n  - packages/apps/embedded-runtime/src/features/interactive-session-runtime/internal.ts\n  entrypoints:\n  - packages/apps/embedded-runtime/src/features/interactive-session-runtime/internal.ts\n  - packages/apps/embedded-runtime/src/features/interactive-session-runtime/composition/host.module.ts\n  - packages/apps/embedded-runtime/src/features/interactive-session-runtime/composition/interactive-session-runtime.contracts.ts\n  - packages/apps/embedded-runtime/src/features/interactive-session-runtime/composition/interactive-session-runtime.inputs.ts\n  allow:\n    boundaries:\n    - core.embedded-runtime.interactive-host\n    - adapter.embedded-runtime.interactive-host\n    packages:\n    - \"@agent-teams/agent-execution\"\n    - \"@get-modular/assembly\"\n    - \"@get-modular/core\"\n    - \"@get-modular/resources\"\n    builtins: []\n    runtimeReferences: []\n",
+      1
+    ],
+    [
+      "- id: core.agent-execution.interactive-session\n  dependencyMode: runtime\n  roots:\n  - packages/contexts/agent-execution/src/features/interactive-agent-session/application\n  - packages/contexts/agent-execution/src/features/interactive-agent-session/contracts\n  - packages/contexts/agent-execution/src/features/interactive-agent-session/domain\n  entrypoints:\n  - packages/contexts/agent-execution/src/features/interactive-agent-session/application/ports/outbound/interactive-provider-driver.ts\n  - packages/contexts/agent-execution/src/features/interactive-agent-session/application/ports/outbound/interactive-session-ports.ts\n  - packages/contexts/agent-execution/src/features/interactive-agent-session/application/use-cases/interactive-session-owner.ts\n  - packages/contexts/agent-execution/src/features/interactive-agent-session/application/use-cases/normalize-provider-event.ts\n  - packages/contexts/agent-execution/src/features/interactive-agent-session/application/use-cases/session-mutation.ts\n  - packages/contexts/agent-execution/src/features/interactive-agent-session/contracts/interactive-provider-driver.ts\n  - packages/contexts/agent-execution/src/features/interactive-agent-session/contracts/interactive-session.ts\n  - packages/contexts/agent-execution/src/features/interactive-agent-session/domain/session.ts\n  allow:\n    boundaries: []\n    packages: []\n    builtins: []\n    runtimeReferences: []\n- id: adapter.agent-execution.interactive-postgres\n  dependencyMode: runtime\n  roots:\n  - packages/contexts/agent-execution/src/features/interactive-agent-session/adapters\n  entrypoints:\n  - packages/contexts/agent-execution/src/features/interactive-agent-session/adapters/outbound/postgres-session-store.ts\n  allow:\n    boundaries: [core.agent-execution.interactive-session]\n    packages: [pg]\n    builtins: []\n    runtimeReferences: []\n- id: composition.agent-execution.interactive-session\n  dependencyMode: runtime\n  roots:\n  - packages/contexts/agent-execution/src/features/interactive-agent-session/composition\n  entrypoints:\n  - packages/contexts/agent-execution/src/features/interactive-agent-session/composition/interactive-session-factory.ts\n  allow:\n    boundaries: [core.agent-execution.interactive-session]\n    packages: []\n    builtins: []\n    runtimeReferences: []\n",
+      1
+    ],
+    [
+      "  - packages/contexts/agent-execution/src/features/interactive-agent-session/index.ts\n  - packages/contexts/agent-execution/src/features/interactive-agent-session/internal.ts\n  - packages/contexts/agent-execution/src/interactive-contracts.ts\n",
+      1
+    ],
+    [
+      "  - packages/apps/embedded-runtime/src/composition/interactive-session-host.ts\n  - packages/apps/embedded-runtime/src/composition/interactive-session-host.root.ts\n",
+      2
+    ],
+    [
+      "    - core.embedded-runtime.interactive-host\n    - adapter.embedded-runtime.interactive-host\n    - composition.embedded-runtime.interactive-host-feature\n",
+      1
+    ],
+    [
+      "    - core.agent-execution.interactive-session\n    - adapter.agent-execution.interactive-postgres\n    - composition.agent-execution.interactive-session\n",
+      2
+    ],
+    [
+      "  - packages/contexts/agent-execution/src/interactive-contracts.ts\n",
+      1
+    ],
+    [
+      "    - composition.embedded-runtime.interactive-host-feature\n",
+      1
+    ],
+    [
+      "    - core.embedded-runtime.interactive-host\n",
+      1
+    ],
+    [
+      "  - ./interactive-contracts\n",
+      1
+    ]
+  ];
+  let currentSourcePolicyBytes = await read("architecture/foundation/source-dependencies.yaml");
+  for (const [text, count] of interactivePolicyAdditions) {
+    assert.equal(currentSourcePolicyBytes.split(text).length - 1, count, "exact admitted interactive SourcePolicy insertion");
+    currentSourcePolicyBytes = currentSourcePolicyBytes.replaceAll(text, "");
+  }
+  // These are exact efd3348f and merged B/6feffbec policy bytes; later policy drift still fails closed.
+  assert.ok(new Set(["1b75095144867b2a9fd2bc8b7e9aa770efc5214ff7c806ddf8c014cdb0427bf4", "bb6d1d6ea1c6d97281dced2019b2d401d982c5f4a855d40372d07a687616bdb0"]).has(sha256(currentSourcePolicyBytes)),
+    "interactive reversal retains an exact reviewed SourcePolicy predecessor");
   assert.equal(currentSourcePolicyBytes.split(getModularAdditions[0]).length - 1, 2);
   // Conformance is admitted twice: for Embedded Runtime tests (AR-1c) and for Filesystem Custody tests (issue #189 handle guards).
   assert.equal(currentSourcePolicyBytes.split(getModularAdditions[1]).length - 1, 2);
