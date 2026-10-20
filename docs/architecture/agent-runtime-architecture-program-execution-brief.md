@@ -120,6 +120,10 @@ modify or merge it.
    engine/store and TS policy proceed against the agreed executable fixture.
    Real native artifacts and complete E2E gate only the dependent activation.
    No TS custodian, copied client, stronger-profile claim or weaker fallback.
+   Native owns/version-publishes the dev fixture and bootstrap/recovery exclusion.
+   Runtime AE/RS/PA/Host accept the product receipt/profile mapping before its
+   codec/adapter freeze. Persist correlation before attempt-owned native effects;
+   distinguish PA/RS preparation helper/broker admission from workload claim.
 
 Before each inter-module link, classify it with the main plan's communication
 table and current CMS authoring guide section 21. Choose a snapshot, query,

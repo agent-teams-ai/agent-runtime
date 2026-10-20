@@ -35,9 +35,18 @@ S2 never introduces a Docker wrapper, native inventory journal or TS custodian.
 Persist only the owner-reviewed operation-to-native-attempt/recovery reference
 needed for reconciliation, with exact immutable profile/attempt identity. The
 native resource journal remains native-owned, not mirrored as a second authority.
+Allocate the opaque native correlation key once and persist it in the acknowledged
+operation before any attempt-owned native acquisition/helper/broker launch. Include
+it in subsequent preparation/claim digests; stable child-purpose keys are known
+before requests. Returned native handles do not replace this durable lookup key.
+No replay/new candidate allocates another native attempt without owned admission;
+the internally generated correlation key is not part of the caller's command
+fingerprint. Native enforces exclusive live-owner versus cleanup-recovery custody
+through its client; uncertain exclusion leaves debt and never permits cleanup of
+another live attempt. S2 records references/outcomes, not a second native lock.
 Native acceptance, lost acknowledgement, program exit, stream EOF/delivery,
 container absence and complete inventory cleanup are different facts. Unknown
-DB claim never starts execution; query of an already admitted native attempt
+DB claim never authorizes workload execution; query of an already admitted native attempt
 cannot authorize another launch. Native cleanup-only recovery never decides a
 provider retry or operation outcome. The new Linux+Docker receipt/profile/codec
 successor must be explicit before activation: do not map container absence to
@@ -260,6 +269,9 @@ Both checks run after acquiring the row lock, closing the current pre-lock prepa
 
 `submit-operation` validates and accepts; only acknowledged inserted ownership creates a local flight.
 `prepare-dispatch` acquires authorities, workspace, credentials and reservation before durable preparation.
+Preparation helper/broker launches have their own bounded PA/RS authorization,
+purpose key and deadline. They may precede dispatch claim, but cannot execute the
+workload; otherwise credentials-before-claim and helper-after-claim would deadlock.
 `claim-dispatch` checks selected provider release against recorded preparation immediately before claim.
 `execute-provider-turn` launches only after acknowledged claim and admits output before durable append.
 `close-flight` closes process/drain, snapshots/admission/publish, retires credentials, settles owners,
@@ -275,7 +287,15 @@ Binding records profile identity/revision separately from concrete provider rele
 Preparation includes the bounded release ID, included in the claim's preparation digest.
 Provider terminal references use neutral `sessionRef`/`turnRef`; the adapter maps provider vocabulary.
 Operation adds epoch-ms `acceptedAt`; receipt union adds `workspace_retained {workspaceId}`.
-The maximum receipt count grows from nine to ten; immutable per-kind merging stays strict.
+The retained Darwin receipt set grows from nine to ten; this is not the native
+profile's universal cap or kind union. Before native-dependent codec/adapter
+freeze, AE/RS/PA/Host accept that profile's own finite required-kind set, cap,
+typed facts and closed codec/validation/digest mapping. Unknown profile/kind or
+missing required evidence rejects; do not loosen the Darwin validator globally
+or manufacture `process_group_closed` from native container absence. Runtime
+terminalization for this profile waits for all required authority/output/resource facts; old
+vectors and records retain their exact semantics. Immutable per-kind merging
+stays strict within each selected profile.
 Golden vectors pin canonical SHA-256, command fingerprint, preparation digest and full envelope.
 
 Security reads compare durable identity fields and validate recorded policy integrity, rather than require

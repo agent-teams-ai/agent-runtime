@@ -175,8 +175,8 @@ frozen code or of all test/tooling files.
 
 The mandatory behaviors carried into each affected slice are:
 
-- Durable matching claim before process start; an unknown claim never starts a
-  process or gets an automatic readback/retry. Unknown acceptance is evidence,
+- Durable matching claim before workload start; an unknown claim never starts a
+  workload or gets an automatic readback/retry. Unknown acceptance is evidence,
   not dispatch ownership or retry permission.
 - Exactly one `turn/start`; a possible write never becomes an automatic retry.
   Cancellation, expiry, output-drain and cleanup evidence remain distinct facts.
@@ -252,7 +252,7 @@ The external native lane creates/delivers them and supplies exact identities.
 
 | Owner | Sole implementation responsibility |
 | --- | --- |
-| Native keeper | Per-attempt Rust Host component: Docker resource lifecycle/unknown outcomes, owned process/container identities, init transport, accepted autonomous deadlines, technical resource journal, cleanup-only recovery and enforcement of the selected technical limits/network rules. Owns broker child launch/stop/wait. No host-wide daemon without a demonstrated need. |
+| Native keeper | Per-attempt host-side Rust custodian: Docker resource lifecycle/unknown outcomes, owned process/container identities, init transport, accepted autonomous deadlines, technical resource journal, cleanup-only recovery and enforcement of the selected technical limits/network rules. Owns broker child launch/stop/wait. No host-wide daemon without a demonstrated need. |
 | Native init | Rust execution/stdio/descriptor ownership, bounded queues/backpressure, partial writes, close-input, signals/wait and technical observations; runs under Tini, not a new PID 1 or OCI runtime. Owns its protocol; keeper consumes its pinned compatible version. |
 | Native client/release lane | Keeper external API and generic TS client, protocol compatibility, binaries/images/artifacts and the main real-process/Docker E2E matrix. Client imports no runtime models, PG, provider SDKs or Get Modular. No third repository merely for shared types. |
 | Runtime TS lane | Consumer-owned execution port and keeper adapter, committed claims/operations/receipts/PG, PA/RS and credential/policy decisions, provider protocol/SDK integration, broker HTTP/TLS semantics, workspace/artifact contents, public API and modular Host lifetime. No second Docker engine wrapper, process custodian, native journal or generic keeper client. |
@@ -268,11 +268,22 @@ and native protocol owner fix a small versioned contract plus executable fixture
 1. Protocol version/transport, typed errors, incompatibility and disconnect facts;
    pin client, keeper, init and image/artifact identities, not moving branches.
 2. Request/attempt identity, the exact acceptance of native custody and query of
-   the same attempt after lost acknowledgement. A confirmed runtime claim still
-   precedes executable start. Unknown DB claim never grants start; observing an
-   existing native attempt after a lost reply never grants a second launch.
+   the same attempt after lost acknowledgement. Persist an immutable native
+   correlation key in the acknowledged operation before its first attempt-owned
+   native effect, including preparation helper/resource acquisition; include that key in later
+   preparation/claim identity. Bound child executions use stable purpose-specific
+   keys, known before sending a request, even if native returns another private
+   handle. Query/recovery uses those same keys after crash/lost acknowledgement.
+   A confirmed dispatch claim gates workload execution. A pre-claim auth helper
+   or broker may start only under its existing bounded PA/RS preparation authority,
+   with separate purpose/identity/deadline and no workload-start permission. This
+   is not an exception for arbitrary executables. Unknown DB claim never grants
+   workload start; observing an existing attempt never grants another launch.
 3. Validated command/args/environment, explicit mounts, limits and authentic
-   descriptors; no serialized PID/FD number treated as acquisition authority.
+   descriptors; distinguish host mount-source paths from container/image command
+   and cwd paths. No serialized PID/FD number is acquisition authority. Journal
+   and diagnostic DTOs allow only safe technical facts, never raw launch requests,
+   argv/environment, stdin/output contents or credential values.
 4. Deadline representation/clock and acceptance, independent enforcement,
    stdin-first stop policy and completion bounds. Reconnect does not extend it;
    unavailable Docker/recovery retains discoverable incomplete cleanup.
@@ -282,11 +293,25 @@ and native protocol owner fix a small versioned contract plus executable fixture
 6. Technical query/cleanup/recovery and a retained recovery reference. The Host
    integration owner invokes native startup/recovery via the supplied client;
    deployment startup owns recovery when no runtime Host exists. Native performs
-   cleanup-only recovery, never provider restart/resume or retry policy.
+   cleanup-only recovery, never provider restart/resume or retry policy. The
+   native client/bootstrap contract owns keeper launch/reattachment and proves
+   exclusive live-versus-recovery custody for the same key; runtime adds no local
+   spawn/lock/signal implementation. Refuse/retain debt if exclusion or identity
+   cannot be established; never clean a live sibling's resources.
 7. Resource ownership and identity mismatch refusal. TS owns source/workspace
    content; declaring a mount never transfers permission to delete its source.
    Native release observations are inputs to owner-evaluated receipts, not
    operation truth or permission grants.
+
+The native protocol/client lane publishes and versions the executable contract
+fixture as dev-only support. Runtime pins that exact artifact and adds its own
+independent product assertions, not a second normative fixture/wire schema.
+Production selection rejects a fixture. Agree this technical subset jointly;
+runtime's AE/RS/PA and Host owners separately accept the Linux execution profile,
+closed required-receipt set, limits, authority and credential mapping before
+dependent runtime codec/adapter contracts are frozen. Native publishes technical
+facts, not that product policy. The old ten-receipt Darwin bound is not a generic
+native limit; reject unsupported profiles or receipt mappings before acquisition.
 
 S3 owns broker executable behavior and its narrow credential/policy inputs;
 keeper owns that executable from launch. Do not TS-spawn a production broker
@@ -463,7 +488,7 @@ contains the executor contract and verification policy.
 | N2 | Runtime FMS adoption lane | v1.1 pin + shared FMS kernel/fixtures, deepest owner, visible surfaces/republications, runtime/type edge cycles, load cycles, empty directory rejects, mirrored tests, roles inferred under successor | P7b; compatible Foundation + FMS release installed |
 | PUBLISH-ROUTE | Integrator: package versions/changesets, surface and tarball qualification | Per-package release with migration notes; names/kinds surface report and isolated runtime/types imports. Local package qualification may be used now; shared Foundation mechanism replaces it once available, never two active implementations | Before first relevant package publication, not before authoring its source |
 | CONTAINED-FREEZE | Integrator: exact source/test classification and notices | Keep code/build/typecheck; disable only proven contained-only tests with owned return conditions; all ordinary/shared materialization tests remain. No delete lane | CI-CONTRACT-1; active reachability and shared-test inventory |
-| NATIVE-CONTRACT | Runtime integration + external native protocol owners | Versioned seven-part contract above, shared executable fixture, exact external owner/artifact handoff and rejecting incompatibility/unknown-effect cases | Before diverging adapter/native implementations; no production fixture fallback |
+| NATIVE-CONTRACT | Runtime integration + external native protocol owners; AE/RS/PA/Host own product-profile acceptance | Versioned seven-part contract, native-published dev fixture, durable native correlation, workload/preparation admission split, exclusive recovery and closed product receipt/profile mapping | Before dependent contract/codec freeze; real artifact/E2E qualification before activation; no production fixture fallback |
 | NATIVE-AUTH | PA + native integration owners | Exact helper placement, credential route/file permissions and broker executable inputs; Linux sandbox/identity/refresh proof and scoped profile successor | Before native provider/auth activation; no implicit port of Darwin permission guarantees |
 
 GOV-BASELINE does not imply EF-SURFACE or isolated-install mechanisms exist.

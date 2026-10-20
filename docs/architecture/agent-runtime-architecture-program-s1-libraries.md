@@ -236,9 +236,11 @@ JSONL/Codex continue as independently reusable libraries over structural bytes.
 Runtime owns one narrow execution/byte port and its adapter to that client.
 Its semantic contract, completed jointly under NATIVE-CONTRACT, must preserve:
 
-- One runtime-confirmed claim before executable start; private native attempt/
-  request identity retained before awaiting acceptance. Lost acknowledgement
-  permits query/reconciliation of that same attempt, never a second launch.
+- One confirmed dispatch claim before workload start. PA/RS preparation authority
+  may admit a separately identified auth-helper/broker before claim; it cannot
+  start the workload. Persist the native correlation key before any attempt-owned
+  native effect and bind child purpose keys before requests/awaits. Lost
+  acknowledgement permits query/recovery of that same key, never a new launch.
 - Explicit validated command/args/environment, workspace/mounts and limits;
   immutable launch selection, no ambient environment or persisted PID as authority.
 - Distinct prepared/starting/ready/proven-not-started/start-unknown/closing and
@@ -265,8 +267,9 @@ The Linux+Docker profile needs its own receipt/profile successor: do not infer
 Keep source/workspace/artifact ownership in TS; mounts do not give native cleanup
 permission to remove caller directories. Native owns only its acquired inventory.
 
-Use an executable fixture of the jointly versioned client contract while native
-artifacts are pending. No fixture or in-memory fake enters production selection.
+Use the native protocol/client owner's versioned dev-only executable fixture
+while artifacts are pending; runtime adds product assertions, not another
+normative fixture. No fixture or in-memory fake enters production selection.
 The adapter's real acceptance requires pinned client/keeper/init/image artifacts
 and a complete disposable integration; the external keeper lane owns the broad
 process/Docker matrix. Unsupported or incompatible artifacts refuse explicitly.
@@ -395,9 +398,13 @@ S1 carries the PA-derived mechanism oracle, not a competing edit of PA's secret 
 The helper's Codex performs refresh; Provider Access neither writes auth.json nor issues refresh commands.
 Do not migrate getAuthStatus only to delete it later. PA adopts the three mechanisms once, with its retained custody tests.
 
-Resolve original Q2: rewrite the classified ordinary AE bindings at their current paths and keep their factories/ports.
-S1 does not wait for engine port relocation. The Agent Execution slice later moves those finished bindings once,
-mechanically, after it owns the new port home. The accepted PA/AE feature rewrites merge after N2 directly into
+Resolve original Q2 for JSONL/Codex bindings only: replace their mechanisms at
+the currently legal boundary until the owning slice moves the narrow port home.
+This does not preserve the old POSIX process ABI. S1-NATIVE implements the agreed
+provider-neutral execution port directly; old process factories/ports are
+behavioral references, not a required compatibility layer. The Agent Execution
+slice may mechanically relocate an already finished protocol binding once.
+The accepted PA/AE feature rewrites merge after N2 directly into
 their nested target features; do not first create temporary flat features. That move is not a second rewrite
 and does not reach into contained code.
 This avoids the cycle library -> engine -> provider feature -> library while leaving one explicit relocation owner.
@@ -421,7 +428,9 @@ Module migration owns P7a/P7b and v1.1/N2 equivalents; S1 uses the resulting cur
 No unrelated observation, event or plugin-lifecycle implementation enters this dependency chain.
 
 At each cutover, switch the real consumer and remove its replaced ordinary mechanism in the same coherent delivery.
-Keep factory signatures stable until their owning slice deliberately changes the contract with all consumers.
+Keep unaffected protocol factory signatures stable; native execution signatures
+change once with NATIVE-CONTRACT and their actual consumers, not through a
+temporary POSIX wrapper that must be rewritten again.
 Policy wrappers remain policy; no pass-through compatibility layer survives after the consumer adopts the new API.
 Update packageRoots, governed roots, feature/module edges, public exports, ordinary census, compiler projects and
 CMS classification/evidence together. Frozen contained source/evidence never follows current-library generation.

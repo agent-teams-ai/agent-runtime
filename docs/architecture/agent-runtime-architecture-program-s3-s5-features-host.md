@@ -198,7 +198,10 @@ are external deliveries, not packages to recreate inside Agent Runtime.
 
 S3 owns the provider broker's HTTP/TLS/credential semantics and executable.
 Keeper launches/owns that executable from the first process effect, including
-stop/wait; do not TS-spawn and hand it over later. A broker exit or closed socket
+stop/wait; do not TS-spawn and hand it over later. Helper/broker preparation uses
+its own bounded PA/RS authority and purpose/deadline before dispatch claim when
+needed. Only workload launch requires the committed dispatch claim; a preparation
+request cannot be reused as workload authority. A broker exit or closed socket
 does not prove remote provider cancellation. Keep PA/RS policies and provider
 reconciliation in TS. Runtime owns workspace/artifact content; native mounts and
 cleanup cover only explicitly acquired resources and never grant recursive
@@ -219,7 +222,9 @@ native generality does not authorize a new Claude execution rewrite.
 
 The Host integration owner invokes the native client's startup/cleanup-recovery
 path and retains incomplete custody; deployment startup owns invocation when no
-Host exists. Native recovery never restarts a provider/turn. Fixture integration,
+Host exists. Native bootstrap/reattachment and live-versus-recovery exclusion
+belong to that supplied client/native contract, not a new TS spawn/lock layer.
+Native recovery never restarts a provider/turn. Fixture integration,
 real Rust contract conformance and full Docker E2E are separate acceptance facts.
 Native owns the broad physical matrix; runtime verifies policy mapping and one
 complete pinned chain, including unrelated-resource preservation.

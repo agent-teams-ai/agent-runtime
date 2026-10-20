@@ -315,3 +315,22 @@ native is pending; only dependent physical cutover/E2E waits. Native owns its
 broad E2E matrix, runtime the policy mapping and complete integration; no test-line
 quota. This delivery records coordination, not native implementation, repository
 creation, provider activation or accepted-ADR changes.
+
+66. Owner-requested clarity audit, October 20: resolve five remaining handoff
+ambiguities. A dispatch claim gates workload execution, while a pre-claim
+auth-helper/broker uses only its existing bounded PA/RS preparation authority,
+separate purpose/identity/deadline and no workload permission. This removes the
+credentials-before-claim/helper-after-claim dependency cycle, not an authority
+exception for arbitrary executables. Persist the immutable native correlation
+key before the attempt's first native effect, include it in later preparation/
+claim identity and use stable child-purpose keys for lost-ack query/recovery.
+Native/client bootstrap owns exclusive live-versus-recovery custody; runtime
+does not add a second process/lock implementation.
+The ten-receipt bound is scoped to the retained Darwin set. AE/RS/PA/Host accept
+the native profile's finite required receipts and exact codec/digest mapping
+before dependent runtime contracts freeze; old validators/records are not
+weakened or relabelled. Native protocol/client owns the versioned dev fixture;
+runtime pins it and adds product assertions. The old preserve-factories/ports
+instruction applies only to unaffected protocol bindings, not a mandatory POSIX
+ABI for S1-NATIVE. Host/container path namespaces and safe technical journal/
+diagnostic data are explicit. No runtime/native implementation is claimed.
