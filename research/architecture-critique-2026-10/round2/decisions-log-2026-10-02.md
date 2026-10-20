@@ -266,3 +266,23 @@ contract. Durable/replay delivery and isolated plugins are larger distinct
 scopes. No new blocking product question was found for the selected runtime
 rewrite. Revisit those product choices only when a real consumer selects the
 future capability.
+
+64. Owner clarification request, October 20: focus further planning on this
+runtime, leaving module-platform work to another agent; establish whether the
+existing TypeScript Host is reusable and whether Rust/cross-platform readiness
+was already delivered. Source review distinguishes the real implemented ordinary/
+passive Embedded Host from the Rust technical Supervisor/Guardian spike.
+The September 6 Rust custody migration remains explicitly deferred, with domain,
+API, PA/RS, SDK and HTTP/TLS ownership retained in TypeScript; this request does
+not activate that separate migration. S5 writes the new ordinary/passive target
+composition/API once, preserving suitable independent mechanisms and meaningful
+tests, while replacing constructor DDL/raw-pool wiring and contained-ledger
+coupling. The frozen contained Host and shared materialization/native custody
+keep their separate existing ownership.
+The plan now records the current ordinary Darwin/non-root and arm64-auth limits,
+synthetic Host/Postgres evidence, distinct frozen Linux route evidence and the
+three-OS Rust spike's unqualified production status. No all-platform or successful
+live-provider claim follows from those tests. Existing Host assertions are
+mapped explicitly; obsolete positive constructor-migration expectations become
+verify-only/no-DDL rejection. No new product answer or Get Modular capability is
+needed to complete this bounded plan refinement.

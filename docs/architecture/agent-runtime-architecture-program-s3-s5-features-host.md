@@ -8,7 +8,7 @@ summary: Implementation brief for access, security, execution and Host cutovers 
 
 # S3-S5: capability features, release selection and the Host
 
-Version 3 implementation brief, 2026-10-19. Read the
+Version 3 implementation brief, updated 2026-10-20. Read the
 [program plan](agent-runtime-architecture-program-plan.md), [S1](agent-runtime-architecture-program-s1-libraries.md)
 and [S2](agent-runtime-architecture-program-s2-operations-storage.md) for their
 contracts. This is planned behavior, not an implementation or qualification claim.
@@ -249,6 +249,36 @@ the Host closes owners before journal. Disposal retries join existing drain,
 report incompleteness and retain recovery; abandonment does not report release.
 Preserve `dispose`/`Symbol.asyncDispose` on the public Host if its existing
 contract requires them; narrow owner `close()` ports return facts.
+
+"New Host" means its new ordinary/passive composition and facade under this
+feature, not a whole-runtime Rust port or a demand to throw away useful code.
+The [main plan's reuse/platform map](agent-runtime-architecture-program-plan.md#host-implementation-reuse-and-platform-evidence)
+fixes that boundary. The existing ordinary constructor is real: it supplies
+seven owner dependencies, lazy auth, tenant/project binding and retained cleanup.
+Replace its constructor DDL/raw pool, old access projection and contained-ledger
+coupling together with S2/S5. Retain generic helpers only when their independent
+contract still holds; shared materialization and native custody keep their owners.
+Do not first move the old Host and then rewrite it, or introduce a second
+production root as a fallback. Rust keeper/init remain separately deferred.
+
+Before switching the Host binding, preserve these existing independent oracles:
+
+- `ordinary-runtime-assembly.test.ts`: seven-port binding table, missing/swapped
+  binding rejection before owner construction, public Host lazy auth and no
+  borrowed pool shutdown. Replace the positive constructor-migration assertion
+  with S2/S5's verify-only/no-DDL assertion; do not preserve obsolete behavior.
+- `ordinary-host-disposal.test.ts` and its ownership fixtures: pending/failed
+  capture custody, retained cleanup recovery, independent owner retries and the
+  journal staying writable until owners actually close.
+- Existing private access tests: same-scope binding, exact replay joining,
+  cancellation and uncertain acceptance. Adapt API calls to `operations` once;
+  preserve the separate frozen contained expectations.
+
+These tests establish synthetic integration and physical boundary facts only
+where actually exercised. The ordinary product adapters currently support
+Darwin/non-root plus arm64 auth; keep that cooperative scope. A passive Host
+constructing on Linux, Postgres CI or the separate three-OS Rust experiment does
+not make Linux/Windows ordinary execution supported or live-qualified.
 
 | Public entrypoint | Target |
 | --- | --- |

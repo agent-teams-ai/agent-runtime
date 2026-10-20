@@ -187,6 +187,52 @@ The mandatory behaviors carried into each affected slice are:
 - Borrowed pools and dependencies are never closed by consumers. Owners close
   before the outer journal; abandonment ends waiting, not actual cleanup.
 
+### Host implementation, reuse and platform evidence
+
+The existing TypeScript Embedded Runtime Host is implemented, not an empty
+prototype: it composes passive setup and seven ordinary dependencies, binds a
+trusted tenant/project scope, starts auth lazily and retains construction/
+disposal recovery. S5 writes its replacement ordinary/passive composition and
+`operations` API directly in the target feature. It does not discard correct
+mechanisms merely to satisfy "from scratch", nor move the old root unchanged.
+The old root performs constructor migrations and uses contained-named access/
+disposal contracts; those are precisely the responsibilities S2/S5 replace.
+The frozen contained Host remains compiled and keeps its separate contracts.
+
+TypeScript Host/API/domain ownership and Rust technical custody are different
+boundaries. The owner explicitly deferred the Rust migration on September 6 in
+the [Rust custody follow-up](rust-custody-migration-follow-up.md). Its proposed
+keeper/init would own native process/resource lifecycle; operation authority,
+PA/RS policy, official SDKs and HTTP/TLS remain TypeScript. This program keeps
+that disposition: no whole-Host language port, Rust keeper, updater or Windows
+custody lane is a prerequisite. S1's bounded `node-or-bun` mechanism does not
+claim to complete that deferred custody migration.
+
+| Existing component | S5 disposition |
+| --- | --- |
+| Ordinary/passive composition and public access | Write the new target implementation once: verified storage/no constructor DDL, release selection, `operations`, scoped composition and safe diagnostics. Preserve current refusal, replay, cancellation and ownership behavior. |
+| Generic abort coordination, safe snapshots/validation and setup capabilities | Reuse an unchanged independent helper where its contract still fits; otherwise replace it once in its named ACTIVE-SUPPORT/Host owner. Do not add a dependency on frozen contained policy. |
+| Journal ownership and cleanup-only recovery | Preserve their independent assertions and proven mechanisms. Adapt their owner-local contracts to the new Host; never copy the contained authority/proof ledger as the ordinary disposal policy. |
+| Shared Provider Access materialization and native filesystem custody | Reuse their existing owner/implementation under the stated S2/native distribution contracts; no second rewrite or ownership transfer. |
+| Rust Supervisor/Guardian experiment | Retain its source and evidence as a future technical reference. Audit/qualify selected primitives if that separate migration starts; do not import experiment binaries as production or rewrite them in this program. |
+
+Platform claims are scoped to the executed boundary, not to the language:
+
+| Boundary at the retained source | Implemented/tested evidence | Current limit |
+| --- | --- | --- |
+| Ordinary product execution | Real TS composition plus wiring, lifecycle and disposable Postgres tests; process adapter admits Darwin/non-root and auth additionally requires arm64 | macOS arm64 cooperative user-session candidate; no claim of a fully live-qualified product. Linux/Windows ordinary execution is unsupported by these adapters. |
+| Passive setup and reusable libraries | Tests for their actual portable APIs/declared targets | Passing on Linux or supporting a platform in one library does not qualify ordinary process/auth/custody on it. |
+| Frozen contained Docker/Linux route | One exact registry tuple has implementation-level boundary evidence | Its own record explicitly excludes a live turn; it does not qualify the ordinary Host or every Linux deployment. |
+| Rust Supervisor/Guardian | Retained `aa7685867d5ccbaba7b4eb0f873566f46d676945` synthetic Linux/macOS/Windows matrix, independently read back as successful | Spike proven, production unqualified; signing/distribution, durable recovery and supported-target gates remain open. |
+
+Use [readiness](readiness.md), the exact
+[qualification registry](qualification-registry.json) and the
+[Rust production gates](../spikes/rust-system-boundaries-production-gates.md)
+for those claims. A new ordinary provider/binary revision needs its own selected
+target evidence through FIRST-BUMP; inherited tests or a three-OS Rust spike are
+not that evidence. Keep the current ordinary OS/profile bounds in the rewrite
+and reject unsupported targets; adding Linux/Windows execution is separate scope.
+
 ### Module communication
 
 Follow the accepted [communication practice catalog](https://github.com/agent-teams-ai/get-modular/blob/3dd68a6b26f42159714a4640b613534a55c2c6aa/research/module-communication-2026-10/raw/practices/practices-catalog-v2.md),
