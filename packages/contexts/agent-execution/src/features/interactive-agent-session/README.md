@@ -16,7 +16,14 @@ The factory in package `./composition` fixes dependencies and scope. Its session
 API is separate from trusted Host scheduling controls. `pumpOutput` reads one
 bounded step; the Host owns scheduling. No per-turn lock blocks interaction
 replies. The PostgreSQL adapter borrows its pool; migration and verification are
-explicit. The additive `interactive_session_v1` namespace never migrates frozen
+explicit. Borrowed clients must provide `on('error', listener)` and matching
+`removeListener` forwarding to the underlying checked-out native client; a
+query/release-only wrapper is rejected before SQL. The store owns a nonthrowing
+listener through query completion and release, discards interrupted clients and
+retains unknown COMMIT outcomes. `release` must return only after transferring
+custody to the pool's idle handler or destroying the client; a throwing release
+retains its error guard because transfer remains unproved. The Host still owns
+idle-pool error handling and closing its pool. The additive `interactive_session_v1` namespace never migrates frozen
 contained-turn state. Unknown COMMIT/handoff/control is held for reconciliation,
 not retried as an external effect. Checkpoint bytes remain with trusted Host
 storage; only its selected reference enters this owner record.

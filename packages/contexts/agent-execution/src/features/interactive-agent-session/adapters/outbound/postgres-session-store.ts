@@ -11,14 +11,49 @@ export const INTERACTIVE_SESSION_SCHEMA = `CREATE TABLE IF NOT EXISTS interactiv
 export interface InteractivePostgresClient {
   readonly query: (config: InteractivePostgresQuery) => Promise<{readonly rows: Record<string, unknown>[]; readonly rowCount: number | null}>;
   readonly release: (discard?: boolean) => void;
+  /** Must observe the underlying checked-out client, including asynchronous socket failure. */
+  readonly on: (event: "error", listener: (error: Error) => void) => void;
+  readonly removeListener: (event: "error", listener: (error: Error) => void) => void;
 }
 export interface InteractivePostgresPool {readonly connect: () => Promise<InteractivePostgresClient>}
-const acquire = (pool: InteractivePostgresPool): Promise<InteractivePostgresClient> => new Promise((resolve, reject) => {
+type OwnedClient = Pick<InteractivePostgresClient, "query" | "release">;
+function ownClient(client: InteractivePostgresClient): OwnedClient {
+  if (typeof client.on !== "function" || typeof client.removeListener !== "function") {
+    client.release(true);
+    throw new TypeError("interactive_store_error_registration_required");
+  }
+  const health = {failed: false};
+  const onError = () => {health.failed = true;};
+  try {client.on("error", onError);} catch {
+    client.release(true); client.removeListener("error", onError);
+    throw new TypeError("interactive_store_error_registration_failed");
+  }
+  const assertHealthy = () => {if (health.failed) {throw new Error("interactive_store_connection_failed");}};
+  return {
+    query: async config => {
+      assertHealthy();
+      const result = await client.query(config);
+      assertHealthy();
+      return result;
+    },
+    release: discard => {
+      // Keep the listener through release: native pg transfers custody to its
+      // idle handler or destroys the client before returning. A throwing custom
+      // release has not proved transfer, so retain the nonthrowing error guard.
+      client.release(discard === true || health.failed);
+      client.removeListener("error", onError);
+    },
+  };
+}
+const acquire = (pool: InteractivePostgresPool): Promise<OwnedClient> => new Promise((resolve, reject) => {
   let expired = false;
   const timer = setTimeout(() => {expired = true; reject(new Error("interactive_store_acquisition_timeout"));}, 5000);
-  void pool.connect().then(client => {
+  void Promise.resolve().then(() => pool.connect()).then(client => {
     clearTimeout(timer);
-    if (expired) {client.release();} else {resolve(client);}
+    try {
+      const owned = ownClient(client);
+      if (expired) {owned.release();} else {resolve(owned);}
+    } catch {reject(new Error("interactive_store_acquisition_failed"));}
     return null;
   }, () => {clearTimeout(timer); reject(new Error("interactive_store_acquisition_failed")); return null;});
 });
@@ -43,7 +78,7 @@ export class PostgresInteractiveSessionStore implements InteractiveSessionStore 
   readonly #pool: InteractivePostgresPool;
   constructor(pool: InteractivePostgresPool) {this.#pool = pool;}
 
-  async #write(body: (client: InteractivePostgresClient) => Promise<StoreWrite>): Promise<StoreWrite> {
+  async #write(body: (client: OwnedClient) => Promise<StoreWrite>): Promise<StoreWrite> {
     const client = await acquire(this.#pool);
     let committing = false; let discard = false;
     try {
