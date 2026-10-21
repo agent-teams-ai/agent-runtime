@@ -6,6 +6,7 @@ type Command = { id: string | number } & (
   | { kind: 'notify'; method: string; params: Record<string, unknown> }
   | { kind: 'approval'; requestId: string | number; method: string; params: Record<string, unknown> }
   | { kind: 'raw'; text: string }
+  | { kind: 'mcp-status'; mode: string }
   | { kind: 'hold-interrupts' | 'release-interrupts' | 'disconnect' | 'reject-next-resume' }
 )
 
@@ -13,8 +14,10 @@ let nextThread = 0
 let nextTurn = 0
 let heldInterrupts = false
 let rejectResume = false
+let mcpMode = 'healthy', mcpReads = 0
 const pendingInterrupts: NativeMessage[] = []
 const active = new Map<string, string>()
+const ownedThreads = new Set<string>()
 const emit = (payload: unknown) => process.stdout.write(`${JSON.stringify(payload)}\n`)
 const notify = (method: string, params: Record<string, unknown>) => emit({ jsonrpc: '2.0', method, params })
 const result = (id: string | number | undefined, value: unknown): void => { emit({ jsonrpc: '2.0', id, result: value }) }
@@ -22,6 +25,24 @@ const ipc = (message: unknown) => { if (process.connected) {process.send?.(messa
 function terminal(threadId: string, turnId: string, status: string, message?: string): void {
   if (active.get(threadId) === turnId) {active.delete(threadId)}
   notify('turn/completed', { threadId, turn: { id: turnId, status, ...(message ? { error: { message } } : {}) } })
+}
+function mcpStatus(message: NativeMessage): void {
+  const params = message.params ?? {}; mcpReads++
+  if (typeof params.threadId !== 'string' || !ownedThreads.has(params.threadId) || typeof params.serverName !== 'string' || params.detail !== 'toolsAndAuthOnly') { throw new Error('fixture MCP request binding') }
+  if (mcpMode === 'timeout') { return }
+  if (mcpMode === 'malformed') { result(message.id, { data: 'invalid' }); return }
+  if (mcpMode === 'duplicate-cursor') { result(message.id, { data: [], nextCursor: 'TEST-repeat' }); return }
+  if (mcpMode === 'excessive-pages') { result(message.id, { data: [], nextCursor: 'TEST-page-' + mcpReads }); return }
+  if (mcpMode === 'pagination' && params.cursor === undefined) { result(message.id, { data: [], nextCursor: 'TEST-next' }); return }
+  const status = {
+    name: mcpMode === 'wrong-server' ? 'foreign' : params.serverName,
+    authStatus: 'unsupported', resources: [], resourceTemplates: [],
+    runtimeStatus: mcpMode === 'disconnected' ? 'failed' : mcpMode === 'pending' && mcpReads === 1 ? 'starting' : 'connected',
+    toolsError: mcpMode === 'tools-error' ? 'TEST-discovery-failed' : null,
+    tools: mcpMode === 'wrong-tools' ? {} : { 'look-up.raw': { name: mcpMode === 'wrong-tool-name' ? 'foreign' : 'look-up.raw', inputSchema: { type: 'object' } } },
+  }
+  const { runtimeStatus: _runtimeStatus, ...withoutStatus } = status
+  result(message.id, { data: [mcpMode === 'cached-only' ? withoutStatus : status], nextCursor: null })
 }
 
 readline.createInterface({ input: process.stdin }).on('line', line => {
@@ -39,10 +60,12 @@ readline.createInterface({ input: process.stdin }).on('line', line => {
     }
     const id = message.method === 'thread/resume' ? params.threadId : `thread-${++nextThread}`
     if (typeof id !== 'string') {throw new Error('fixture requires thread ID')}
+    ownedThreads.add(id)
     result(message.id, { thread: { id } })
     notify('thread/started', { thread: { id } })
     return
   }
+  if (message.method === 'mcpServerStatus/list') { mcpStatus(message); return }
   if (message.method === 'turn/start') {
     if (typeof params.threadId !== 'string') {throw new Error('fixture requires thread ID')}
     const id = `turn-${++nextTurn}`
@@ -78,6 +101,7 @@ process.on('message', value => {
   if (command.kind === 'notify') {notify(command.method, command.params)}
   if (command.kind === 'approval') {emit({ jsonrpc: '2.0', id: command.requestId, method: command.method, params: command.params })}
   if (command.kind === 'raw') {process.stdout.write(command.text)}
+  if (command.kind === 'mcp-status') {mcpMode = command.mode; mcpReads = 0}
   if (command.kind === 'hold-interrupts') {heldInterrupts = true}
   if (command.kind === 'reject-next-resume') {rejectResume = true}
   if (command.kind === 'release-interrupts') {

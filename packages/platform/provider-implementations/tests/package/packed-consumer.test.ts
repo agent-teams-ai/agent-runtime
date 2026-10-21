@@ -14,11 +14,14 @@ test('packed consumer imports codecs and declarations without donor checkout or 
   const files = execFileSync('tar', ['-tzf', archive], { encoding: 'utf8' })
   assert.ok(!files.split('\n').some(path => /^package\/(?:src|tests|node_modules)\//u.test(path)))
   const consumer = `import { CodexAppServerClient, createCodexDriverFactory, mapCodexNativeExecLine } from '@agent-teams/provider-implementations/codex';
-import type { CodexDriverHost } from '@agent-teams/provider-implementations/codex';
+import type { CodexDriverConfig, CodexDriverHost } from '@agent-teams/provider-implementations/codex';
 import { createClaudeDriverFactory, openClaudeSession } from '@agent-teams/provider-implementations/claude';
 import { EventFeed } from '@agent-teams/provider-implementations/session-io';
 import type { DriverFactory, Session, EventPayload, Input } from '@agent-teams/provider-session-contracts';
 import type { ClaudeConfig, ClaudeDriverHost } from '@agent-teams/provider-implementations/claude';
+const mandatoryTools: CodexDriverConfig['requiredMcpTools'] = { team: ['look-up.raw'] };
+const finiteStatusMethod: CodexAppServerClient['listMcpServerStatus'] | undefined = undefined;
+if (mandatoryTools.team?.[0] !== 'look-up.raw' || finiteStatusMethod !== undefined) throw Error('finite native MCP contracts');
 const compaction: EventPayload = { kind: 'compaction', sourceRef: 'opaque', reason: 'automatic' };
 const nativeOptions: ClaudeConfig['nativeOptions'] = { permissionMode: 'acceptEdits', settingSources: ['project'], projectInstructions: { append: 'TEST' }, effort: 'high', fastMode: false, context: 'model-default' };
 const namespace: ClaudeConfig['configNamespace'] = 'native-default';

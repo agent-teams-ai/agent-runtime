@@ -28,11 +28,20 @@ export function createCodexDriverFactory(host: CodexDriverHost): DriverFactory {
       restored = selectedDriverCheckpoint(checkpoint, config)
     }
     const driver = new CodexDriverSession(config, restored)
+    const mandatoryNativeTools = Object.keys(config.requiredMcpTools ?? {}).length > 0
     try {
-      const ready = await driver.checkReadiness()
-      if (!ready.ok) {throw new Error('codex.driver.' + ready.code)}
+      if (!mandatoryNativeTools) {
+        const ready = await driver.checkReadiness()
+        if (!ready.ok) {throw new Error('codex.driver.' + ready.code)}
+      }
       await driver.open(restored?.nativeThreadId)
-      return { driver, capabilities }
     } catch { await driver.close(); throw new Error('codex.driver.open-failed') }
+    // Thread-scoped discovery requires the owned native thread. No turn/work is
+    // submitted until native mandatory tools and the Host probe both pass.
+    if (mandatoryNativeTools) {
+      const ready = await driver.checkReadiness()
+      if (!ready.ok) { await driver.close(); throw new Error('codex.driver.' + ready.code) }
+    }
+    return { driver, capabilities }
   } }
 }

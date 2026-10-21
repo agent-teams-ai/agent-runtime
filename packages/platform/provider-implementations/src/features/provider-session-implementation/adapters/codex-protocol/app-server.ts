@@ -7,6 +7,8 @@ import type { CodexAppServerEvent, CodexApprovalHandler, CodexTurnRef } from './
 import { CodexThreadSession } from './thread-session.ts'
 import { nativeThreadId, nativeTurnId } from './notification-mapper.ts'
 import { record, string } from './wire-frames.ts'
+import { captureMcpStatusRequest, decodeMcpStatusPage } from './mcp-status.ts'
+import type { CodexMcpStatusRequest, CodexMcpServerStatusPage } from './mcp-status.ts'
 
 export type CodexAppServerOptions = {
   readonly transport: CodexAppServerTransport
@@ -81,6 +83,17 @@ export class CodexAppServerClient {
 
   /** Protocol availability only; this does not attest provider authentication or process custody. */
   isOpen(): boolean { return this.rpc.isOpen() }
+
+  /** Finite read-only native discovery for an actual thread owned by this client. */
+  async listMcpServerStatus(supplied: CodexMcpStatusRequest, signal?: AbortSignal): Promise<CodexMcpServerStatusPage> {
+    const request = captureMcpStatusRequest(supplied)
+    if (!this.initialized || !this.sessions.has(request.threadId)) { throw new CodexProtocolError('codex.protocol.unbound-mcp-thread', 'not-sent') }
+    await this.initialized
+    const response = await this.rpc.request('mcpServerStatus/list', { ...request, detail: 'toolsAndAuthOnly' },
+      { ...(signal ? { signal } : {}), beforeWrite: () => this.sessions.has(request.threadId) })
+    if (!this.sessions.has(request.threadId)) { throw new CodexProtocolError('codex.protocol.unbound-mcp-thread', 'not-sent') }
+    return decodeMcpStatusPage(response)
+  }
 
   private async handshake(params: CodexInitializeParams): Promise<void> {
     try {

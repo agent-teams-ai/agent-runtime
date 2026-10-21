@@ -27,7 +27,7 @@ function fixture(t) {
     mkdirSync(dirname(join(directory, path)), { recursive: true });
     cpSync(join(root, path), join(directory, path));
   }
-  const extraction = JSON.parse(readFileSync(join(root, "architecture/sdk-growth/provider-attachments.json"), "utf8"));
+  const extraction = JSON.parse(readFileSync(join(root, "architecture/sdk-growth/provider-codex-mcp-readiness.json"), "utf8"));
   for (const {path} of extraction.currentInputs) {
     mkdirSync(dirname(join(directory, path)), {recursive: true});
     cpSync(join(root, path), join(directory, path));
@@ -73,7 +73,7 @@ test("provider capability successor rejects a changed predecessor and missing cu
   mutate(predecessor, "architecture/sdk-growth/provider-session-contracts-extraction.json", value => { value.sourceBase = "changed"; });
   assert.throws(() => checkSdkGrowthProfile(predecessor), /SDK_PROVIDER_SOURCE_DRIFT/u);
   const current = fixture(t);
-  mutate(current, "architecture/sdk-growth/provider-attachments.json", value => { value.currentInputs.pop(); });
+  mutate(current, "architecture/sdk-growth/provider-codex-mcp-readiness.json", value => { value.currentInputs.pop(); });
   assert.throws(() => checkSdkGrowthProfile(current), /SDK_PROVIDER_SOURCE_DRIFT/u);
 });
 test("provider qualification rejects failed engine, SDK-process and retained evidence claims", t => {

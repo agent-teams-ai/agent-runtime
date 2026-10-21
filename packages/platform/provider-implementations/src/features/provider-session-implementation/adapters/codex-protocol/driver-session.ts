@@ -10,6 +10,7 @@ import { CodexProtocolError } from './rpc-types.ts'
 import type { CodexAppServerEvent, CodexTurnOutcome, CodexTurnRef, CodexTurnSubmission } from './session-types.ts'
 import type { CodexThreadSession } from './thread-session.ts'
 import { AttachmentFailure, assertSerializedAttachments, prepareAttachments, snapshotInput, validCanonicalInput, validateAttachments } from '../provider-session-io/attachments.ts'
+import { requiredMcpToolsReady } from './mcp-status.ts'
 
 const failure = (code: FailureCode, unsent = false) => ({ ok: false as const, code, ...(unsent ? { delivery: 'known-not-sent' as const } : {}) })
 type Pending = { input: Input; ownerKey: string; receipt: ReturnType<typeof deferred<Reply<Handoff>>>; abort: AbortController; revoked: boolean; earlyBytes: number;
@@ -85,7 +86,12 @@ export class CodexDriverSession implements Session {
     if (this.state !== 'open' || !this.client.isOpen()) {return failure('unavailable')}
     const deadline = new AbortController()
     try {
-      const ready = await bounded(this.config.probe(AbortSignal.any([deadline.signal, this.abort.signal])), this.config.limits.timeoutMs)
+      const signal = AbortSignal.any([deadline.signal, this.abort.signal])
+      const ready = await bounded((async () => {
+        if (this.config.requiredMcpTools && Object.keys(this.config.requiredMcpTools).length > 0 &&
+          (!this.thread || !await requiredMcpToolsReady(this.client, this.thread.threadId, this.config.requiredMcpTools, signal))) { return false }
+        return this.config.probe(signal)
+      })(), this.config.limits.timeoutMs)
       return ready && this.isUsable() ? { ok: true, value: undefined } : failure('dependency-unavailable')
     } catch { return failure('dependency-unavailable') } finally { deadline.abort() }
   }

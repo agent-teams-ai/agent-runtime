@@ -3383,6 +3383,7 @@ boundaries:
   - packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-turn-projection.ts
   - packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/provider-session-io/io.ts
   - packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/provider-session-io/attachments.ts
+  - packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/mcp-status.ts
   allow:
     boundaries: ["contracts.provider-implementations","contracts.provider-session"]
     packages: ["@agent-teams/provider-session-contracts","@anthropic-ai/claude-agent-sdk"]
