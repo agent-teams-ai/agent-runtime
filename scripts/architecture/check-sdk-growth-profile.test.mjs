@@ -212,6 +212,24 @@ test("scoped public import proof rejects missing successor", t => {
   rmSync(join(directory, "architecture/sdk-growth/interactive-contracts-public-import.json"));
   assert.throws(() => checkSdkGrowthProfile(directory), /ENOENT/u);
 });
+test("current scoped revalidation retains its exact predecessor and release boundary", t => {
+  for (const change of [
+    value => {value.predecessor.sha256 = "0".repeat(64);},
+    value => {value.releaseEligible = true;},
+  ]) {
+    const directory = fixture(t);
+    mutate(directory, "architecture/sdk-growth/interactive-contracts-pg-error-custody-revalidation.json", change);
+    assert.throws(() => checkSdkGrowthProfile(directory), /SDK_SCOPED_IMPORT_REVALIDATION_DRIFT/u);
+  }
+});
+test("current scoped revalidation rejects missing proof or altered executable evidence", t => {
+  const missing = fixture(t);
+  rmSync(join(missing, "architecture/sdk-growth/interactive-contracts-pg-error-custody-revalidation.json"));
+  assert.throws(() => checkSdkGrowthProfile(missing), /ENOENT/u);
+  const changed = fixture(t);
+  writeFileSync(join(changed, "architecture/sdk-growth/evidence/interactive-contracts-pg-error-custody-revalidation.txt"), "unqualified replacement\n");
+  assert.throws(() => checkSdkGrowthProfile(changed), /SDK_SCOPED_IMPORT_REVALIDATION_DRIFT/u);
+});
 test("reject a package qualification promoted to release evidence", t => {
   const directory = fixture(t);
   mutate(directory, "architecture/sdk-growth/qualification.json", value => { value.releaseEligible = true; });

@@ -59,6 +59,20 @@ function checkPackedQualification(repository, qualification, profile, json) {
   ]) {
     assert.equal(createHash("sha256").update(readFileSync(resolve(repository, path))).digest("hex"), expected, "SDK_SCOPED_IMPORT_PROOF_DRIFT");
   }
+  const revalidationPath = `${directory}/interactive-contracts-pg-error-custody-revalidation.json`;
+  const revalidationBytes = readFileSync(resolve(repository, revalidationPath));
+  assert.equal(createHash("sha256").update(revalidationBytes).digest("hex"), "2e9f31cfd1b71685b0580893c8d073a58874e134ae2ed7341cb8abe4c2e60745", "SDK_SCOPED_IMPORT_REVALIDATION_DRIFT");
+  const revalidation = json(revalidationPath);
+  assert.equal(revalidation.predecessor.path, successorPath, "SDK_SCOPED_IMPORT_REVALIDATION_DRIFT");
+  assert.equal(revalidation.predecessor.sha256, createHash("sha256").update(successorBytes).digest("hex"), "SDK_SCOPED_IMPORT_REVALIDATION_DRIFT");
+  assert.equal(revalidation.publicImport, successor.publicImport, "SDK_SCOPED_IMPORT_REVALIDATION_DRIFT");
+  for (const [path, expected] of [
+    [revalidation.manifestPath, revalidation.observation.manifestSha256],
+    [revalidation.testPath, revalidation.testSha256],
+    [revalidation.evidencePath, revalidation.evidenceSha256],
+  ]) {
+    assert.equal(createHash("sha256").update(readFileSync(resolve(repository, path))).digest("hex"), expected, "SDK_SCOPED_IMPORT_REVALIDATION_DRIFT");
+  }
   for (const [index, name] of ["ef160-pack-run-a.txt", "ef160-pack-run-b.txt"].entries()) {
     const bytes = readFileSync(resolve(repository, `${directory}/evidence/${name}`));
     assert.equal(createHash("sha256").update(bytes).digest("hex"), qualification.packEvidence.runSha256[index], "SDK_PACK_EVIDENCE_DRIFT");

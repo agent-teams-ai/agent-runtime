@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "qualification": "scoped-interactive-public-import-revalidation",
+  "authority": "docs/decisions/0091-interactive-agent-session-synthetic-vertical-slice.md",
+  "publicImport": "@agent-teams/agent-execution/interactive-contracts",
+  "productionSourceCommit": "f88850b263c4ad29020f24eca0bba321f0012fe3",
+  "productionSourceTree": "3bec0c2e39f8510012d980a4589b1d4c32ab9f44",
+  "manifestPath": "packages/contexts/agent-execution/package.json",
+  "observation": {
+    "packageName": "@agent-teams/agent-execution",
+    "exportPath": "./interactive-contracts",
+    "targets": {
+      "types": "./dist/interactive-contracts.d.ts",
+      "import": "./dist/interactive-contracts.js"
+    },
+    "archiveSha256": "a1861647d69abc834824650a27e48f6beece4d8c78a0a8f39505f222b6d9ec4d",
+    "manifestSha256": "8763bdb5406634a14045840272700b2b63cc5b52283d456bf43738668970786c",
+    "strictTypesWithoutSdkOrWorkspace": true,
+    "runtimeExports": [],
+    "providerSpecificTypeRejected": true
+  },
+  "testPath": "packages/contexts/agent-execution/tests/package/interactive-contracts-packed-consumer.test.ts",
+  "testSha256": "f1331d6d5bf038835d62790a4329eb3b6b210195ec416f895539e91ec6ccb8ec",
+  "evidencePath": "architecture/sdk-growth/evidence/interactive-contracts-pg-error-custody-revalidation.txt",
+  "evidenceSha256": "d94d46865a43dc1f1ffa925007a12f5e411dace137649425f1621d82981a42b7",
+  "command": [
+    "node",
+    "--test",
+    "packages/contexts/agent-execution/tests/package/interactive-contracts-packed-consumer.test.ts"
+  ],
+  "node": "v26.11.1",
+  "managedJobId": "68d5b67bf83345dae5913cd2dbf33cff",
+  "sdkAdmission": "unchanged-blocked-current-typed-observation",
+  "releaseEligible": false,
+  "predecessor": {
+    "path": "architecture/sdk-growth/interactive-contracts-public-import.json",
+    "sha256": "27898ef1bf9a30897a56dd8cf41235bc812e4344c7ee8f7573bd2eea508fd948"
+  }
+}
