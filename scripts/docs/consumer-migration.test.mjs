@@ -59,6 +59,15 @@ test("projected direct tooling pins and disabled release-age waiting preserve th
     "@get-modular/assembly@0.6.0",
     "@get-modular/resources@0.2.0",
     "@get-modular/conformance@0.4.0",
+    "@anthropic-ai/claude-agent-sdk@0.3.305",
+    "@anthropic-ai/claude-agent-sdk-darwin-arm64@0.3.305",
+    "@anthropic-ai/claude-agent-sdk-darwin-x64@0.3.305",
+    "@anthropic-ai/claude-agent-sdk-linux-arm64-musl@0.3.305",
+    "@anthropic-ai/claude-agent-sdk-linux-arm64@0.3.305",
+    "@anthropic-ai/claude-agent-sdk-linux-x64-musl@0.3.305",
+    "@anthropic-ai/claude-agent-sdk-linux-x64@0.3.305",
+    "@anthropic-ai/claude-agent-sdk-win32-arm64@0.3.305",
+    "@anthropic-ai/claude-agent-sdk-win32-x64@0.3.305",
   ]);
   assert.match(await read("scripts/architecture/feature-module-config.mjs"), /const FOUNDATION_VERSION = "1\.7\.2";/u);
 });
@@ -79,6 +88,7 @@ test("Source Dependencies uses schema v3 with root package and every workspace p
   assert.equal(policy.rootPackage, true);
   assert.equal(Object.hasOwn(policy, "includeRootPackage"), false);
   assert.deepEqual(policy.packageRoots, [
+    "experiments/interactive-provider-contract",
     "packages/apps/embedded-runtime",
     "packages/contexts/agent-execution",
     "packages/contexts/provider-access",
@@ -87,8 +97,11 @@ test("Source Dependencies uses schema v3 with root package and every workspace p
     "packages/platform/filesystem-custody",
   ]);
   assert.deepEqual(policy.governedRoots, [
+    "experiments/interactive-provider-contract",
     "packages/platform/filesystem-custody/native",
-    "experiments",
+    "experiments/runtime-profile-behavior",
+    "experiments/rust-system-boundaries",
+    "experiments/sandbox-backend-hosting",
     "packages/apps/embedded-runtime/src",
     "packages/apps/embedded-runtime/tests",
     "packages/contexts/agent-execution/scripts",
@@ -191,6 +204,21 @@ test("stable31 managed bytes stay exact and the current Foundation source policy
   // These are exact efd3348f and merged B/6feffbec policy bytes; later policy drift still fails closed.
   assert.ok(new Set(["1b75095144867b2a9fd2bc8b7e9aa770efc5214ff7c806ddf8c014cdb0427bf4", "bb6d1d6ea1c6d97281dced2019b2d401d982c5f4a855d40372d07a687616bdb0"]).has(sha256(currentSourcePolicyBytes)),
     "interactive reversal retains an exact reviewed SourcePolicy predecessor");
+  const experimentalSourcePolicyBytes = currentSourcePolicyBytes;
+  // Authenticate and reverse only B's finite TEST boundary/topology amendment.
+  // Historical receipts and every prior policy digest retain their exact bytes.
+  const experimentalMarker = "\n- id: experiments.interactive-draft-contracts\n";
+  const experimentalParts = experimentalSourcePolicyBytes.split(experimentalMarker);
+  assert.equal(experimentalParts.length, 2);
+  assert.equal(sha256(experimentalMarker + experimentalParts[1]), "ef6f64f752963f06f754c98060e90a6a38b8c8b89256eac694a57b3755232d74");
+  const packageRootAddition = "- experiments/interactive-provider-contract\n";
+  assert.equal(experimentalParts[0].split(packageRootAddition).length - 1, 2);
+  const classifiedExperiments = "- experiments/runtime-profile-behavior\n- experiments/rust-system-boundaries\n- experiments/sandbox-backend-hosting\n";
+  assert.equal(experimentalParts[0].split(classifiedExperiments).length - 1, 1);
+  currentSourcePolicyBytes = experimentalParts[0].replaceAll(packageRootAddition, "")
+    .replace(classifiedExperiments, "- experiments\n");
+  assert.equal(sha256(currentSourcePolicyBytes), "1b75095144867b2a9fd2bc8b7e9aa770efc5214ff7c806ddf8c014cdb0427bf4",
+    "TEST experiment reversal retains exact efd3348f main source-policy bytes");
   assert.equal(currentSourcePolicyBytes.split(getModularAdditions[0]).length - 1, 2);
   // Conformance is admitted twice: for Embedded Runtime tests (AR-1c) and for Filesystem Custody tests (issue #189 handle guards).
   assert.equal(currentSourcePolicyBytes.split(getModularAdditions[1]).length - 1, 2);

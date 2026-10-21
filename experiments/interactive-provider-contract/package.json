@@ -1,0 +1,40 @@
+{
+  "name": "@agent-teams/interactive-provider-contract-experiment",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24.21.0 <25 || >=26.10.0 <27"
+  },
+  "description": "TEST-only draft runtime session SPI and Claude SDK proof, not production admission",
+  "exports": {
+    "./draft-contracts": {
+      "types": "./dist/draft-contracts/index.d.ts",
+      "import": "./dist/draft-contracts/index.js"
+    },
+    "./claude": {
+      "types": "./dist/claude/index.d.ts",
+      "import": "./dist/claude/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "node --test test/session.test.ts test/failures.test.ts test/fixture-host.test.ts test/live-preflight.test.ts",
+    "check": "pnpm build && pnpm typecheck && pnpm test",
+    "test:sdk-process": "node --test test/sdk-process.e2e.test.ts",
+    "test:packed": "pnpm build && node --test test/packed-consumer.test.ts",
+    "harness": "node harness/live.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "catalog:interactive-proof",
+    "zod": "catalog:interactive-proof"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "typescript": "catalog:"
+  }
+}

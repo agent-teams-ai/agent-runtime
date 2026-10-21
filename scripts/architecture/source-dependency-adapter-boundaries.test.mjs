@@ -76,6 +76,7 @@ const copyWorkspacePackageManifests = async root => {
     "packages/contexts/runtime-configuration": true,
     "packages/contexts/runtime-security": true,
     "packages/platform/filesystem-custody": true,
+    "experiments/interactive-provider-contract": true,
   })) {
     await writeFixtureFile(
       root,
@@ -129,6 +130,7 @@ const analyzeFixture = async files => {
       '  - "packages/apps/*"',
       '  - "packages/contexts/*"',
       '  - "packages/platform/*"',
+      '  - "experiments/*"',
       "",
     ].join("\n"));
     await copyWorkspacePackageManifests(root);
