@@ -1,112 +1,103 @@
 name: CI scheduling benchmark
 
+# TEMPORARY diagnostic-branch definition. Never merge into required CI.
 on:
-  workflow_dispatch:
-    inputs:
-      revision:
-        description: Exact SHA of this orchestration workflow; both arms use this same SHA
-        required: true
-        type: string
-      arm:
-        type: choice
-        required: true
-        options: [serial, parallel]
-      pair:
-        description: Controller runs at most three pairs, alternating arm order
-        type: choice
-        required: true
-        options: ['1', '2', '3']
+  workflow_dispatch: {}
 
 permissions:
   contents: read
 
 concurrency:
-  group: benchmark-${{ github.workflow_sha }}-${{ inputs.pair }}-${{ inputs.arm }}
+  group: worker-signal-diagnostic-${{ github.workflow_sha }}-${{ github.run_id }}
   cancel-in-progress: false
 
 jobs:
-  serial:
-    name: benchmark-serial-serial
-    if: ${{ inputs.arm == 'serial' }}
-    uses: ./.github/workflows/ci-lane.yml
-    with:
-      script: check
-      artifact: benchmark-serial-serial
-      revision: ${{ inputs.revision }}
-      arm: serial
-
-  quick:
-    name: benchmark-parallel-quick
-    if: ${{ inputs.arm == 'parallel' }}
-    uses: ./.github/workflows/ci-lane.yml
-    with:
-      script: check:ci:quick
-      artifact: benchmark-parallel-quick
-      revision: ${{ inputs.revision }}
-      arm: parallel
-
-  foundation:
-    name: benchmark-parallel-foundation
-    if: ${{ inputs.arm == 'parallel' }}
-    uses: ./.github/workflows/ci-lane.yml
-    with:
-      script: check:ci:foundation
-      artifact: benchmark-parallel-foundation
-      revision: ${{ inputs.revision }}
-      arm: parallel
-
-  architecture:
-    name: benchmark-parallel-architecture
-    if: ${{ inputs.arm == 'parallel' }}
-    uses: ./.github/workflows/ci-lane.yml
-    with:
-      script: check:ci:architecture
-      artifact: benchmark-parallel-architecture
-      revision: ${{ inputs.revision }}
-      arm: parallel
-
-  docs:
-    name: benchmark-parallel-docs
-    if: ${{ inputs.arm == 'parallel' }}
-    uses: ./.github/workflows/ci-lane.yml
-    with:
-      script: check:ci:docs
-      artifact: benchmark-parallel-docs
-      revision: ${{ inputs.revision }}
-      arm: parallel
-
-  product:
-    name: benchmark-parallel-product
-    if: ${{ inputs.arm == 'parallel' }}
-    uses: ./.github/workflows/ci-lane.yml
-    with:
-      script: check:ci:product
-      artifact: benchmark-parallel-product
-      revision: ${{ inputs.revision }}
-      arm: parallel
-
-  benchmark-completeness:
-    name: benchmark-completeness
-    if: ${{ always() }}
-    needs: [serial, quick, foundation, architecture, docs, product]
+  worker-signal-diagnostic:
+    name: diagnostic-only actual Worker signal observation
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 35
+    env:
+      GIT_AUTHOR_NAME: iliya
+      GIT_AUTHOR_EMAIL: iliyazelenkog@gmail.com
+      GIT_COMMITTER_NAME: iliya
+      GIT_COMMITTER_EMAIL: iliyazelenkog@gmail.com
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - name: Checkout reviewed diagnostic observer separately
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           ref: ${{ github.workflow_sha }}
           persist-credentials: false
           fetch-depth: 0
-      - name: Verify benchmark controller revision
-        shell: bash
-        env:
-          EXPECTED_REVISION: ${{ github.workflow_sha }}
-        run: test "$(git rev-parse HEAD)" = "$EXPECTED_REVISION"
-      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+      - name: Checkout unchanged target source
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
-          node-version-file: .node-version
-      - name: Check selected scheduling arm only
-        env:
-          NEEDS: ${{ toJSON(needs) }}
-          BENCHMARK_ARM: ${{ inputs.arm }}
-        run: node scripts/ci/gate.ts benchmark
+          ref: 8b1735d716491445d8d9b97efec4adb40557ea5b
+          path: target
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Verify exact independent checkouts
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_WORKFLOW_SHA"
+          test "$(git -C target rev-parse HEAD)" = 8b1735d716491445d8d9b97efec4adb40557ea5b
+          test -z "$(git -C target status --porcelain)"
+          object=8e5e859d10981e1623d0617e933afc68a9e8770c
+          if ! git -C target cat-file -e "$object^{commit}"; then
+            git -C target fetch --no-tags origin "$object"
+          fi
+          git -C target fsck --connectivity-only --no-reflogs "$object"
+      - name: Setup Node 24 Corepack source
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24.21.0
+          package-manager-cache: false
+      - name: Preserve exact Node 24 TEST executable
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(node -p 'process.version')" = v24.21.0
+          printf 'NODE24_TEST_EXECUTABLE=%s\n' "$(node -p 'process.execPath')" >> "$GITHUB_ENV"
+      - name: Setup pinned Node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version-file: target/.node-version
+          package-manager-cache: false
+      - name: Enable pinned pnpm
+        shell: bash
+        run: |
+          set -euo pipefail
+          selectedNode="$(node -p 'process.execPath')"
+          test "$(node -p 'process.version')" = v26.11.1
+          corepackJs="$RUNNER_TOOL_CACHE/node/24.21.0/$(node -p 'process.arch')/lib/node_modules/corepack/dist/corepack.js"
+          test -f "$corepackJs"
+          export COREPACK_HOME="$RUNNER_TEMP/node-toolchain/corepack"
+          mkdir -p "$RUNNER_TEMP/node-toolchain/bin" "$COREPACK_HOME"
+          printf '#!/bin/sh\nexec "%s" "%s" pnpm "$@"\n' "$selectedNode" "$corepackJs" > "$RUNNER_TEMP/node-toolchain/bin/pnpm"
+          chmod 755 "$RUNNER_TEMP/node-toolchain/bin/pnpm"
+          printf '%s\n' "$RUNNER_TEMP/node-toolchain/bin" >> "$GITHUB_PATH"
+          printf 'COREPACK_HOME=%s\n' "$COREPACK_HOME" >> "$GITHUB_ENV"
+          "$selectedNode" "$corepackJs" pnpm --version
+      - name: Install unchanged target dependencies
+        working-directory: target
+        run: pnpm install --frozen-lockfile
+      - name: Bind disposable diagnostic evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          evidence="$RUNNER_TEMP/TEST-runner-worker-signal-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          mkdir -m 700 "$evidence"
+          printf 'CI_EVIDENCE_DIR=%s\n' "$evidence" >> "$GITHUB_ENV"
+      - name: Observe actual Worker while running unchanged quick measure
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/diagnostics/runner-worker-signal-observer.mts --target "$GITHUB_WORKSPACE/target" | tee "$CI_EVIDENCE_DIR/signal-metadata.txt"
+      - name: Retain diagnostic-only evidence
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: diagnostic-worker-signal-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.CI_EVIDENCE_DIR }}/
+          if-no-files-found: error
+          retention-days: 14
