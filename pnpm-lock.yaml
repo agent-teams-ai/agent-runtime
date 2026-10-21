@@ -84,13 +84,6 @@ catalogs:
     zod:
       specifier: 4.4.3
       version: 4.4.3
-  interactive-proof:
-    '@anthropic-ai/claude-agent-sdk':
-      specifier: 0.3.305
-      version: 0.3.305
-    zod:
-      specifier: 4.6.7
-      version: 4.6.7
   provider-implementations:
     '@anthropic-ai/claude-agent-sdk':
       specifier: 0.3.305
@@ -182,19 +175,25 @@ importers:
 
   experiments/interactive-provider-contract:
     dependencies:
-      '@anthropic-ai/claude-agent-sdk':
-        specifier: catalog:interactive-proof
-        version: 0.3.305(@anthropic-ai/sdk@0.122.0(zod@4.6.7))(@modelcontextprotocol/sdk@1.30.0(supports-color@8.1.1)(zod@4.6.7))(zod@4.6.7)
-      zod:
-        specifier: catalog:interactive-proof
-        version: 4.6.7
+      '@agent-teams/agent-execution':
+        specifier: workspace:*
+        version: link:../../packages/contexts/agent-execution
+      '@agent-teams/provider-implementations':
+        specifier: workspace:*
+        version: link:../../packages/platform/provider-implementations
     devDependencies:
+      '@anthropic-ai/claude-agent-sdk':
+        specifier: catalog:provider-implementations
+        version: 0.3.305(@anthropic-ai/sdk@0.122.0(zod@4.6.7))(@modelcontextprotocol/sdk@1.30.0(supports-color@8.1.1)(zod@4.6.7))(zod@4.6.7)
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.3
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
+      zod:
+        specifier: catalog:provider-implementations
+        version: 4.6.7
 
   packages/apps/embedded-runtime:
     dependencies:

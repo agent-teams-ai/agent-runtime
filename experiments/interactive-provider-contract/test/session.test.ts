@@ -18,10 +18,10 @@ test('malformed JavaScript interaction replies fail closed without consuming the
         { kind: 'question', answers: { choice: 1 } }, { kind: 'question', answers: new Date() },
         { kind: 'question', answers: Object.create({ choice: 'inherited' }) },
         { kind: 'question', answers: { get choice() { throw new Error('must not read accessor'); } } }];
-      for (const reply of invalid) { assert.deepEqual(session.respondToInteraction(interaction.interactionRef, reply as InteractionReply), { ok: false, code: 'unsupported' }); }
+      for (const reply of invalid) { assert.deepEqual((await session.respondToInteraction(interaction.interactionRef, reply as InteractionReply)), { ok: false, code: 'unsupported' }); }
       await tick(); assert.equal(settled, false);
       const reply: InteractionReply = tool === 'Read' ? { kind: 'permission', decision: 'deny' } : { kind: 'question', answers: { choice: 'A' } };
-      assert(session.respondToInteraction(interaction.interactionRef, reply).ok);
+      assert((await session.respondToInteraction(interaction.interactionRef, reply)).ok);
       const result = await pending; assert.equal(result?.behavior, tool === 'Read' ? 'deny' : 'allow');
       if (result?.behavior === 'allow') { assert.deepEqual(result.updatedInput?.answers, { choice: 'A' }); }
     }
@@ -61,12 +61,12 @@ test('permission reply is independent of full prompt queue; question, duplicate 
     assert.deepEqual(await session.submit(input(3)), { ok: false, code: 'backpressure' });
     const abort = new AbortController(); const pending = fake.options.canUseTool?.('Read', { path: '/TEST/file' }, { signal: abort.signal, requestId: 'request-test', toolUseID: 'permission-1' });
     await tick(); const interaction = events.find((e) => e.kind === 'interaction'); assert(interaction?.kind === 'interaction');
-    assert.deepEqual(session.respondToInteraction(interaction.interactionRef, { kind: 'question', answers: {} }), { ok: false, code: 'unsupported' });
-    assert(session.respondToInteraction(interaction.interactionRef, { kind: 'permission', decision: 'allow' }).ok);
-    assert.equal((await pending)?.behavior, 'allow'); assert.deepEqual(session.respondToInteraction(interaction.interactionRef, { kind: 'permission', decision: 'allow' }), { ok: false, code: 'stale' });
+    assert.deepEqual((await session.respondToInteraction(interaction.interactionRef, { kind: 'question', answers: {} })), { ok: false, code: 'unsupported' });
+    assert((await session.respondToInteraction(interaction.interactionRef, { kind: 'permission', decision: 'allow' })).ok);
+    assert.equal((await pending)?.behavior, 'allow'); assert.deepEqual((await session.respondToInteraction(interaction.interactionRef, { kind: 'permission', decision: 'allow' })), { ok: false, code: 'stale' });
     const question = fake.options.canUseTool?.('AskUserQuestion', { questions: [{ question: 'Choice?' }] }, { signal: abort.signal, requestId: 'request-test', toolUseID: 'question-1' });
     await tick(); const questions = events.filter((e) => e.kind === 'interaction'); const q = questions.at(-1); assert(q?.kind === 'interaction');
-    assert(session.respondToInteraction(q.interactionRef, { kind: 'question', answers: { 'Choice?': 'A' } }).ok);
+    assert((await session.respondToInteraction(q.interactionRef, { kind: 'question', answers: { 'Choice?': 'A' } })).ok);
     const answer = await question; assert(answer?.behavior === 'allow'); assert.deepEqual(answer.updatedInput?.answers, { 'Choice?': 'A' });
     const cancelled = fake.options.canUseTool?.('Read', {}, { signal: abort.signal, requestId: 'request-test', toolUseID: 'cancel-1' }); await tick(); abort.abort(); assert.equal((await cancelled)?.behavior, 'deny');
     fake.result(); assert((await second).ok); await tick(); fake.result(1); await tick();
@@ -92,7 +92,7 @@ test('close seals submit and replies before awaiting, is idempotent and reports 
   const interaction = events.find((e) => e.kind === 'interaction'); assert(interaction?.kind === 'interaction');
   const queued = session.submit(input(2)); const close = session.close(); assert.equal(close, session.close());
   assert.deepEqual(await session.submit(input(3)), { ok: false, code: 'unknown' });
-  assert.deepEqual(session.respondToInteraction(interaction.interactionRef, { kind: 'permission', decision: 'allow' }), { ok: false, code: 'unavailable' });
+  assert.deepEqual((await session.respondToInteraction(interaction.interactionRef, { kind: 'permission', decision: 'allow' })), { ok: false, code: 'unavailable' });
   assert.equal((await pending)?.behavior, 'deny'); assert.equal((await queued).ok, false);
   assert.deepEqual(await close, { logicallyClosed: true, cleanup: 'unknown' }); assert.equal(fake.closed, 1); assert.equal(fake.inputs.length, 1);
 });
@@ -122,7 +122,7 @@ test('interrupt fences new interactions and replies through ACK until A terminal
     const pending = request('before-interrupt'); await tick(); const original = events.find((event) => event.kind === 'interaction'); assert(original?.kind === 'interaction');
     const second = session.submit(input(2)); const interrupted = session.interrupt('operation-1');
     assert.equal((await pending)?.behavior, 'deny');
-    assert.equal(session.respondToInteraction(original.interactionRef, { kind: 'permission', decision: 'allow' }).ok, false);
+    assert.equal((await session.respondToInteraction(original.interactionRef, { kind: 'permission', decision: 'allow' })).ok, false);
     const during = request('during-interrupt'); await tick();
     assert.equal(events.filter((event) => event.kind === 'interaction').length, 1, 'cancelled A cannot publish another request');
     assert.equal((await during)?.behavior, 'deny');
@@ -133,7 +133,7 @@ test('interrupt fences new interactions and replies through ACK until A terminal
     fake.result(); assert((await second).ok); await tick();
     const inB = request('B-permission'); await tick(); const current = events.filter((event) => event.kind === 'interaction').at(-1); assert(current?.kind === 'interaction');
     assert.equal(current.operationRef, 'operation-2');
-    assert(session.respondToInteraction(current.interactionRef, { kind: 'permission', decision: 'allow' }).ok);
+    assert((await session.respondToInteraction(current.interactionRef, { kind: 'permission', decision: 'allow' })).ok);
     assert.equal((await inB)?.behavior, 'allow'); fake.result(1); await tick();
   } finally { await session.close(); }
 });

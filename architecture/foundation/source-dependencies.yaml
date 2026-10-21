@@ -3262,7 +3262,8 @@ boundaries:
   - experiments/interactive-provider-contract/src/draft-contracts/index.ts
   allow:
     boundaries: []
-    packages: []
+    packages:
+    - '@agent-teams/agent-execution'
     builtins: []
     runtimeReferences: []
 - id: experiments.interactive-claude-driver
@@ -3272,12 +3273,10 @@ boundaries:
   entrypoints:
   - experiments/interactive-provider-contract/src/claude/index.ts
   allow:
-    boundaries:
-    - experiments.interactive-draft-contracts
+    boundaries: []
     packages:
-    - '@anthropic-ai/claude-agent-sdk'
-    builtins:
-    - node:crypto
+    - '@agent-teams/provider-implementations'
+    builtins: []
     runtimeReferences: []
 - id: experiments.interactive-harness
   dependencyMode: development

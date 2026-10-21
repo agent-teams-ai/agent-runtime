@@ -29,6 +29,9 @@ const scopeMutations = {
   "adds a provider facade beyond its finite admission": (profile) => {
     profile.assemblyFiles.push("packages/platform/provider-implementations/src/hidden.ts");
   },
+  "omits an admitted provider facade": (profile) => {
+    profile.assemblyFiles = profile.assemblyFiles.filter(path => path !== "packages/platform/provider-implementations/src/claude.ts");
+  },
   "widens provider package exports beyond its finite admission": (profile) => {
     profile.scope.productionModules.find(({ id }) => id === "provider-implementations").curatedExports.push("./hidden");
   },

@@ -1,23 +1,25 @@
 # Interactive provider contract experiment
 
-**TEST-only candidate.** Runtime owns the draft contracts in `./draft-contracts`.
-`./claude` is an SDK adapter proof, not a runtime, agent loop, durable queue,
-checkpoint store, business tools host or process supervisor. No production root
-imports it. Phase C must admit a successor runtime contract and move this driver
-subtree to the external provider library once, without parallel copies.
+**TEST-only compatibility consumer.** `./draft-contracts` reexports the canonical
+Agent Execution interactive contract types; `./claude` reexports the single
+workspace provider implementation admitted by ADR-0092. The five experimental
+private algorithm modules have been retired. No production root imports this
+experiment. This package retains the original behavioral, SDK-process and packed
+consumer assertions without owning a second driver, runtime or process supervisor.
 
 This package is outside the accepted Embedded Runtime passive setup Assembly
 scope. Fixed local helpers use static imports. The two meaningful development
-boundaries are the consumer-owned draft SPI and concrete SDK adapter; the test
-Host owns processes, readiness and cleanup. Foundation classifies every source
-root and the SDK dependency edge. The package has real build/typecheck/tests,
+boundaries are the historical contract and driver compatibility entrypoints;
+the test Host owns processes, readiness and cleanup. Foundation classifies every
+source root and the precise workspace package edges. The package has real build/typecheck/tests,
 also called by root `check:ci:quick` and `check:fast`. Current CI-contract census
 admission must pass before delivery; a local package pass is not that admission.
 
 Exact reviewed dependency pair: Claude Agent SDK **0.3.305**, bundled Claude Code
-**2.1.305**, experimental Zod **4.6.7**. The SDK declarations use newer Zod
-preprocess generics despite declaring `^4.0.0`; the experiment therefore has an
-isolated named catalog. Production SDK 0.3.251 and Zod 4.4.3 remain pinned.
+**2.1.305**, Zod **4.6.7**. The SDK declarations use newer Zod
+preprocess generics despite declaring `^4.0.0`; the experiment therefore uses
+the provider library's named catalog. Existing contained-turn SDK 0.3.251 and Zod
+4.4.3 remain pinned.
 
 ```sh
 pnpm --filter @agent-teams/interactive-provider-contract-experiment check
@@ -32,7 +34,9 @@ already handed-off turn seals continuation as unknown: fresh MCP connectivity
 alone cannot prove that the old turn has stopped. The runtime must reconcile
 and retire that execution before recovery. It is not real-provider E2E.
 
-`submit` receipts report SDK iterable handoff and unknown provider acceptance.
+`submit` receipts report `client-consumed` iterable handoff and unknown provider
+acceptance. Interaction replies are awaited because the canonical contract permits
+either a synchronous or asynchronous provider implementation.
 The caller owns durable admission, stable input/operation IDs, idempotency and
 recovery. No input is automatically retried. Only live/queued identity conflicts
 are rejected locally; durable terminal identity retention belongs to runtime.
@@ -107,5 +111,7 @@ with a queued prompt, selected-session resume and scoped cleanup.
 builds and installs the archive in a fresh external TEST consumer, compiles the
 public API and resolves the bundled executable without launching it. This
 opt-in command may fetch missing registry dependencies (preferring cached bytes).
-Electron packaging/signing, runtime custody/durability, production SPI admission
-and Orchestrator/desktop integration remain outside this TEST candidate.
+Electron packaging/signing, production runtime custody qualification and
+Orchestrator/desktop integration remain outside this TEST consumer. Canonical
+SPI admission and provider library ownership are recorded by their runtime ADRs;
+these fixture passes do not certify native authentication or deployment.

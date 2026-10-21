@@ -44,7 +44,8 @@ export class FakeQuery implements QueryHandle {
     }
   }
 }
-export function config(ref = 'runtime-session-A'): ClaudeConfig {
+type FixtureConfig = Omit<ClaudeConfig, 'limits'> & { limits: { -readonly [K in keyof ClaudeConfig['limits']]: ClaudeConfig['limits'][K] } };
+export function config(ref = 'runtime-session-A'): FixtureConfig {
   return {
     sessionRef: ref, trustedBinding: `opaque:${ref}`, accountBinding: 'TEST-account', configRevision: 'TEST-v1',
     cwd: '/TEST-disposable/workspace', model: 'test-model', environment: { HOME: '/TEST-disposable/home', CLAUDE_CONFIG_DIR: '/TEST-disposable/config', PATH: '/usr/bin:/bin' },

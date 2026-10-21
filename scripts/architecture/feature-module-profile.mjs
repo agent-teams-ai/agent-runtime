@@ -305,7 +305,9 @@ const hostAppCompositionAssemblyPath = (path, productionRoots, hostAppRoots) => 
 const profileTopologyIssues = (profile, profilePath) => {
   const issues = [], productionRoots = profile.scope.productionRoots, features = profile.features;
   const expectedCurated = [...productionRoots.flatMap((root) => [`${root}/index.ts`, `${root}/composition.ts`]),
-    ...PROVIDER_IMPLEMENTATION_FACADES,
+    ...profile.scope.productionModules.filter(module => module.id === "provider-implementations"
+      && module.sourceRoot === "packages/platform/provider-implementations/src" && module.adoption === "active")
+      .flatMap(() => PROVIDER_IMPLEMENTATION_FACADES),
     ...profile.scope.productionModules.filter(module => module.id === "agent-execution" && module.sourceRoot === "packages/contexts/agent-execution/src")
       .map(module => `${module.sourceRoot}/interactive-contracts.ts`)];
   const hostAppRoots = new Set(profile.scope.productionModules

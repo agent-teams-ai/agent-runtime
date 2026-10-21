@@ -78,8 +78,8 @@ export async function runLive(manifest: Manifest) {
           if (event.request.kind === 'permission') {
             permissionCount += 1;
             if (session.sessionRef === 'A' && !queued) {queued = session.submit({ inputId: 'A-2', operationRef: 'A-2', content: 'Recall the marker from the first turn. Reply exactly TEST-MULTITURN-ALPHA.' });}
-            session.respondToInteraction(event.interactionRef, { kind: 'permission', decision: 'allow' });
-          } else {session.respondToInteraction(event.interactionRef, { kind: 'question', answers: {} });}
+            (await session.respondToInteraction(event.interactionRef, { kind: 'permission', decision: 'allow' }));
+          } else {(await session.respondToInteraction(event.interactionRef, { kind: 'question', answers: {} }));}
         }
       }
     })(); return session;

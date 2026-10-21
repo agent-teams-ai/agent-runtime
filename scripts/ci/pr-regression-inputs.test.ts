@@ -42,7 +42,7 @@ const trusted = {
 };
 const facts = { node: 'v26.11.1', pnpm: '11.18.0', platform: 'linux', arch: 'x64', glibc: '2.39', execArgv: [] as string[] };
 
-async function fixture(t: test.TestContext, includeInteractiveProof = false) {
+async function fixture(t: test.TestContext, options: { interactiveProof?: boolean; providerLibrary?: boolean } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'ar-pr-regressions-TEST-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   const env = { ...process.env, GIT_CONFIG_NOSYSTEM: '1', GIT_AUTHOR_NAME: 'TEST', GIT_AUTHOR_EMAIL: 'test@example.invalid',
@@ -50,17 +50,18 @@ async function fixture(t: test.TestContext, includeInteractiveProof = false) {
   const git = (...args: string[]) => execFileSync('git', args, { cwd: root, env, encoding: 'utf8' }).trim();
   git('clone', '--quiet', '--shared', repository, '.');
   // Classifier unit fixtures retain the original fixed-six admission envelope.
-  // The current repository's seventh, development-only package must stay FULL;
-  // it is retained separately for the actual current conformance case below.
-  if (!includeInteractiveProof) { await rm(join(root, 'experiments/interactive-provider-contract'), { recursive: true, force: true }); }
+  // Both later package additions stay FULL in the real repository. Only these
+  // historical unit snapshots remove them to exercise the fixed-six envelope.
+  if (options.interactiveProof !== true) { await rm(join(root, 'experiments/interactive-provider-contract'), { recursive: true, force: true }); }
+  if (options.providerLibrary !== true) { await rm(join(root, 'packages/platform/provider-implementations'), { recursive: true, force: true }); }
   // Seed the new common policy at both immutable TEST revisions. First adoption
   // is tested separately; these fixtures model the next package-only PR.
   for (const path of ['package.json', 'pnpm-lock.yaml', 'architecture/foundation/ci-pr-regressions.json', 'architecture/foundation/source-dependencies.yaml',
-    'scripts/ci/pr-regression-inputs.ts', 'scripts/ci/pr-regression-inputs.test.ts', 'scripts/ci/pr-regression-command.ts', 'scripts/ci/conformance.ts', 'scripts/ci/policy.ts',
+    'scripts/ci/pr-regression-inputs.ts', 'scripts/ci/pr-regression-inputs.test.ts', 'scripts/ci/pr-regression-command.ts', 'scripts/ci/conformance.ts', 'scripts/ci/policy.ts', 'scripts/ci/platform-contract.json',
     '.github/workflows/ci-foundation-route.yml', '.github/workflows/ci-pr-regressions.yml']) {
     await cp(join(repository, path), join(root, path));
   }
-  if (includeInteractiveProof) {
+  if (options.interactiveProof === true) {
     const path = 'experiments/interactive-provider-contract/package.json';
     await mkdir(dirname(join(root, path)), { recursive: true });
     await cp(join(repository, path), join(root, path));
@@ -86,9 +87,17 @@ async function fixture(t: test.TestContext, includeInteractiveProof = false) {
 export function registerPrRegressionTests(): void {
   registerFoundationPrExecutionTests();
   test('the experimental seventh manifest remains FULL for later package-only changes', async t => {
-    const f = await fixture(t, true);
+    const f = await fixture(t, { interactiveProof: true });
     await f.body(rc);
     assert.equal((await f.plan(f.freeze())).mode, 'full', 'new development scope does not inherit fixed-six deferrals');
+  });
+  test('the provider production manifest remains FULL without inheriting fixed-six deferrals', async t => {
+    const f = await fixture(t, { providerLibrary: true });
+    await f.body(rc);
+    const result = await f.plan(f.freeze());
+    assert.equal(result.mode, 'full');
+    assert.match(result.reason, /fixed six roots/u);
+    assert.deepEqual(result.deferred, []);
   });
   test('real immutable RC and ER body snapshots defer whole regressions with their independent closures', async t => {
     const f = await fixture(t);
@@ -230,7 +239,7 @@ export function registerPrRegressionTests(): void {
   // Old: there is no live conformance obligation outside the combined test:ci
   // process. New: observe the actual standalone process and reject its failure.
   test('actual current conformance remains blocking when the CI selftests defer', async t => {
-    const f = await fixture(t, true);
+    const f = await fixture(t, { interactiveProof: true, providerLibrary: true });
     await symlink(join(repository, 'node_modules'), join(f.root, 'node_modules'));
     const obligation = prObligations('quick').find(item => item.id === 'ci-conformance');
     assert.deepEqual(obligation, { id: 'ci-conformance', command: 'node scripts/ci/conformance.ts' });
@@ -238,6 +247,14 @@ export function registerPrRegressionTests(): void {
     const execution = await observeRegressionProcess(obligation.command, f.root, process.env);
     assert.equal(execution.code, 0);
     assertPrObligations([obligation], [{ ...obligation, disposition: 'executed', execution }], ['ci-selftests']);
+    const platformPath = join(f.root, 'scripts/ci/platform-contract.json');
+    const platform = await readFile(platformPath, 'utf8');
+    for (const field of ['.github/workflows/ci-darwin-packages.yml', 'scripts/ci/node-runtime-compatibility.test.mjs']) {
+      await writeFile(platformPath, JSON.stringify({ ...JSON.parse(platform), [field]: '0'.repeat(64) }));
+      const staleTrust = await observeRegressionProcess(obligation.command, f.root, process.env);
+      assert.notEqual(staleTrust.code, 0, `${field} remains an actual blocking trust check`);
+    }
+    await writeFile(platformPath, platform);
     await writeFile(join(f.root, '.node-version'), '26.10.0\n');
     const failed = await observeRegressionProcess(obligation.command, f.root, process.env);
     assert.notEqual(failed.code, 0);

@@ -9,6 +9,33 @@ const root = new URL("../../", import.meta.url);
 const read = path => readFile(new URL(path, root), "utf8");
 const json = async path => JSON.parse(await read(path));
 const sha256 = bytes => createHash("sha256").update(bytes).digest("hex");
+// Reverse only the admitted D library and B compatibility amendments before
+// applying the unchanged historical source-policy byte oracles below.
+function reverseProviderImplementationAdmission(bytes) {
+  const marker = "\n- id: contracts.provider-implementations\n";
+  const parts = bytes.split(marker);
+  assert.equal(parts.length, 2);
+  assert.equal(sha256(marker + parts[1]), "0726474641cd0bf7b8f7f39537035c5c57f23b254f82cac923f275db7b2f00b3");
+  bytes = parts[0];
+  for (const suffix of ["", "/src", "/tests", "/scripts"]) {
+    const line = `- packages/platform/provider-implementations${suffix}\n`;
+    assert.equal(bytes.split(line).length - 1, 1);
+    bytes = bytes.replace(line, "");
+  }
+  const replacements = [
+    ["    packages:\n    - '@agent-teams/agent-execution'\n    builtins: []\n    runtimeReferences: []\n- id: experiments.interactive-claude-driver\n",
+      "    packages: []\n    builtins: []\n    runtimeReferences: []\n- id: experiments.interactive-claude-driver\n"],
+    ["    boundaries: []\n    packages:\n    - '@agent-teams/provider-implementations'\n    builtins: []\n",
+      "    boundaries:\n    - experiments.interactive-draft-contracts\n    packages:\n    - '@anthropic-ai/claude-agent-sdk'\n    builtins:\n    - node:crypto\n"],
+  ];
+  for (const [current, previous] of replacements) {
+    assert.equal(bytes.split(current).length - 1, 1);
+    bytes = bytes.replace(current, previous);
+  }
+  assert.equal(sha256(bytes), "90f99378a48ba60cb9a5e88eaa99c93c6070b45397c26a976d21d1a3f0b6cba2",
+    "retain the exact reviewed C14 source-policy predecessor");
+  return bytes;
+}
 const objectId = (type, bytes) => createHash("sha1")
   .update(Buffer.from(`${type} ${bytes.length}\0`)).update(bytes).digest("hex");
 const yaml = async path => {
@@ -95,6 +122,7 @@ test("Source Dependencies uses schema v3 with root package and every workspace p
     "packages/contexts/runtime-configuration",
     "packages/contexts/runtime-security",
     "packages/platform/filesystem-custody",
+    "packages/platform/provider-implementations",
   ]);
   assert.deepEqual(policy.governedRoots, [
     "experiments/interactive-provider-contract",
@@ -125,11 +153,28 @@ test("Source Dependencies uses schema v3 with root package and every workspace p
     "packages/apps/embedded-runtime/scripts",
     "packages/contexts/provider-access/scripts",
     "packages/contexts/runtime-security/scripts",
+    "packages/platform/provider-implementations/src",
+    "packages/platform/provider-implementations/tests",
+    "packages/platform/provider-implementations/scripts",
   ]);
   const source = await read("scripts/architecture/source-dependency-adapter-boundaries.test.mjs");
   assert.doesNotMatch(source, /engineering-foundation\/dist\/capabilities/u);
   assert.match(source, /foundationManifest\.bin\["agent-teams-foundation"\]/u);
   assert.match(source, /"architecture\.source-dependencies", "--consumer", root, "--json"/u);
+});
+
+test("provider policy reversal rejects changed ownership and compatibility permissions", async () => {
+  const current = await read("architecture/foundation/source-dependencies.yaml");
+  const marker = "\n- id: contracts.provider-implementations\n";
+  const offset = current.indexOf(marker);
+  assert.ok(offset > 0);
+  const changedProvider = current.slice(0, offset) + current.slice(offset).replace("node:crypto", "node:child_process");
+  assert.notEqual(changedProvider, current);
+  const removedRoot = current.replace("- packages/platform/provider-implementations/src\n", "");
+  const changedFacade = current.replace("'@agent-teams/provider-implementations'", "'@agent-teams/unadmitted-provider'");
+  for (const mutant of [changedProvider, removedRoot, changedFacade]) {
+    assert.throws(() => reverseProviderImplementationAdmission(mutant));
+  }
 });
 
 test("stable31 managed bytes stay exact and the current Foundation source policy retains reviewed scope", async () => {
@@ -196,7 +241,7 @@ test("stable31 managed bytes stay exact and the current Foundation source policy
       1
     ]
   ];
-  let currentSourcePolicyBytes = await read("architecture/foundation/source-dependencies.yaml");
+  let currentSourcePolicyBytes = reverseProviderImplementationAdmission(await read("architecture/foundation/source-dependencies.yaml"));
   for (const [text, count] of interactivePolicyAdditions) {
     assert.equal(currentSourcePolicyBytes.split(text).length - 1, count, "exact admitted interactive SourcePolicy insertion");
     currentSourcePolicyBytes = currentSourcePolicyBytes.replaceAll(text, "");
