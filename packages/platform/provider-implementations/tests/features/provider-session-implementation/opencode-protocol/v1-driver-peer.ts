@@ -6,6 +6,7 @@ import type { OpenCodeMessage } from '../../../../src/features/provider-session-
 export async function v1Peer() {
   const directory = '/TEST/v1-original', nativeSessionId = 'ses_TESTv1', neighbor = 'ses_TESTneighbor'
   const messages: OpenCodeMessage[] = [], submittedIds: string[] = [], granted: string[] = [], aborted: string[] = []
+  const submittedParts: unknown[][] = []
   let holding = false, permission = false, lostReceipt = false, foreign = false, parentWrong = false
   let heldPermission: (() => void) | undefined, holdPermission = false, heldAbort: (() => void) | undefined, holdAbort = false
   let abortAckOnly = false
@@ -53,7 +54,7 @@ export async function v1Peer() {
       if (url.pathname.endsWith('/prompt_async')) {
         const input = JSON.parse(body) as { messageID: string; parts: Array<{ text: string }>; model: unknown }
         assert.match(input.messageID, /^msg_[0-9a-f]{12}[A-Za-z0-9]{14}$/)
-        submittedIds.push(input.messageID); append(input.messageID, input.parts[0]!.text)
+        submittedIds.push(input.messageID); submittedParts.push(input.parts); append(input.messageID, input.parts[0]!.text)
         if (!holding) {complete()}
         if (lostReceipt) { req.socket.destroy(); return }
         res.writeHead(204); res.end(); return
@@ -72,7 +73,7 @@ export async function v1Peer() {
   })
   server.listen(0, '127.0.0.1'); await once(server, 'listening')
   const address = server.address(); assert(address && typeof address !== 'string')
-  return { endpoint: `http://127.0.0.1:${address.port}`, directory, nativeSessionId, messages, submittedIds, granted, aborted,
+  return { endpoint: `http://127.0.0.1:${address.port}`, directory, nativeSessionId, messages, submittedIds, submittedParts, granted, aborted,
     hold: () => { holding = true }, permission: () => { holding = true; permission = true }, loseReceipt: () => { lostReceipt = true },
     toolCompletedOnly: () => { const toolPart = messages.at(-1)?.parts.find(part => part.type === 'tool'); if (toolPart) {toolPart.state = { ...(toolPart.state as object), status: 'completed', output: 'TEST output', time: { start: tick, end: tick } }} },
     failTool: () => { complete(); const tool = messages.at(-1)!.parts.find(part => part.type === 'tool')!; tool.state = { status: 'error', input: { resource: 'TEST' }, error: 'TEST failed', time: { start: tick - 1, end: tick } } },

@@ -4,9 +4,19 @@ import type { DriverFactory, OpenConfig } from '@agent-teams/provider-session-co
 import { createOpenCodeV2DriverFactory } from '../../../../src/opencode.ts'
 import { nativeConfig } from './v2-driver-support.ts'
 import { driverPeer } from './v2-driver-peer.ts'
+import { artifact, attachedInput } from '../provider-session-io/attachment-support.ts'
 
 const request: OpenConfig = { tenantId: 'TEST-tenant', projectId: 'TEST-project', sessionId: 'TEST-runtime-session', generation: 1,
   configRevision: 'TEST-r1', requiredCapabilities: ['text'] }
+
+test('V2 attachment refs explicitly reject known not sent instead of silently using text queue', async t => {
+  const host = await driverPeer(); t.after(host.close)
+  const { driver } = await createOpenCodeV2DriverFactory({ capabilities: ['text'], resolveConfiguration: async () => nativeConfig(host), readCheckpoint: async () => {} }).open(request)
+  try {
+    assert.deepEqual(await driver.submit(attachedInput([artifact().reference])), { ok: false, code: 'unsupported', delivery: 'known-not-sent' })
+    assert.equal(host.counts().submitted, 0)
+  } finally { await driver.close() }
+})
 
 test('selected native factory refuses unsupported capability before resolving Host or performing HTTP', async t => {
   const host = await driverPeer(); t.after(host.close)

@@ -8,7 +8,7 @@ export type OpenCodeV1DriverHost = {
   readCheckpoint: (reference: string, request: OpenConfig) => Promise<unknown>
   capabilities: readonly string[]
 }
-const supported = new Set(['text', 'tools', 'permission', 'interrupt', 'checkpoint'])
+const supported = new Set(['text', 'tools', 'permission', 'interrupt', 'checkpoint', 'attachments'])
 /** Existing explicitly selected V1 native session only; no Host/bootstrap/materialization. */
 export function createOpenCodeV1DriverFactory(host: OpenCodeV1DriverHost): DriverFactory {
   const capabilities = Object.freeze([...host.capabilities])
@@ -31,7 +31,7 @@ export function createOpenCodeV1DriverFactory(host: OpenCodeV1DriverHost): Drive
       const cp = checkpoint as Record<string, unknown> | null
       if (!cp || cp.version !== 1 || cp.engine !== 'opencode-v1' || cp.nativeSessionId !== config.nativeSessionId || cp.compatibility !== compatibility) {throw new Error('opencode.v1.checkpoint-incompatible')}
     }
-    const driver = new OpenCodeDriverSession({ ...config, engine: 'opencode-v1', compatibility }, signal => createV1DriverBackend(config, signal))
+    const driver = new OpenCodeDriverSession({ ...config, attachmentModel: config.model.providerID + '/' + config.model.modelID, engine: 'opencode-v1', compatibility }, signal => createV1DriverBackend(config, signal))
     const ready = await driver.checkReadiness()
     if (!ready.ok) { await driver.close(); throw new Error('opencode.v1.' + ready.code) }
     return { driver, capabilities }

@@ -2,6 +2,8 @@ import { createHash, randomUUID } from 'node:crypto';
 import type { McpServerConfig, Options } from '@anthropic-ai/claude-agent-sdk';
 import type { Limits } from '@agent-teams/provider-session-contracts';
 import type { ClaudeToolBinding } from './tool-binding.ts';
+import { attachmentCompatibility, snapshotAttachmentPort } from '../provider-session-io/attachments.ts';
+import type { AttachmentPort } from '../provider-session-io/attachments.ts';
 export const SDK_REVISION = '0.3.305';
 export type ClaudeConfig = {
   sessionRef: string;
@@ -11,6 +13,7 @@ export type ClaudeConfig = {
   accountBinding: string;
   configRevision: string;
   environment: Record<string, string>;
+  attachments?: AttachmentPort;
   /** Omission preserves the existing explicit custom-directory requirement. */
   configNamespace?: 'native-default' | 'custom-directory';
   /** Trusted, selected native configuration. No arbitrary SDK options, settings or hooks. */
@@ -44,6 +47,7 @@ export function compatibility(config: ClaudeConfig): string {
   const { cwd, accountBinding, configRevision, model, trustedBinding, nativeTools, autoAllowedTools, requiredTools } = config;
   return createHash('sha256').update(JSON.stringify({ cwd, accountBinding, configRevision, model, trustedBinding, nativeTools, autoAllowedTools, requiredTools,
     toolBindingTools: config.toolBinding?.matchedToolNames,
+    ...(config.attachments ? { attachments: attachmentCompatibility(config.attachments) } : {}),
     ...(config.nativeOptions ? { nativeOptions: selectedOptions(config) } : {}),
     ...(config.configNamespace ? { configNamespace: config.configNamespace, home: config.environment.HOME,
       configDirectory: config.environment.CLAUDE_CONFIG_DIR } : {}) })).digest('hex');
@@ -80,6 +84,7 @@ export function readCheckpoint(value: unknown): Checkpoint | undefined {
 /** Pin the caller's private projection once; later caller mutation cannot change a session. */
 export function snapshotConfig(c: ClaudeConfig): ClaudeConfig {
   return { ...c, environment: { ...c.environment }, nativeTools: [...c.nativeTools],
+    ...(c.attachments !== undefined ? { attachments: snapshotAttachmentPort(c.attachments)! } : {}),
     ...(c.nativeOptions ? { nativeOptions: structuredClone(c.nativeOptions) } : {}),
     autoAllowedTools: [...c.autoAllowedTools], requiredTools: structuredClone(c.requiredTools),
     mcpServers: structuredClone(c.mcpServers), ...(c.toolBinding ? { toolBinding: { ...c.toolBinding, matchedToolNames: [...c.toolBinding.matchedToolNames] } } : {}), limits: { ...c.limits }, custody: { ...c.custody } };

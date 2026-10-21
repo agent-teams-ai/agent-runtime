@@ -8,9 +8,11 @@ import { Interactions } from './interactions.ts';
 import { Normalizer, OutputLimitError, record } from './normalize.ts';
 import { bounded, deferred, EventFeed } from '../provider-session-io/io.ts';
 import { fail } from './primitives.ts';
+import { AttachmentFailure, assertSerializedAttachments, prepareAttachments, snapshotInput, validateAttachments } from '../provider-session-io/attachments.ts';
+import type { PreparedAttachment } from '../provider-session-io/attachments.ts';
 export type QueryHandle = Pick<Query, 'interrupt' | 'close' | 'mcpServerStatus'> & AsyncIterable<unknown>;
 export type QueryFactory = (args: { prompt: AsyncIterable<SDKUserMessage>; options: Options }) => QueryHandle;
-type PendingInput = { input: Input; nativeRef: ReturnType<typeof randomUUID>; receipt: ReturnType<typeof deferred<Reply<Handoff>>>; interactionsCancelled: boolean; toolRevocation: AbortController };
+type PendingInput = { input: Input; handed: boolean; nativeRef: ReturnType<typeof randomUUID>; receipt: ReturnType<typeof deferred<Reply<Handoff>>>; interactionsCancelled: boolean; toolRevocation: AbortController };
 export class ClaudeSession implements Session {
   readonly sessionRef: string;
   private state: 'open' | 'unavailable' | 'closed' = 'open';
@@ -59,9 +61,11 @@ export class ClaudeSession implements Session {
   submit(input: Input): Promise<Reply<Handoff>> {
     if (this.state !== 'open') {return Promise.resolve(fail(this.failure ?? 'unavailable'));}
     if (!input.inputId || !input.operationRef || !input.content || Buffer.byteLength(input.content) > this.config.limits.inputBytes) {return Promise.resolve(fail('backpressure'));}
+    try { input = snapshotInput(input); validateAttachments(input, 'claude', this.config.model, this.config.attachments); }
+    catch (error) { return Promise.resolve({ ok: false, code: error instanceof AttachmentFailure ? error.code : 'invalid-config', delivery: 'known-not-sent' }); }
     if ((this.active?.input.operationRef === input.operationRef || this.active?.input.inputId === input.inputId) || this.queued.some((v) => v.input.operationRef === input.operationRef || v.input.inputId === input.inputId)) {return Promise.resolve(fail('stale'));}
     if (this.queued.length >= this.config.limits.queuedInputs) {return Promise.resolve(fail('backpressure'));}
-    const pending: PendingInput = { input: { ...input }, nativeRef: randomUUID(), receipt: deferred<Reply<Handoff>>(), interactionsCancelled: false, toolRevocation: new AbortController() };
+    const pending: PendingInput = { input, handed: false, nativeRef: randomUUID(), receipt: deferred<Reply<Handoff>>(), interactionsCancelled: false, toolRevocation: new AbortController() };
     this.queued.push(pending); this.wake(); return pending.receipt.promise;
   }
   observe(): AsyncIterable<Event> { return this.feed; }
@@ -110,6 +114,7 @@ export class ClaudeSession implements Session {
   interrupt(operationRef: string): Promise<Reply<{ requested: true; terminal: 'unconfirmed' }>> {
     if (this.state !== 'open') {return Promise.resolve(fail('unavailable'));}
     if (!this.active || this.active.input.operationRef !== operationRef) {return Promise.resolve(fail('stale'));}
+    if (!this.active.handed) {return Promise.resolve(fail('stale'));}
     if (this.control) {return this.control;}
     // Install the fence synchronously. A result cannot release the next handoff until this settles.
     const done = deferred<Reply<{ requested: true; terminal: 'unconfirmed' }>>(); this.control = done.promise;
@@ -153,8 +158,20 @@ export class ClaudeSession implements Session {
       const pending = this.queued.shift();
       if (!pending) {continue;}
       this.active = pending; this.foregroundBound = false; this.messageOwners.clear(); this.toolOwners.clear(); this.streamRef = undefined; this.turnBytes = 0; this.turnEvents = 0; this.normalizer.reset(); this.backgroundNormalizer.reset();
+      let content: SDKUserMessage['message']['content'] = pending.input.content;
+      if (pending.input.attachments?.length) {
+        try {
+          const attachments = await prepareAttachments(pending.input, { trustedBinding: this.config.trustedBinding, sessionRef: this.sessionRef, port: this.config.attachments, signal: pending.toolRevocation.signal, timeoutMs: this.config.limits.timeoutMs });
+          content = claudeContent(pending.input.content, attachments);
+          if (this.active !== pending || this.state !== 'open' || pending.interactionsCancelled || this.control) { throw new AttachmentFailure('stale'); }
+        } catch (error) {
+          pending.toolRevocation.abort(); pending.receipt.resolve({ ok: false, code: error instanceof AttachmentFailure ? error.code : 'unavailable', delivery: 'known-not-sent' });
+          if (this.active === pending) { this.active = undefined; } this.wake(); continue;
+        }
+      }
+      pending.handed = true;
       pending.receipt.resolve({ ok: true, value: { inputId: pending.input.inputId, operationRef: pending.input.operationRef, delivery: 'client-consumed', providerAcceptance: 'unknown' } });
-      yield { type: 'user', message: { role: 'user', content: pending.input.content }, parent_tool_use_id: null, session_id: this.nativeSession, uuid: pending.nativeRef };
+      yield { type: 'user', message: { role: 'user', content }, parent_tool_use_id: null, session_id: this.nativeSession, uuid: pending.nativeRef };
     }
   }
   private handoffAvailable(): boolean {
@@ -270,6 +287,9 @@ export class ClaudeSession implements Session {
     this.failure = this.active && code === 'dependency-unavailable' ? 'unknown' : code;
     if (this.active) {
       this.active.toolRevocation.abort();
+      if (!this.active.handed) { this.active.receipt.resolve({ ok: false, code, delivery: 'known-not-sent' }); this.active = undefined; }
+    }
+    if (this.active) {
       // Exactly one unknown outcome for an accepted input; never auto-replay.
       const event: Event = { sessionRef: this.sessionRef, inputId: this.active.input.inputId, operationRef: this.active.input.operationRef, kind: 'result', outcome: 'unknown', code };
       if (code === 'output-limit') {this.feed.finishWith(this.knownTerminal ? { ...this.knownTerminal, code: 'output-limit' } : event);} else {this.feed.push(event);}
@@ -283,4 +303,20 @@ export class ClaudeSession implements Session {
   }
   private rejectQueued(code: FailureCode): void { for (const pending of this.queued.splice(0)) {pending.receipt.resolve(fail(code));} }
   private wake(): void { this.wakeup.resolve(); this.wakeup = deferred<void>(); }
+}
+
+function claudeContent(text: string, attachments: readonly PreparedAttachment[]): SDKUserMessage['message']['content'] {
+  const blocks: Exclude<SDKUserMessage['message']['content'], string> = [];
+  for (const { reference, bytes } of attachments) {
+    if (reference.mimeType.startsWith('image/')) {
+      blocks.push({ type: 'image', source: { type: 'base64', media_type: reference.mimeType as 'image/png' | 'image/jpeg' | 'image/webp' | 'image/gif', data: Buffer.from(bytes).toString('base64') } });
+    } else if (reference.mimeType === 'application/pdf') {
+      blocks.push({ type: 'document', title: reference.artifactId, source: { type: 'base64', media_type: 'application/pdf', data: Buffer.from(bytes).toString('base64') } });
+    } else {
+      let data: string;
+      try { data = new TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch { throw new AttachmentFailure('invalid-config'); }
+      blocks.push({ type: 'document', title: reference.artifactId, source: { type: 'text', media_type: 'text/plain', data } });
+    }
+  }
+  blocks.push({ type: 'text', text }); assertSerializedAttachments(blocks); return blocks;
 }

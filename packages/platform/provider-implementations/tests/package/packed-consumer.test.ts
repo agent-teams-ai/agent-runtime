@@ -17,11 +17,14 @@ test('packed consumer imports codecs and declarations without donor checkout or 
 import type { CodexDriverHost } from '@agent-teams/provider-implementations/codex';
 import { createClaudeDriverFactory, openClaudeSession } from '@agent-teams/provider-implementations/claude';
 import { EventFeed } from '@agent-teams/provider-implementations/session-io';
-import type { DriverFactory, Session, EventPayload } from '@agent-teams/provider-session-contracts';
+import type { DriverFactory, Session, EventPayload, Input } from '@agent-teams/provider-session-contracts';
 import type { ClaudeConfig, ClaudeDriverHost } from '@agent-teams/provider-implementations/claude';
 const compaction: EventPayload = { kind: 'compaction', sourceRef: 'opaque', reason: 'automatic' };
 const nativeOptions: ClaudeConfig['nativeOptions'] = { permissionMode: 'acceptEdits', settingSources: ['project'], projectInstructions: { append: 'TEST' }, effort: 'high', fastMode: false, context: 'model-default' };
 const namespace: ClaudeConfig['configNamespace'] = 'native-default';
+const attachmentRefs: Input['attachments'] = [{ artifactId: 'TEST-image', mimeType: 'image/png', byteLength: 1, digest: '0'.repeat(64) }];
+const attachmentResolver: NonNullable<ClaudeConfig['attachments']> = { model: 'TEST-model', revision: 'TEST-policy', mimeTypes: ['image/png'], resolve: async binding => ({ binding, bytes: new Uint8Array([0]) }) };
+if (attachmentRefs.length !== 1 || attachmentResolver.model !== 'TEST-model') throw Error('attachment contracts');
 if (compaction.kind !== 'compaction' || nativeOptions.fastMode !== false || namespace !== 'native-default') throw Error('selected Claude contracts');
 const factory: (host: ClaudeDriverHost) => DriverFactory = createClaudeDriverFactory;
 const codexFactory: (host: CodexDriverHost) => DriverFactory = createCodexDriverFactory;

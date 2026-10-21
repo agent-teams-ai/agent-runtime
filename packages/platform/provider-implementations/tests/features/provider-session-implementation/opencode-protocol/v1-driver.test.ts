@@ -5,6 +5,7 @@ import type { DriverFactory, Event, OpenConfig, Session } from '@agent-teams/pro
 import { createOpenCodeV1DriverFactory } from '../../../../src/opencode.ts'
 import type { OpenCodeV1DriverConfig } from '../../../../src/opencode.ts'
 import { v1Peer } from './v1-driver-peer.ts'
+import { artifact, attachedInput, attachmentPort } from '../provider-session-io/attachment-support.ts'
 const request: OpenConfig = { tenantId: 'TEST-tenant', projectId: 'TEST-project', sessionId: 'TEST-session', generation: 1, configRevision: 'TEST-r1', requiredCapabilities: ['text'] }
 function configuration(host: Awaited<ReturnType<typeof v1Peer>>): OpenCodeV1DriverConfig {
   return { endpoint: host.endpoint, workspacePath: host.directory, nativeSessionId: host.nativeSessionId, version: '1.18.34',
@@ -17,6 +18,36 @@ function factory(c: OpenCodeV1DriverConfig, cp?: () => unknown): DriverFactory {
 }
 async function until(predicate: () => boolean) { const deadline = Date.now() + 4000; while (!predicate()) { if (Date.now() > deadline) {assert.fail('TEST observation deadline');} await delay(10) } }
 function observe(session: Session) { const events: Event[] = []; const done = (async () => { for await (const event of session.observe()) {events.push(event)} })(); return { events, done } }
+
+test('selected V1 prompt_async serializes actual ordered native file parts for images and approved video', async t => {
+  const host = await v1Peer(); t.after(host.close)
+  const c = configuration(host); c.version = '1.18.35'; c.model = { providerID: 'minimax-coding-plan', modelID: 'minimax-m3' }
+  const items = [artifact('TEST-video', 'video/mp4'), artifact('TEST-image', 'image/png')]
+  c.attachments = attachmentPort('minimax-coding-plan/minimax-m3', items)
+  const { driver } = await factory(c).open(request)
+  try {
+    const refs = items.map(item => ({ ...item.reference })); const submission = driver.submit(attachedInput(refs)); refs.reverse()
+    assert.equal((await submission).ok, true)
+    assert.deepEqual(host.submittedParts[0], [{ type: 'text', text: 'TEST text' }, ...items.map(item => ({ type: 'file', mime: item.reference.mimeType,
+      url: 'data:' + item.reference.mimeType + ';base64,' + item.bytes.toString('base64'), filename: item.reference.artifactId }))])
+  } finally { await driver.close() }
+})
+
+test('V1 unsupported model projection and missing artifact cannot reach native prompt_async', async t => {
+  const host = await v1Peer(); t.after(host.close); const c = configuration(host), image = artifact(), port = attachmentPort('different-model', [image])
+  c.attachments = port
+  const { driver } = await factory(c).open(request)
+  try {
+    assert.deepEqual(await driver.submit(attachedInput([image.reference])), { ok: false, code: 'unsupported', delivery: 'known-not-sent' })
+    assert.equal(host.submittedIds.length, 0)
+  } finally { await driver.close() }
+  c.attachments = { ...port, model: 'TEST-provider/TEST-model', resolve: attachmentPort('TEST-provider/TEST-model', []).resolve }
+  const next = (await factory(c).open(request)).driver
+  try {
+    assert.deepEqual(await next.submit(attachedInput([image.reference])), { ok: false, code: 'dependency-unavailable', delivery: 'known-not-sent' })
+    assert.equal(host.submittedIds.length, 0)
+  } finally { await next.close() }
+})
 
 test('canonical V1 factory serializes actual HTTP turns with native ascending IDs and exact text/tool ownership', async t => {
   const host = await v1Peer(); t.after(host.close)

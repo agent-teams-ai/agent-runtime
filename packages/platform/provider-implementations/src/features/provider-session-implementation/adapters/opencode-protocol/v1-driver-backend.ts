@@ -6,6 +6,7 @@ import { createV1DriverWire, v1NotSubmitted } from './v1-driver-wire.ts'
 import { readV1Window } from './v1-native-read.ts'
 import { readV1DriverCut, verifyV1Session } from './v1-driver-cut.ts'
 import { createV1DriverOutput } from './v1-driver-output.ts'
+import { assertSerializedAttachments } from '../provider-session-io/attachments.ts'
 
 export function createV1DriverBackend(config: OpenCodeV1DriverConfig, signal: AbortSignal): DriverProtocol {
   const wire = createV1DriverWire(config, signal)
@@ -26,8 +27,11 @@ export function createV1DriverBackend(config: OpenCodeV1DriverConfig, signal: Ab
         turns.delete(requestId)
       }, revoked)
     },
-    async queue(operationKey, text) {
+    async queue(operationKey, text, attachments = []) {
       turns.clear()
+      const parts = [{ type: 'text', text }, ...attachments.map(item => ({ type: 'file', mime: item.reference.mimeType,
+        url: 'data:' + item.reference.mimeType + ';base64,' + Buffer.from(item.bytes).toString('base64'), filename: item.reference.artifactId }))]
+      assertSerializedAttachments(parts)
       const nativeInputID = await wire.use(async client => {
         let id: string
         try {
@@ -44,7 +48,7 @@ export function createV1DriverBackend(config: OpenCodeV1DriverConfig, signal: Ab
           if (!id) {throw new Error('unqualified_native_id_order')}
         } catch { throw v1NotSubmitted('native_preflight') }
         await client.promptSessionAsync(config.nativeSessionId, { messageID: id, model: config.model,
-          ...(config.agent !== undefined && config.agent.length > 0 ? { agent: config.agent } : {}), ...(config.variant !== undefined && config.variant.length > 0 ? { variant: config.variant } : {}), parts: [{ type: 'text', text }] })
+          ...(config.agent !== undefined && config.agent.length > 0 ? { agent: config.agent } : {}), ...(config.variant !== undefined && config.variant.length > 0 ? { variant: config.variant } : {}), parts })
         return id
       })
       const output = createV1DriverOutput()

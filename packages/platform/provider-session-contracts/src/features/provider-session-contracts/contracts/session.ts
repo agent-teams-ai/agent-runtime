@@ -6,7 +6,9 @@ export type FailureCode = "invalid-config" | "unavailable" | "dependency-unavail
   "checkpoint-missing" | "provider-failure" | "output-limit" | "unknown";
 export type Failure = {readonly ok: false; readonly code: FailureCode; readonly delivery?: "known-not-sent"};
 export type Reply<T> = {readonly ok: true; readonly value: T} | Failure;
-export type Input = {readonly inputId: string; readonly operationRef: string; readonly content: string};
+export type Input = {readonly inputId: string; readonly operationRef: string; readonly content: string;
+  /** Ordered immutable artifact references; bytes and native paths remain consumer-owned. digest is lowercase SHA-256 hex. */
+  readonly attachments?: readonly {readonly artifactId: string; readonly mimeType: string; readonly byteLength: number; readonly digest: string}[]};
 /** Consumption of stdin/SDK input is not provider acceptance or terminal completion. */
 export type Handoff = {readonly inputId: string; readonly operationRef: string; readonly delivery: "client-consumed"; readonly providerAcceptance: "unknown"};
 export type InteractionReply = {readonly kind: "permission"; readonly decision: "allow" | "deny"} |

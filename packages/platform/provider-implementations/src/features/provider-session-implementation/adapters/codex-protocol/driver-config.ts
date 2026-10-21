@@ -2,6 +2,8 @@ import { createHash } from 'node:crypto'
 import type { Limits, OpenConfig } from '@agent-teams/provider-session-contracts'
 import type { CodexInitializeParams } from './app-server.ts'
 import type { CodexAppServerTransport, CodexRpcLimits } from './rpc-types.ts'
+import { attachmentCompatibility, snapshotAttachmentPort } from '../provider-session-io/attachments.ts'
+import type { AttachmentPort } from '../provider-session-io/attachments.ts'
 
 /** Explicit private binding. The caller owns the connected transport, native process and durable identity. */
 export type CodexDriverConfig = {
@@ -14,6 +16,7 @@ export type CodexDriverConfig = {
   readonly initialize: CodexInitializeParams
   readonly threadParams: Readonly<Record<string, unknown>>
   readonly turnParams?: Readonly<Record<string, unknown>>
+  readonly attachments?: AttachmentPort
   readonly rpcLimits?: Partial<CodexRpcLimits>
   readonly limits: Limits
   /** Read-only qualification of this exact configuration and custody, not ambient discovery. */
@@ -56,6 +59,7 @@ function validDriverConfiguration(value: unknown, request: OpenConfig): boolean 
 export function captureDriverConfig(config: CodexDriverConfig, request: OpenConfig): CodexDriverConfig {
   if (!validDriverConfiguration(config, request)) {throw new Error('codex.driver.invalid-config')}
   return { ...config, binding: { ...config.binding }, limits: { ...config.limits }, initialize: structuredClone(config.initialize),
+    ...(config.attachments !== undefined ? { attachments: snapshotAttachmentPort(config.attachments)! } : {}),
     threadParams: structuredClone(config.threadParams), turnParams: structuredClone(config.turnParams ?? {}), rpcLimits: { ...config.rpcLimits } }
 }
 
@@ -63,7 +67,8 @@ export function driverCompatibility(config: CodexDriverConfig): string {
   const { tenantId, projectId, sessionId } = config.binding
   return createHash('sha256').update(JSON.stringify({ tenantId, projectId, sessionId, configRevision: config.configRevision,
     protocolRevision: config.protocolRevision, trustedBinding: config.trustedBinding, accountBinding: config.accountBinding,
-    threadParams: config.threadParams, turnParams: config.turnParams })).digest('hex')
+    threadParams: config.threadParams, turnParams: config.turnParams,
+    ...(config.attachments ? { attachments: attachmentCompatibility(config.attachments) } : {}) })).digest('hex')
 }
 
 export type CodexDriverCheckpoint = {

@@ -1,0 +1,164 @@
+{
+  "schemaVersion": 1,
+  "sourceRevision": "07e7d8e0d44f4a3999e2693dfa2986d6b3819403",
+  "sourceMethod": "Git blobs only; dirty frontend worktree not used",
+  "blobs": [
+    {
+      "path": "src/features/agent-attachments/core/domain/budgets.ts",
+      "sha256": "d27f777635dedfd679c06308843e3c838f6623282c72d40e857d1f4fba7013e7"
+    },
+    {
+      "path": "src/features/agent-attachments/core/domain/capabilities.ts",
+      "sha256": "984eacf0df10eb781c3d23848840c78d44d882a545ae2f10d2faa56be39843bf"
+    },
+    {
+      "path": "src/features/agent-attachments/core/domain/mimeTypes.ts",
+      "sha256": "2ba488eb5507c5b374d12040579bb9ed855d0132bea65f86710e480e3c452f02"
+    },
+    {
+      "path": "src/features/agent-attachments/core/domain/types.ts",
+      "sha256": "13a63d318455074d59b2da7d356db34c8024103b32a7dede2ccb5e9e6027e6c9"
+    },
+    {
+      "path": "src/features/agent-attachments/core/domain/validation.ts",
+      "sha256": "36612ccd9c9355b47be031c36d7d3811ed1547afe689fa1db700832117e72ba7"
+    },
+    {
+      "path": "src/shared/constants/attachments.ts",
+      "sha256": "e092f3cecabc2b378b19b00f1f8b2a1537c0074b4a3c22e35f6300a795db8bb9"
+    },
+    {
+      "path": "src/renderer/utils/attachmentRecipientCapabilities.ts",
+      "sha256": "bd7a104acacfe3f8c12175c2514c15a18a0eb43661b289065ff3d4798f17a17e"
+    },
+    {
+      "path": "src/renderer/components/team/messages/MessageComposer.tsx",
+      "sha256": "edfc57dd16b3f537f007c293b7846fa48b0fec49b1bcb212a372eeba809dbc40"
+    },
+    {
+      "path": "src/main/services/team/provisioning/TeamProvisioningLeadAttachments.ts",
+      "sha256": "2390ee96070ea1553db08eb9e707218dcfdcba4728912a9cb62253c42a5e9e74"
+    },
+    {
+      "path": "src/main/services/team/provisioning/TeamProvisioningSendMessageToRunBoundaryFactory.ts",
+      "sha256": "7fb38cc8a581ff2244d53df43186459e3aa477bf1a134d02602c59b32244cfeb"
+    },
+    {
+      "path": "src/features/agent-attachments/main/providers/claudeAttachmentAdapter.ts",
+      "sha256": "f851df143164b461632f8fe2c03e8ba5a91c6c68a5c67797694b5f34972bdc10"
+    },
+    {
+      "path": "src/features/agent-attachments/main/providers/codexNativeAttachmentAdapter.ts",
+      "sha256": "e7f099808c94581e13700514ba9591ad36beb91fc9d1ebf0ac73d92ed0786ae8"
+    },
+    {
+      "path": "src/features/agent-attachments/main/providers/opencodeAttachmentAdapter.ts",
+      "sha256": "7bb218f2ce370f69432110275e1bf004b3deda73bfb45d59fc8d5725f79e6a96"
+    },
+    {
+      "path": "src/main/services/team/opencode/delivery/OpenCodeMemberMessageDeliveryService.ts",
+      "sha256": "66027058bb4c4a4591fcb8b3b1805351dd9f8b120ed29e20522c546630469f04"
+    }
+  ],
+  "recipients": {
+    "supported": [
+      "online same-team Claude lead",
+      "online same-team Codex lead",
+      "online same-team OpenCode lead/member with approved model"
+    ],
+    "blocked": [
+      "offline team",
+      "cross-team recipient",
+      "non-OpenCode teammate",
+      "unsupported/unknown model"
+    ]
+  },
+  "mime": {
+    "claude": [
+      "image/png",
+      "image/jpeg",
+      "image/webp",
+      "image/gif",
+      "application/pdf",
+      "text/*"
+    ],
+    "codex": [
+      "image/png",
+      "image/jpeg",
+      "image/webp"
+    ],
+    "openCodeV1Images": [
+      "image/png",
+      "image/jpeg",
+      "image/webp"
+    ],
+    "openCodeV1Video": [
+      "video/mp4",
+      "video/webm",
+      "video/quicktime"
+    ]
+  },
+  "openCodeProductPolicy": {
+    "owner": "frontend Host capability projection, never D implementation policy",
+    "canonicalization": "trim/lowercase; remove leading openrouter/ then openai/",
+    "imageModels": [
+      "gpt-5.4-mini",
+      "moonshotai/kimi-k2.6",
+      "z-ai/glm-4.5v",
+      "zai-coding-plan/glm-5v-turbo",
+      "minimax-coding-plan/minimax-m3",
+      "xai/grok-4.5",
+      "xai/grok-4.3",
+      "xai/grok-4.20-0309-reasoning",
+      "xai/grok-4.20-0309-non-reasoning",
+      "xai/grok-build-0.1",
+      "github-copilot/gpt-5-mini",
+      "github-copilot/gpt-5.3-codex",
+      "github-copilot/gpt-5.4",
+      "github-copilot/gpt-5.4-mini",
+      "github-copilot/gpt-5.5",
+      "github-copilot/gpt-5.6-luna",
+      "github-copilot/gpt-5.6-sol",
+      "github-copilot/gpt-5.6-terra",
+      "github-copilot/claude-fable-5",
+      "github-copilot/claude-haiku-4.5",
+      "github-copilot/claude-opus-4.5",
+      "github-copilot/claude-opus-4.6",
+      "github-copilot/claude-opus-4.7",
+      "github-copilot/claude-opus-4.8",
+      "github-copilot/claude-sonnet-4.5",
+      "github-copilot/claude-sonnet-4.6",
+      "github-copilot/claude-sonnet-5",
+      "github-copilot/gemini-2.5-pro",
+      "github-copilot/gemini-3-flash-preview",
+      "github-copilot/gemini-3.1-pro-preview",
+      "github-copilot/gemini-3.5-flash",
+      "github-copilot/kimi-k2.7-code",
+      "xiaomi-token-plan-ams/mimo-v2.5",
+      "xiaomi-token-plan-sgp/mimo-v2.5",
+      "xiaomi-token-plan-cn/mimo-v2.5",
+      "kimi-for-coding/k3",
+      "kimi-for-coding/kimi-for-coding",
+      "kimi-for-coding/kimi-for-coding-highspeed"
+    ],
+    "videoModels": [
+      "minimax-coding-plan/minimax-m3"
+    ]
+  },
+  "budgets": {
+    "maxImages": 5,
+    "maxClaudeFiles": 5,
+    "maxVideos": 1,
+    "bytesPerImageOrFile": 4194304,
+    "bytesPerVideo": 8388608,
+    "totalBytes": 8388608,
+    "originalSerializedIpcCeiling": 7500000
+  },
+  "nativeMapping": {
+    "claude": "ordered image base64 / PDF document base64 / UTF-8 text document text blocks, followed by text; empty refs preserves content:string",
+    "codex": "turn/start input: text plus ordered {type:localImage,path}; consumer owns verified native paths until terminal/recovery",
+    "openCodeV1": "POST /session/:sessionId/prompt_async: {messageID,model,agent?,variant?,parts:[{type:text,text},...ordered {type:file,mime,url:data-MIME-base64,filename:artifactId}]}",
+    "openCodeV2": "nonempty refs reject unsupported + known-not-sent; existing /api text queue has no qualified attachment wire"
+  },
+  "scope": "Synthetic SDK/protocol request qualification only; no native provider/auth/profile/model qualification. Input attachment order now preserved instead of frozen Claude image/document grouping. Original filenames are not in minimal SPI; native document/file labels default to artifactId. Host owns model/recipient approval and product blob retention."
+}

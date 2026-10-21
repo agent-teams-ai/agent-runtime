@@ -4,11 +4,12 @@ import type { CloseReceipt, Event, EventPayload, FailureCode, Input, Interaction
 import { bounded, deferred, EventFeed } from '../provider-session-io/io.ts'
 import type { DriverPermission, DriverProtocol, DriverSessionConfig, DriverTurn } from './driver-protocol.ts'
 import { executionWasNotSubmitted } from './v2-failures.ts'
+import { AttachmentFailure, inputFingerprint, prepareAttachments, snapshotInput, validCanonicalInput, validateAttachments } from '../provider-session-io/attachments.ts'
 
 const failure = (code: FailureCode, unsent = false) => ({ ok: false as const, code, ...(unsent ? { delivery: 'known-not-sent' as const } : {}) })
 const handoff = (input: Input) => ({ ok: true as const, value: { inputId: input.inputId, operationRef: input.operationRef,
   delivery: 'client-consumed' as const, providerAcceptance: 'unknown' as const } })
-type Pending = { input: Input; nativeId: string; done: ReturnType<typeof deferred<ReturnType<typeof handoff> | ReturnType<typeof failure>>>; handed: boolean; interactionsRevoked: boolean; interactionAbort: AbortController; turn?: DriverTurn }
+type Pending = { input: Input; nativeId: string; done: ReturnType<typeof deferred<ReturnType<typeof handoff> | ReturnType<typeof failure>>>; handed: boolean; preparing: boolean; interactionsRevoked: boolean; interactionAbort: AbortController; turn?: DriverTurn }
 type Interaction = { permission: DriverPermission; owner: Pending; answering: boolean }
 
 /** Volatile bounded native-session consumer. Runtime owns durable operations and recovery. */
@@ -39,16 +40,16 @@ export class OpenCodeDriverSession implements Session {
   }
   submit(supplied: Input) {
     if (!this.isOpen()) {return Promise.resolve(failure('unavailable', true))}
-    const input = { ...supplied }
-    if (typeof input.inputId !== 'string' || !input.inputId || Buffer.byteLength(input.inputId) > 4096
-      || typeof input.operationRef !== 'string' || !input.operationRef || Buffer.byteLength(input.operationRef) > 4096 || typeof input.content !== 'string' || !input.content.trim()
-      || Buffer.byteLength(input.content) > Math.min(this.config.limits.inputBytes, 256 * 1024)) {return Promise.resolve(failure('backpressure', true))}
+    let input: Input
+    try { input = snapshotInput(supplied); validateAttachments(input, this.config.engine, this.config.attachmentModel, this.config.attachments) }
+    catch (error) { return Promise.resolve(failure(error instanceof AttachmentFailure ? error.code : 'invalid-config', true)) }
+    if (!validCanonicalInput(input, Math.min(this.config.limits.inputBytes, 256 * 1024))) {return Promise.resolve(failure('backpressure', true))}
     if (this.active?.input.inputId === input.inputId || this.active?.input.operationRef === input.operationRef
       || this.queued.some(item => item.input.inputId === input.inputId || item.input.operationRef === input.operationRef)) {return Promise.resolve(failure('stale', true))}
     if (this.queued.length >= this.config.limits.queuedInputs) {return Promise.resolve(failure('backpressure', true))}
     const nativeId = 'msg_' + createHash('sha256').update(JSON.stringify([this.config.trustedBinding,
-      this.config.nativeSessionId, this.sessionRef, input.inputId, input.operationRef])).digest('hex')
-    const pending: Pending = { input, nativeId, done: deferred(), handed: false, interactionsRevoked: false, interactionAbort: new AbortController() }
+      this.config.nativeSessionId, this.sessionRef, input.inputId, input.operationRef, ...(input.attachments?.length ? [inputFingerprint(input)] : [])])).digest('hex')
+    const pending: Pending = { input, nativeId, done: deferred(), handed: false, preparing: !!input.attachments?.length, interactionsRevoked: false, interactionAbort: new AbortController() }
     this.queued.push(pending); this.wake(); return pending.done.promise
   }
   observe(): AsyncIterable<Event> { return this.feed }
@@ -85,6 +86,7 @@ export class OpenCodeDriverSession implements Session {
   }
   interrupt(operationRef: string): Promise<Reply<{ requested: true; terminal: 'unconfirmed' }>> {
     if (!this.isOpen() || !this.active || this.active.input.operationRef !== operationRef) {return Promise.resolve(failure('stale'))}
+    if (this.active.preparing) {return Promise.resolve(failure('stale'))}
     if (this.control) {return this.control}
     const pending = this.active
     pending.interactionsRevoked = true; pending.interactionAbort.abort(); this.interactions.clear()
@@ -128,17 +130,27 @@ export class OpenCodeDriverSession implements Session {
         const pending = this.queued.shift(); if (!pending) {continue}
         this.active = pending; this.turnEvents = 0; this.turnBytes = 0; this.settledInteractions.clear()
         try {
-          const turn = await this.protocol.queue(pending.nativeId, pending.input.content)
+          const attachments = await prepareAttachments(pending.input, { trustedBinding: this.config.trustedBinding, sessionRef: this.sessionRef, port: this.config.attachments, signal: pending.interactionAbort.signal, timeoutMs: this.config.limits.timeoutMs })
+          if (!this.canSubmit(pending)) { pending.done.resolve(failure('stale', true)); continue }
+          pending.preparing = false
+          const turn = await this.protocol.queue(pending.nativeId, pending.input.content, attachments)
           if (!this.isOpen()) { pending.done.resolve(failure('unknown')); continue }
           pending.turn = turn; pending.nativeId = turn.nativeInputId; pending.handed = true; pending.done.resolve(handoff(pending.input))
           await this.poll(pending, turn)
         } catch (error) {
+          if (this.rejectAttachments(error, pending)) { continue }
           if (!pending.handed && executionWasNotSubmitted(error)) {
             pending.done.resolve(failure('dependency-unavailable', true)); this.active = undefined; this.seal('dependency-unavailable')
           } else { pending.done.resolve(failure('unknown')); this.seal('unknown') }
         }
       }
     } finally { this.feed.end() }
+  }
+  private canSubmit(pending: Pending): boolean { return this.isOpen() && this.active === pending && !pending.interactionsRevoked && !this.hasControl() }
+  private rejectAttachments(error: unknown, pending: Pending): boolean {
+    if (!(error instanceof AttachmentFailure) || pending.handed) { return false }
+    pending.done.resolve(failure(error.code, true)); pending.interactionAbort.abort()
+    if (this.active === pending) { this.active = undefined } this.wake(); return true
   }
   private async poll(pending: Pending, turn: DriverTurn): Promise<void> {
     const deadline = Date.now() + this.config.limits.timeoutMs
@@ -183,8 +195,8 @@ export class OpenCodeDriverSession implements Session {
     const pending = this.active; this.active = undefined
     if (pending) {
       pending.interactionsRevoked = true; pending.interactionAbort.abort()
-      pending.done.resolve(failure(code))
-      this.feed.finishWith(knownTerminal ?? (code === 'output-limit' && this.knownTerminal ? { ...this.knownTerminal, code } : undefined) ?? { kind: 'result', outcome: 'unknown', code, sessionRef: this.sessionRef,
+      pending.done.resolve(failure(code, pending.preparing))
+      this.feed.finishWith(pending.preparing ? { kind: 'diagnostic', code, sessionRef: this.sessionRef } : knownTerminal ?? (code === 'output-limit' && this.knownTerminal ? { ...this.knownTerminal, code } : undefined) ?? { kind: 'result', outcome: 'unknown', code, sessionRef: this.sessionRef,
         inputId: pending.input.inputId, operationRef: pending.input.operationRef })
     } else {this.feed.finishWith({ kind: 'diagnostic', code, sessionRef: this.sessionRef })}
     for (const item of this.queued.splice(0)) {item.done.resolve(failure(code, true))}

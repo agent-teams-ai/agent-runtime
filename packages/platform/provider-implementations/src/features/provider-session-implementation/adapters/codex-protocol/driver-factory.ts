@@ -8,7 +8,7 @@ export type CodexDriverHost = {
   readonly readCheckpoint: (reference: string, request: OpenConfig) => Promise<unknown>
   readonly capabilities: readonly string[]
 }
-const supported = new Set(['text', 'tools', 'usage', 'permission', 'interrupt', 'checkpoint'])
+const supported = new Set(['text', 'tools', 'usage', 'permission', 'interrupt', 'checkpoint', 'attachments'])
 
 /** Native transport is caller-selected, exclusive to this binding and already under caller custody. */
 export function createCodexDriverFactory(host: CodexDriverHost): DriverFactory {

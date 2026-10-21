@@ -9,6 +9,7 @@ import { projectDriverEvent } from './driver-output.ts'
 import { CodexProtocolError } from './rpc-types.ts'
 import type { CodexAppServerEvent, CodexTurnOutcome, CodexTurnRef, CodexTurnSubmission } from './session-types.ts'
 import type { CodexThreadSession } from './thread-session.ts'
+import { AttachmentFailure, assertSerializedAttachments, prepareAttachments, snapshotInput, validCanonicalInput, validateAttachments } from '../provider-session-io/attachments.ts'
 
 const failure = (code: FailureCode, unsent = false) => ({ ok: false as const, code, ...(unsent ? { delivery: 'known-not-sent' as const } : {}) })
 type Pending = { input: Input; ownerKey: string; receipt: ReturnType<typeof deferred<Reply<Handoff>>>; abort: AbortController; revoked: boolean; earlyBytes: number;
@@ -68,10 +69,10 @@ export class CodexDriverSession implements Session {
   }
   submit(supplied: Input): Promise<Reply<Handoff>> {
     if (this.state !== 'open') {return Promise.resolve(failure('unavailable', true))}
-    const input = { ...supplied }
-    if (typeof input.inputId !== 'string' || !input.inputId || Buffer.byteLength(input.inputId) > 4096
-      || typeof input.operationRef !== 'string' || !input.operationRef || Buffer.byteLength(input.operationRef) > 4096
-      || typeof input.content !== 'string' || !input.content.trim() || Buffer.byteLength(input.content) > this.config.limits.inputBytes)
+    let input: Input
+    try { input = snapshotInput(supplied); validateAttachments(input, 'codex', typeof this.config.threadParams.model === 'string' ? this.config.threadParams.model : undefined, this.config.attachments) }
+    catch (error) { return Promise.resolve(failure(error instanceof AttachmentFailure ? error.code : 'invalid-config', true)) }
+    if (!validCanonicalInput(input, this.config.limits.inputBytes))
       {return Promise.resolve(failure('invalid-config', true))}
     if (this.active?.input.inputId === input.inputId || this.active?.input.operationRef === input.operationRef
       || this.queued.some(item => item.input.inputId === input.inputId || item.input.operationRef === input.operationRef)) {return Promise.resolve(failure('stale', true))}
@@ -157,7 +158,11 @@ export class CodexDriverSession implements Session {
       const ready = await this.checkReadiness()
       if (!this.isCurrent(owner)) {return}
       if (!ready.ok) { owner.receipt.resolve(failure(ready.code, true)); this.seal(ready.code, true); return }
-      owner.turn = this.thread!.submitTurn({ ...this.config.turnParams, input: [{ type: 'text', text: owner.input.content, text_elements: [] }] }, owner.abort.signal)
+      const attachments = await prepareAttachments(owner.input, { trustedBinding: this.config.trustedBinding, sessionRef: this.sessionRef, port: this.config.attachments, signal: owner.abort.signal, timeoutMs: this.config.limits.timeoutMs, requirePath: true })
+      if (!this.isCurrent(owner) || owner.revoked || this.control) { return }
+      const parts = [{ type: 'text', text: owner.input.content, text_elements: [] }, ...attachments.map(item => ({ type: 'localImage', path: item.nativePath! }))]
+      if (attachments.length) { assertSerializedAttachments(parts) }
+      owner.turn = this.thread!.submitTurn({ ...this.config.turnParams, input: parts }, owner.abort.signal)
       // Capture completion before any event sink can close the client on output overflow.
       void owner.turn.completed.then(result => { owner.outcome = result; return result }, () => {})
       owner.ref = await owner.turn.accepted
@@ -173,6 +178,10 @@ export class CodexDriverSession implements Session {
       if (terminal.outcome === 'unknown') {this.seal('unknown')}
       else {this.advance()}
     } catch (error) {
+      if (error instanceof AttachmentFailure && !owner.turn) {
+        owner.receipt.resolve(failure(error.code, true)); owner.abort.abort();
+        if (this.isCurrent(owner)) { this.active = undefined; this.advance() } return
+      }
       const unsent = !owner.turn || (error instanceof CodexProtocolError && error.acceptance === 'not-sent')
       owner.receipt.resolve(failure(unsent ? 'dependency-unavailable' : 'unknown', unsent))
       this.seal(unsent ? 'dependency-unavailable' : 'unknown', unsent)
