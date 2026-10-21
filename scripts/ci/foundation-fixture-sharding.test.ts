@@ -138,7 +138,7 @@ async function aggregateReports(dir: string, reports: Report[], needs = { fixtur
 }
 
 export function registerFoundationFixtureShardingTests(): void {
-test('all original leaf bodies, assertions, CLI options and cleanup remain byte-identical', async () => {
+test('original assertions, CLI options and cleanup retain exact bytes with the admitted interactive extension', async () => {
   assert.equal(names.length, 25);
   assert.equal(new Set(names).size, 25);
   assert.equal([...original.matchAll(/\bassert\.\w+\(/gu)].length, 133);
@@ -148,7 +148,36 @@ test('all original leaf bodies, assertions, CLI options and cleanup remain byte-
     // Add only the TEST package topology; every original leaf body stays exact.
     .replace('    "packages/platform/filesystem-custody": true,\n', '    "packages/platform/filesystem-custody": true,\n    "experiments/interactive-provider-contract": true,\n')
     .replace('      \'  - "packages/platform/*"\',\n', '      \'  - "packages/platform/*"\',\n      \'  - "experiments/*"\',\n');
-  assert.equal(await readFile(join(root, boundary), 'utf8'), expected);
+  // ADR-0091 adds these exact negative assertions and boundary identities; every prior assertion stays retained.
+  const interactiveExtension = "    const interactive = \"packages/contexts/agent-execution/src/features/interactive-agent-session\";\n    const selected = boundariesById.get(\"core.agent-execution.interactive-session\");\n    assert.deepEqual(selected.allow, {boundaries: [], packages: [], builtins: [], runtimeReferences: []});\n    for (const [source, expected] of [\n      [\"import 'node:fs';\", \"architecture.source-dependencies.forbidden-builtin-dependency\"],\n      [\"import type {} from '@anthropic-ai/claude-agent-sdk';\", \"architecture.source-dependencies.forbidden-package-dependency\"],\n      [\"import type {} from '@get-modular/assembly';\", \"architecture.source-dependencies.forbidden-package-dependency\"],\n      [\"import '../../adapters/outbound/postgres-session-store.js';\", \"architecture.source-dependencies.forbidden-boundary-dependency\"],\n    ]) {\n      const diagnostics = await analyzeFixture({[`${interactive}/application/use-cases/negative-fixture.ts`]: source});\n      assert.ok(rules(diagnostics).includes(expected), JSON.stringify(diagnostics));\n      assert.ok(!rules(diagnostics).includes(\"architecture.source-dependencies.unclassified-source-file\"));\n    }\n";
+  let reviewed = expected.replace("    })).includes(\"architecture.source-dependencies.forbidden-package-dependency\"));\n", "    })).includes(\"architecture.source-dependencies.forbidden-package-dependency\"));\n" + interactiveExtension);
+  const amendments = [
+  [
+    "    assert.deepEqual(production.allowedBoundaries, [\n      \"adapter.agent-execution.claude-agent-sdk\",",
+    "    assert.deepEqual(production.allowedBoundaries, [\n      \"core.agent-execution.interactive-session\",\n      \"adapter.agent-execution.interactive-postgres\",\n      \"composition.agent-execution.interactive-session\",\n      \"adapter.agent-execution.claude-agent-sdk\","
+  ],
+  [
+    "    assert.deepEqual(composition.roots, [\n      \"packages/apps/embedded-runtime/src/composition.ts\",",
+    "    assert.deepEqual(composition.roots, [\n      \"packages/apps/embedded-runtime/src/composition/interactive-session-host.ts\",\n      \"packages/apps/embedded-runtime/src/composition/interactive-session-host.root.ts\",\n      \"packages/apps/embedded-runtime/src/composition.ts\","
+  ],
+  [
+    "      \"composition.embedded-runtime.agent-runtime-host\",\n      \"core.embedded-runtime.access-contracts\",",
+    "      \"composition.embedded-runtime.agent-runtime-host\",\n      \"core.embedded-runtime.access-contracts\",\n      \"composition.embedded-runtime.interactive-host-feature\","
+  ],
+  [
+    "    assert.deepEqual(production.allowedBoundaries, [\n      \"core.embedded-runtime.access-contracts\",",
+    "    assert.deepEqual(production.allowedBoundaries, [\n      \"core.embedded-runtime.access-contracts\",\n      \"core.embedded-runtime.interactive-host\","
+  ],
+  [
+    "const owners = new Set([\"composition.embedded-runtime\", \"test.embedded-runtime\"]);",
+    "const owners = new Set([\"composition.embedded-runtime\", \"composition.embedded-runtime.interactive-host-feature\", \"test.embedded-runtime\"]);"
+  ]
+] as const;
+  for (const [before, after] of amendments) {
+    assert.equal(reviewed.split(before).length, 2, "one exact reviewed amendment location");
+    reviewed = reviewed.replace(before, after);
+  }
+  assert.equal(await readFile(join(root, boundary), 'utf8'), reviewed);
 });
 
 test('partial, malformed and unknown shard environments reject before any body execution', async () => {

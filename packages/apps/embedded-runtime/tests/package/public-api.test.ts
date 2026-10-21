@@ -138,8 +138,11 @@ test("contained-turn declarations stay owned across root and composition closure
   ]);
   assert.doesNotMatch(rootClosure, /@agent-teams\/agent-execution|\bContainedTurnView\b|ContainedTurnFeatureApi/u);
   assert.doesNotMatch(compositionClosure, /\bContainedTurnView\b|ContainedTurnFeatureApi/u);
-  assert.doesNotMatch(rootClosure, /readonly revision:|authorityRevision|ContainedTurnAccessAuthority|AuthorityBound|bindContainedTurnCapabilityAuthority|runtime-access-authority/u);
-  assert.doesNotMatch(compositionClosure, /readonly revision:/u);
+  assert.doesNotMatch(rootClosure, /authorityRevision|ContainedTurnAccessAuthority|AuthorityBound|bindContainedTurnCapabilityAuthority|runtime-access-authority/u);
+  // Check the frozen contained-turn surfaces directly: interactive session views own a separate transport revision.
+  for (const path of ["features/contained-turn-runtime-access/index.d.ts", "composition/contained-turn-runtime-access.d.ts"]) {
+    assert.doesNotMatch(await readDeclarationClosure(join(packageRoot, "dist", path)), /readonly revision:/u);
+  }
   assert.match(compositionClosure, /interface ContainedTurnCapabilityBundle/u);
   assert.match(compositionClosure, /expectedProvider: string/u);
 });

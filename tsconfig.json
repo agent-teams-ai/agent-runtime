@@ -54,7 +54,9 @@
     "packages/contexts/provider-access/tests/features/contained-turn-access/ordinary-pa-owner-disposal.test.ts",
     "packages/contexts/provider-access/tests/features/contained-turn-access/ordinary-pa-owner-races.test.ts",
     "packages/contexts/provider-access/tests/features/contained-turn-access/ordinary-pa-postgres.test.ts",
-    "packages/contexts/agent-execution/tests/features/contained-agent-turn/support/docker-engine/**/*.ts"
+    "packages/contexts/agent-execution/tests/features/contained-agent-turn/support/docker-engine/**/*.ts",
+    "packages/contexts/agent-execution/tests/features/interactive-agent-session/**/*.ts",
+    "packages/contexts/agent-execution/tests/package/interactive-contracts-packed-consumer.test.ts"
   ],
   "exclude": [
     "experiments/runtime-profile-behavior/src/features/evidence/generate-runtime-operation-oracle.ts",

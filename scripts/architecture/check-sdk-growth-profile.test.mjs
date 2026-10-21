@@ -16,7 +16,7 @@ const contract = JSON.parse(readFileSync(join(root, contractPath), "utf8"));
 function fixture(t) {
   const directory = mkdtempSync(join(tmpdir(), "ar-sdk-profile-"));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
-  for (const path of [contractPath, "architecture/c0/ar-owned-lifetime/identity.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "architecture/sdk-growth", "architecture/get-modular/consumer-profile.json", "architecture/get-modular/evidence/consumer-module-standard.md", "architecture/get-modular/evidence/a3-cms-pin-review.json", "architecture/get-modular/evidence/creation-cleanup-cms-pin-review.json", "architecture/get-modular/evidence/creation-cleanup-cms-pin-delta.diff", "architecture/get-modular/evidence/sdk-growth-standard-review.json", "architecture/get-modular/evidence/sdk-growth-current-standard.md", "architecture/consumer-module-standard/contained-turn-profile.json", ...contract.inventory.packages.map(pkg => pkg.manifest)]) {
+  for (const path of ["packages/contexts/agent-execution/tests/package/interactive-contracts-packed-consumer.test.ts", contractPath, "architecture/c0/ar-owned-lifetime/identity.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "architecture/sdk-growth", "architecture/get-modular/consumer-profile.json", "architecture/get-modular/evidence/consumer-module-standard.md", "architecture/get-modular/evidence/a3-cms-pin-review.json", "architecture/get-modular/evidence/creation-cleanup-cms-pin-review.json", "architecture/get-modular/evidence/creation-cleanup-cms-pin-delta.diff", "architecture/get-modular/evidence/sdk-growth-standard-review.json", "architecture/get-modular/evidence/sdk-growth-current-standard.md", "architecture/consumer-module-standard/contained-turn-profile.json", ...contract.inventory.packages.map(pkg => pkg.manifest)]) {
     mkdirSync(dirname(join(directory, path)), { recursive: true });
     cpSync(join(root, path), join(directory, path), { recursive: true });
   }
@@ -176,6 +176,59 @@ test("reject a package qualification that omits a public import", t => {
   const directory = fixture(t);
   mutate(directory, "architecture/sdk-growth/qualification.json", value => { value.publicImports.pop(); });
   assert.throws(() => checkSdkGrowthProfile(directory), /SDK_PUBLIC_IMPORT_QUALIFICATION_DRIFT/u);
+});
+test("scoped interactive proof cannot qualify another or omit its actual public import", t => {
+  for (const change of [
+    value => {value.exports["./unqualified"] = value.exports["./interactive-contracts"];},
+    value => {delete value.exports["./interactive-contracts"];},
+  ]) {
+    const directory = fixture(t);
+    mutate(directory, "packages/contexts/agent-execution/package.json", change);
+    assert.throws(() => checkSdkGrowthProfile(directory), /SDK_PUBLIC_IMPORT_QUALIFICATION_DRIFT/u);
+  }
+});
+test("historical and scoped public import qualifications must remain disjoint", t => {
+  const directory = fixture(t);
+  mutate(directory, "architecture/sdk-growth/qualification.json", value => {value.publicImports.push("@agent-teams/agent-execution/interactive-contracts");});
+  assert.throws(() => checkSdkGrowthProfile(directory), /SDK_SCOPED_IMPORT_COVERAGE_OVERLAP/u);
+});
+test("scoped proof rejects substituted manifest targets and release admission", t => {
+  const directory = fixture(t);
+  mutate(directory, "packages/contexts/agent-execution/package.json", value => {value.exports["./interactive-contracts"].import = "./dist/index.js";});
+  assert.throws(() => checkSdkGrowthProfile(directory), /SDK_SCOPED_IMPORT_PROOF_DRIFT/u);
+  const promoted = fixture(t);
+  mutate(promoted, "architecture/sdk-growth/interactive-contracts-public-import.json", value => {value.releaseEligible = true;});
+  assert.throws(() => checkSdkGrowthProfile(promoted), /SDK_SCOPED_IMPORT_PROOF_DRIFT/u);
+});
+for (const path of ["architecture/sdk-growth/evidence/interactive-contracts-public-import.txt", "packages/contexts/agent-execution/tests/package/interactive-contracts-packed-consumer.test.ts"]) {
+  test(`scoped public import proof rejects changed evidence or executable consumer: ${path}`, t => {
+    const directory = fixture(t);
+    writeFileSync(join(directory, path), "unqualified replacement\n");
+    assert.throws(() => checkSdkGrowthProfile(directory), /SDK_SCOPED_IMPORT_PROOF_DRIFT/u);
+  });
+}
+test("scoped public import proof rejects missing successor", t => {
+  const directory = fixture(t);
+  rmSync(join(directory, "architecture/sdk-growth/interactive-contracts-public-import.json"));
+  assert.throws(() => checkSdkGrowthProfile(directory), /ENOENT/u);
+});
+test("current scoped revalidation retains its exact predecessor and release boundary", t => {
+  for (const change of [
+    value => {value.predecessor.sha256 = "0".repeat(64);},
+    value => {value.releaseEligible = true;},
+  ]) {
+    const directory = fixture(t);
+    mutate(directory, "architecture/sdk-growth/interactive-contracts-pg-error-custody-revalidation.json", change);
+    assert.throws(() => checkSdkGrowthProfile(directory), /SDK_SCOPED_IMPORT_REVALIDATION_DRIFT/u);
+  }
+});
+test("current scoped revalidation rejects missing proof or altered executable evidence", t => {
+  const missing = fixture(t);
+  rmSync(join(missing, "architecture/sdk-growth/interactive-contracts-pg-error-custody-revalidation.json"));
+  assert.throws(() => checkSdkGrowthProfile(missing), /ENOENT/u);
+  const changed = fixture(t);
+  writeFileSync(join(changed, "architecture/sdk-growth/evidence/interactive-contracts-pg-error-custody-revalidation.txt"), "unqualified replacement\n");
+  assert.throws(() => checkSdkGrowthProfile(changed), /SDK_SCOPED_IMPORT_REVALIDATION_DRIFT/u);
 });
 test("reject a package qualification promoted to release evidence", t => {
   const directory = fixture(t);

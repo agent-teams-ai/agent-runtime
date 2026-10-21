@@ -27,7 +27,10 @@ export const shardIds = ['agent-execution-1', 'agent-execution-2', 'agent-execut
 export type ShardId = typeof shardIds[number];
 export const aePatterns = ['tests/features/runtime-installation-discovery/*.test.ts',
   'tests/features/contained-agent-turn/*.test.ts',
-  'tests/features/contained-agent-turn/contained-turn-live-canary-lifecycle.test.mjs', 'tests/package/*.test.ts'] as const;
+  'tests/features/contained-agent-turn/contained-turn-live-canary-lifecycle.test.mjs',
+  'tests/features/interactive-agent-session/owner.test.ts',
+  'tests/features/interactive-agent-session/postgres-store.test.ts',
+  'tests/features/interactive-agent-session/composition.test.ts', 'tests/package/*.test.ts'] as const;
 const aeRunner = `node --test --test-concurrency=1 ${aePatterns.join(' ')}`;
 export const prerequisiteCommands = [
   { executable: 'pnpm', argv: ['--filter', './packages/**', '-r', 'run', 'clean'] },

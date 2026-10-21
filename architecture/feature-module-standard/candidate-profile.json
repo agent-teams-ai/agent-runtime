@@ -26,7 +26,8 @@
         "ownerDocument": "ADR-0005",
         "curatedExports": [
           ".",
-          "./composition"
+          "./composition",
+          "./interactive-contracts"
         ],
         "adoption": "active",
         "activationAuthority": "ADR-0013"
@@ -549,6 +550,36 @@
         "public": "packages/apps/embedded-runtime/src/features/trusted-runtime-access-scope/index.ts",
         "internal": "packages/apps/embedded-runtime/src/features/trusted-runtime-access-scope/internal.ts"
       }
+    },
+    {
+      "id": "interactive-agent-session",
+      "root": "packages/contexts/agent-execution/src/features/interactive-agent-session",
+      "roles": [
+        "contracts",
+        "domain",
+        "application",
+        "adapters",
+        "composition"
+      ],
+      "entrypoints": {
+        "public": "packages/contexts/agent-execution/src/features/interactive-agent-session/index.ts",
+        "internal": "packages/contexts/agent-execution/src/features/interactive-agent-session/internal.ts"
+      }
+    },
+    {
+      "id": "interactive-session-runtime",
+      "root": "packages/apps/embedded-runtime/src/features/interactive-session-runtime",
+      "roles": [
+        "contracts",
+        "domain",
+        "application",
+        "adapters",
+        "composition"
+      ],
+      "entrypoints": {
+        "public": "packages/apps/embedded-runtime/src/features/interactive-session-runtime/index.ts",
+        "internal": "packages/apps/embedded-runtime/src/features/interactive-session-runtime/internal.ts"
+      }
     }
   ],
   "assemblyFiles": [
@@ -603,7 +634,10 @@
     "packages/apps/embedded-runtime/src/composition/ordinary-runtime-assembly.ts",
     "packages/apps/embedded-runtime/src/composition/runtime-access-lifecycle.ts",
     "packages/apps/embedded-runtime/src/composition/runtime-setup-assembly.ts",
-    "packages/apps/embedded-runtime/src/composition/trusted-runtime-access-scope.ts"
+    "packages/apps/embedded-runtime/src/composition/trusted-runtime-access-scope.ts",
+    "packages/contexts/agent-execution/src/interactive-contracts.ts",
+    "packages/apps/embedded-runtime/src/composition/interactive-session-host.ts",
+    "packages/apps/embedded-runtime/src/composition/interactive-session-host.root.ts"
   ],
   "featureEdges": [
     {
@@ -666,6 +700,13 @@
       "kinds": [
         "runtime",
         "type"
+      ]
+    },
+    {
+      "from": "embedded-runtime",
+      "to": "filesystem-custody",
+      "kinds": [
+        "runtime"
       ]
     }
   ],

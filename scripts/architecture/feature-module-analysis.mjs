@@ -244,7 +244,7 @@ const parseFileImports = async (absoluteFile, path, resources) => {
   };
 };
 
-const isCuratedModuleFile = (path) => LOCAL_MODULE_FILES.includes(posix.basename(path));
+const isCuratedModuleFile = (path) => LOCAL_MODULE_FILES.includes(posix.basename(path)) || path === "packages/contexts/agent-execution/src/interactive-contracts.ts";
 const isHostCompositionAssembly = (path, isAssembly) => Boolean(isAssembly) && !isCuratedModuleFile(path);
 
 const assemblyGrammarIssues = ({ isAssembly, path, sourceFeature, program, source }) => {
@@ -269,12 +269,17 @@ const assemblyGrammarIssues = ({ isAssembly, path, sourceFeature, program, sourc
 };
 
 const assemblyImportIssues = ({ path, imported, targetPath, targetFeature }) => {
-  const visibility = posix.basename(path) === "index.ts" ? "public" : "internal";
+  const visibility = ["index.ts", "interactive-contracts.ts"].includes(posix.basename(path)) ? "public" : "internal";
   if (targetFeature.entrypoints[visibility] === targetPath) {return [];}
   return [issue("FM_FEATURE_DEEP_IMPORT", path, imported.line, `assembly ${posix.basename(path)} must use the curated ${targetFeature.id} ${visibility} entrypoint, not ${targetPath}`)];
 };
 
 const sameFeatureImportIssues = ({ path, imported, targetPath, sourceFeature }) => {
+  // ADR-0091: one consumer-owned SPI, exposed outward only by this erased named bridge.
+  const interactiveRoot = "packages/contexts/agent-execution/src/features/interactive-agent-session";
+  if (path === `${interactiveRoot}/contracts/interactive-provider-driver.ts`
+    && targetPath === `${interactiveRoot}/application/ports/outbound/interactive-provider-driver.ts`
+    && imported.kind === "type" && imported.syntax === "re-export") {return [];}
   const sourceLayer = layerForPath(sourceFeature, path);
   const targetLayer = layerForPath(sourceFeature, targetPath);
   if (!LAYER_ALLOWED[sourceLayer] || LAYER_ALLOWED[sourceLayer].has(targetLayer)) {return [];}
@@ -496,7 +501,7 @@ export const checkFeatureModules = async ({ root = REPOSITORY_ROOT, profilePath 
 // Reused by additive, accepted source slices; legacy module activation stays unchanged.
 export const scopedFeaturePrimitives = { issue, collectProductionFiles, featureForPath, layerForPath,
   ownershipIssues, parseFileImports, assemblyGrammarIssues, inspectImport, featureStructureIssues,
-  compareIssues };
+  sameFeatureImportIssues, compareIssues };
 
 export const formatIssues = (issues) => boundedIssueText(issues, (entry) => `${stableDiagnosticPath(entry.path)}:${entry.line} ${entry.code} ${stableMessage(entry.message)}`);
 

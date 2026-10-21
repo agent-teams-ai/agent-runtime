@@ -43,7 +43,36 @@ function checkPackedQualification(repository, qualification, profile, json) {
     const exports = Object.keys(json(pkg.manifestPath).exports);
     return exports.map(exportPath => `${pkg.packageName}${exportPath === "." ? "" : exportPath.slice(1)}`);
   });
-  assert.deepEqual(qualification.publicImports.toSorted(), expectedImports.toSorted(), "SDK_PUBLIC_IMPORT_QUALIFICATION_DRIFT");
+  // ADR-0091 qualifies one new erased SPI import independently. The EF 1.6.0
+  // archives, public imports and authority status below remain historical.
+  const successorPath = `${directory}/interactive-contracts-public-import.json`;
+  const successorBytes = readFileSync(resolve(repository, successorPath));
+  assert.equal(createHash("sha256").update(successorBytes).digest("hex"), "27898ef1bf9a30897a56dd8cf41235bc812e4344c7ee8f7573bd2eea508fd948", "SDK_SCOPED_IMPORT_PROOF_DRIFT");
+  const successor = json(successorPath);
+  assert.equal(successor.publicImport, "@agent-teams/agent-execution/interactive-contracts", "SDK_SCOPED_IMPORT_PROOF_DRIFT");
+  assert.ok(!qualification.publicImports.includes(successor.publicImport), "SDK_SCOPED_IMPORT_COVERAGE_OVERLAP");
+  assert.deepEqual([...qualification.publicImports, successor.publicImport].toSorted(), expectedImports.toSorted(), "SDK_PUBLIC_IMPORT_QUALIFICATION_DRIFT");
+  for (const [path, expected] of [
+    [successor.manifestPath, successor.observation.manifestSha256],
+    [successor.testPath, successor.testSha256],
+    [successor.evidencePath, successor.evidenceSha256],
+  ]) {
+    assert.equal(createHash("sha256").update(readFileSync(resolve(repository, path))).digest("hex"), expected, "SDK_SCOPED_IMPORT_PROOF_DRIFT");
+  }
+  const revalidationPath = `${directory}/interactive-contracts-pg-error-custody-revalidation.json`;
+  const revalidationBytes = readFileSync(resolve(repository, revalidationPath));
+  assert.equal(createHash("sha256").update(revalidationBytes).digest("hex"), "2e9f31cfd1b71685b0580893c8d073a58874e134ae2ed7341cb8abe4c2e60745", "SDK_SCOPED_IMPORT_REVALIDATION_DRIFT");
+  const revalidation = json(revalidationPath);
+  assert.equal(revalidation.predecessor.path, successorPath, "SDK_SCOPED_IMPORT_REVALIDATION_DRIFT");
+  assert.equal(revalidation.predecessor.sha256, createHash("sha256").update(successorBytes).digest("hex"), "SDK_SCOPED_IMPORT_REVALIDATION_DRIFT");
+  assert.equal(revalidation.publicImport, successor.publicImport, "SDK_SCOPED_IMPORT_REVALIDATION_DRIFT");
+  for (const [path, expected] of [
+    [revalidation.manifestPath, revalidation.observation.manifestSha256],
+    [revalidation.testPath, revalidation.testSha256],
+    [revalidation.evidencePath, revalidation.evidenceSha256],
+  ]) {
+    assert.equal(createHash("sha256").update(readFileSync(resolve(repository, path))).digest("hex"), expected, "SDK_SCOPED_IMPORT_REVALIDATION_DRIFT");
+  }
   for (const [index, name] of ["ef160-pack-run-a.txt", "ef160-pack-run-b.txt"].entries()) {
     const bytes = readFileSync(resolve(repository, `${directory}/evidence/${name}`));
     assert.equal(createHash("sha256").update(bytes).digest("hex"), qualification.packEvidence.runSha256[index], "SDK_PACK_EVIDENCE_DRIFT");

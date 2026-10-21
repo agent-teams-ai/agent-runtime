@@ -18,7 +18,7 @@ const SOURCE_EXTENSIONS = new Set([".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx",
 const TEST_FILE = /(?:^|\/)[^/]+\.(?:test|spec)\.(?:[cm]?[jt]sx?)$/u;
 const compareText = (left, right) => left < right ? -1 : left > right ? 1 : 0;
 
-const EXPORT_STEMS = Object.freeze({ ".": "index", "./composition": "composition" });
+const EXPORT_STEMS = Object.freeze({ ".": "index", "./composition": "composition", "./interactive-contracts": "interactive-contracts" });
 
 const curatedPackageExports = (exports, curated) => {
   if (!exports || !curated?.length) {return false;}
@@ -142,7 +142,7 @@ const invalidResolutionIssue = (context, sourcePath, imported, resolved) => cont
 // join any other declared production module at that same curated surface,
 // because the application is the joining host. Anything else that leaves the
 // package stays a resolution failure.
-const declaredModuleConsumption = (context, resolved) => {
+export const declaredModuleConsumption = (context, resolved, imported) => {
   if (resolved.self !== true || typeof resolved.path !== "string") {return false;}
   // A package export map names the emitted specifier, so the resolved target can
   // still carry the build-output extension.
@@ -156,6 +156,10 @@ const declaredModuleConsumption = (context, resolved) => {
   const curated = target.curatedExports
     .filter((entry) => entry === "." || entry === "./composition")
     .map((entry) => `${target.sourceRoot}/${entry === "." ? "index.ts" : "composition.ts"}`);
+  if (target.id === "agent-execution" && target.curatedExports.includes("./interactive-contracts")
+    && targetPath === "packages/contexts/agent-execution/src/interactive-contracts.ts") {
+    return imported?.kind === "type" && context.declaredModuleEdges?.get(`${owner.id}->${target.id}`)?.has("type") === true;
+  }
   return curated.includes(targetPath)
     && (owner.role === "host-app" || Boolean(context.declaredModuleEdges?.has(`${owner.id}->${target.id}`)));
 };
@@ -165,7 +169,7 @@ const detectedSourceFeatures = async (context, parsed, visited) => {
   let overflow = false;
   for (const imported of parsed.imports ?? []) {
     const resolved = context.localPackageImports.resolve(parsed.testPath, imported.specifier, context.packagePathIndex);
-    if (declaredModuleConsumption(context, resolved)) {continue;}
+    if (declaredModuleConsumption(context, resolved, imported)) {continue;}
     if (packageArchitectureToolingLoad(context, parsed.testPath, imported.specifier)) {continue;}
     if (resolved.kind === "invalid") {
       issues.push(invalidResolutionIssue(context, parsed.testPath, imported, resolved));

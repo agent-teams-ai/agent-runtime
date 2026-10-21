@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "qualification": "scoped-interactive-public-import",
+  "authority": "docs/decisions/0091-interactive-agent-session-synthetic-vertical-slice.md",
+  "publicImport": "@agent-teams/agent-execution/interactive-contracts",
+  "productionSourceCommit": "1185d38fb7420eb5060484e6eb51232e1b09c7b9",
+  "productionSourceTree": "838912caa5b9db820e7d0dfedb608ab68c3f675e",
+  "manifestPath": "packages/contexts/agent-execution/package.json",
+  "observation": {
+    "packageName": "@agent-teams/agent-execution",
+    "exportPath": "./interactive-contracts",
+    "targets": {
+      "types": "./dist/interactive-contracts.d.ts",
+      "import": "./dist/interactive-contracts.js"
+    },
+    "archiveSha256": "0e06fd7b3deb0de9ad5a01b6d64f0875fb1a1e13a4af49b093a38321c4a49ccb",
+    "manifestSha256": "8763bdb5406634a14045840272700b2b63cc5b52283d456bf43738668970786c",
+    "strictTypesWithoutSdkOrWorkspace": true,
+    "runtimeExports": [],
+    "providerSpecificTypeRejected": true
+  },
+  "testPath": "packages/contexts/agent-execution/tests/package/interactive-contracts-packed-consumer.test.ts",
+  "testSha256": "f1331d6d5bf038835d62790a4329eb3b6b210195ec416f895539e91ec6ccb8ec",
+  "evidencePath": "architecture/sdk-growth/evidence/interactive-contracts-public-import.txt",
+  "evidenceSha256": "a73ffa7db36c8497d2c5a0f33af60c54727efb8506c88a6cb8c838096d41c066",
+  "command": [
+    "node",
+    "--test",
+    "packages/contexts/agent-execution/tests/package/interactive-contracts-packed-consumer.test.ts"
+  ],
+  "node": "v26.11.1",
+  "managedJobId": "3d5ed47ada76c53fa79cc331e4391045",
+  "sdkAdmission": "unchanged-blocked-current-typed-observation",
+  "releaseEligible": false
+}

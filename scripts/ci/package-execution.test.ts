@@ -20,7 +20,10 @@ async function fixture() {
     'tests/features/contained-agent-turn/a.test.ts', 'tests/features/contained-agent-turn/b.test.ts',
     'tests/features/contained-agent-turn/c.test.ts',
     'tests/features/contained-agent-turn/contained-turn-live-canary-lifecycle.test.mjs',
-    'tests/package/a.test.ts', 'tests/package/b.test.ts'];
+    'tests/package/a.test.ts', 'tests/package/b.test.ts',
+    'tests/features/interactive-agent-session/owner.test.ts',
+    'tests/features/interactive-agent-session/postgres-store.test.ts',
+    'tests/features/interactive-agent-session/composition.test.ts'];
   await mkdir(packageRoot, { recursive: true });
   await writeFile(join(packageRoot, 'package.json'), JSON.stringify({ type: 'module', scripts: { test: packages[0].test } }));
   for (const [index, path] of paths.entries()) {
@@ -202,6 +205,41 @@ test('the Filesystem Custody stream plan keeps the force-exit flag in the origin
 }
 export function registerPackageExecutionTests(): void {
   registerEmbeddedCaptureTests();
+
+test('admitted C specs extend the exact historical AE command and each reaches one current partition', async () => {
+  const interactive = ['tests/features/interactive-agent-session/owner.test.ts',
+    'tests/features/interactive-agent-session/postgres-store.test.ts', 'tests/features/interactive-agent-session/composition.test.ts'];
+  const baseline = spawnSync('git', ['show', '6feffbec41b2b5c08b188a9b63cbcf0dffb852f3:packages/contexts/agent-execution/package.json'], {encoding:'utf8'});
+  assert.equal(baseline.status, 0, baseline.stderr);
+  const prior = JSON.parse(baseline.stdout).scripts.test;
+  const current: string = JSON.parse(await readFile('packages/contexts/agent-execution/package.json', 'utf8')).scripts.test;
+  assert.equal(current, packages[0].test);
+  const args = current.split(' ');
+  assert.equal(args.filter(arg => interactive.includes(arg)).length, 3);
+  assert.equal(args.filter(arg => !interactive.includes(arg)).join(' '), prior, 'ordinary and contained flags/order remain exact');
+  const universe = await enumerateExecutionFiles(resolve('.'));
+  const partitions = await Promise.all(shardIds.slice(0, 3).map(id => executionSelection(resolve('.'), selectShard(id))));
+  const union = partitions.flatMap(partition => {assert.ok(partition); return partition.files;});
+  assert.deepEqual(union.toSorted(), universe);
+  assert.equal(new Set(union).size, union.length);
+  for (const spec of interactive) {assert.equal(union.filter(file => file === spec).length, 1);}
+});
+
+test('C runner rejects each missing or duplicated spec and each missing literal file', async t => {
+  const f = await fixture(); t.after(() => rm(f.root, {recursive:true,force:true}));
+  const path = join(f.packageRoot, 'package.json'), original = await readFile(path);
+  for (const leaf of ['owner', 'postgres-store', 'composition']) {
+    const spec = `tests/features/interactive-agent-session/${leaf}.test.ts`;
+    for (const script of [packages[0].test.replace(` ${spec}`, ''), `${packages[0].test} ${spec}`]) {
+      await writeFile(path, JSON.stringify({scripts:{test:script}}));
+      await assert.rejects(enumerateExecutionFiles(f.root), /runner drift/);
+    }
+    await writeFile(path, original);
+    const file = join(f.packageRoot, spec), bytes = await readFile(file); await rm(file);
+    await assert.rejects(enumerateExecutionFiles(f.root), /unmatched original/);
+    await writeFile(file, bytes);
+  }
+});
 
 test('original four patterns include the literal mjs, exclude nested/helpers/dotfiles, and repartition additions', async t => {
   const f = await fixture(); t.after(() => rm(f.root, { recursive: true, force: true }));

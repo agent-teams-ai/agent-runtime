@@ -4,6 +4,7 @@ const hostFeature = (id, roles) => ({ root: `packages/apps/embedded-runtime/src/
 export const REVIEWED_FEATURES = Object.freeze({
   "runtime-installation-discovery": { root: "packages/contexts/agent-execution/src/features/runtime-installation-discovery", roles: ["contracts", "application", "adapters", "composition"] },
   "contained-agent-turn": { root: "packages/contexts/agent-execution/src/features/contained-agent-turn", roles: STANDARD_ROLES },
+  "interactive-agent-session": { root: "packages/contexts/agent-execution/src/features/interactive-agent-session", roles: STANDARD_ROLES },
   "contained-turn-access": { root: "packages/contexts/provider-access/src/features/contained-turn-access", roles: STANDARD_ROLES },
   "stable-filesystem-custody": { root: "packages/platform/filesystem-custody/src/features/stable-filesystem-custody", roles: ["contracts", "adapters"] },
   "codex-configuration-inspection": { root: "packages/contexts/runtime-configuration/src/features/codex-configuration-inspection", roles: ["contracts", "application", "adapters", "composition"] },
@@ -35,6 +36,7 @@ export const REVIEWED_FEATURES = Object.freeze({
   "linux-codex-deployment": hostFeature("linux-codex-deployment", ["adapters"]),
   "linux-codex-node-recipe": hostFeature("linux-codex-node-recipe", ["adapters"]),
   "ordinary-session-runtime": hostFeature("ordinary-session-runtime", ["contracts", "adapters", "composition"]),
+  "interactive-session-runtime": hostFeature("interactive-session-runtime", STANDARD_ROLES),
   "setup-inspection-planning": hostFeature("setup-inspection-planning", ["contracts", "adapters"]),
   "trusted-runtime-access-scope": hostFeature("trusted-runtime-access-scope", ["contracts", "adapters"]),
 });

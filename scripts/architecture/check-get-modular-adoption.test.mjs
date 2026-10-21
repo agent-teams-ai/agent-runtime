@@ -1,3 +1,4 @@
+await import('./interactive-host-composition-evidence.test.mjs');
 import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import test from 'node:test';
@@ -298,7 +299,8 @@ test('active profile retains the two direct contained-turn seams without claimin
     assert.ok(composition.relationships.some(edge => edge.from.endsWith('/host-custodied-agent-runtime-host.ts') && edge.to.endsWith(`/${leaf}.ts`) && edge.mode === 'runtime'));
   }
   assert.match(composition.rationale, /contained-turn.*remains direct/);
-  assert.equal(pending.compositions.length, 2);
+  assert.equal(pending.compositions.length, 3);
+  assert.equal(pending.compositions[2].authority, 'ADR-0091');
   assert.equal(pending.compositions[1].authority, 'ADR-0090');
   assert.equal(pending.compositions[0].factorySymbol, 'createDefaultAgentRuntimeHost');
 });
@@ -365,7 +367,8 @@ test('PR71 reviewed owners and helpers retain exact live relationships without e
     /independently composed Darwin authority and deployment roots remain explicitly outside.*passive setup scope/);
   assert.match(pending.boundaries.find(b => b.id === 'production.agent-execution').rationale,
     /fixed feature-local route helper.*not separate graph nodes/);
-  assert.deepEqual(pending.boundaries.filter(b => b.status === 'adopted').map(b => b.id), ['composition.embedded-runtime']);
+  assert.deepEqual(pending.boundaries.filter(b => b.status === 'adopted').map(b => b.id),
+    ['composition.embedded-runtime', 'composition.embedded-runtime.interactive-host-feature']);
   assert.deepEqual(pending.compositions.filter(c => c.authority === undefined).map(c => c.factorySymbol), ['createDefaultAgentRuntimeHost']);
   assert.deepEqual(pending.compositions.filter(c => c.authority === 'ADR-0090').map(c => c.factorySymbol), ['createOrdinaryModuleFactories']);
   assert.deepEqual(pending.exceptions, []);

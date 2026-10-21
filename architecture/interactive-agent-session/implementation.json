@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "authority": "ADR-0091",
+  "feature": "interactive-agent-session",
+  "hostAdoption": "pending-separate-cms-migration",
+  "spi": {
+    "export": "@agent-teams/agent-execution/interactive-contracts",
+    "owner": "packages/contexts/agent-execution/src/features/interactive-agent-session/application/ports/outbound/interactive-provider-driver.ts",
+    "bridge": "packages/contexts/agent-execution/src/features/interactive-agent-session/contracts/interactive-provider-driver.ts",
+    "kind": "named-type-re-export-only",
+    "reason": "One consumer-owned driver contract; outward erased bridge avoids a second concurrent SPI while retaining ordinary public DTO mapping."
+  },
+  "admittedLocalFmsExtension": "Only the exact SPI bridge-to-owner named type re-export is admitted under ADR-0091. Runtime imports, other contracts-to-application edges and wider layer exemptions remain forbidden. This is a scoped local extension, not unmodified FMS v1 conformance.",
+  "gates": [
+    "pnpm test:feature-modules",
+    "pnpm architecture:feature-modules:active",
+    "pnpm foundation:check",
+    "pnpm product:check",
+    "pnpm typecheck"
+  ],
+  "evidenceClasses": ["deterministic-synthetic", "owned-postgresql-restart", "packed-type-only-consumer"],
+  "unclaimed": ["real-provider-qualification", "production-host-adoption", "deployment-qualification"]
+}

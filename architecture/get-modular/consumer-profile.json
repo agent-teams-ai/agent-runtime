@@ -20,7 +20,7 @@
   },
   "fms": {
     "profile": "architecture/feature-module-standard/candidate-profile.json",
-    "sha256": "8e644e832bedf1553a6632aaf809e5b7bbc144fbb27042b4e9dadd21c0d3bccb",
+    "sha256": "d05150f789650722db091e308fd6ef310b2932b046f561c4bb5d5fd12d8753a0",
     "features": [
       "runtime-installation-discovery",
       "contained-agent-turn",
@@ -56,7 +56,9 @@
       "linux-codex-node-recipe",
       "ordinary-session-runtime",
       "setup-inspection-planning",
-      "trusted-runtime-access-scope"
+      "trusted-runtime-access-scope",
+      "interactive-agent-session",
+      "interactive-session-runtime"
     ]
   },
   "productionRoots": [
@@ -2259,7 +2261,9 @@
         "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/composition/ordinary-runtime-assembly.ts",
         "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/contracts/ordinary-session-observation.ts",
         "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/index.ts",
-        "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/internal.ts"
+        "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/internal.ts",
+        "packages/apps/embedded-runtime/src/composition/interactive-session-host.root.ts",
+        "packages/apps/embedded-runtime/src/composition/interactive-session-host.ts"
       ],
       "entrypoints": [
         "packages/apps/embedded-runtime/src/composition.ts",
@@ -2271,7 +2275,9 @@
         "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/composition/ordinary-runtime-assembly.ts",
         "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/contracts/ordinary-session-observation.ts",
         "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/index.ts",
-        "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/internal.ts"
+        "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/internal.ts",
+        "packages/apps/embedded-runtime/src/composition/interactive-session-host.root.ts",
+        "packages/apps/embedded-runtime/src/composition/interactive-session-host.ts"
       ],
       "status": "adopted",
       "rationale": "Only createDefaultAgentRuntimeHost passive setup is adopted. Host-custodied contained-turn composition remains direct under its existing owner; exact retained relationships are censused, not exempted. Reviewed at 291684ed9: current-authority selection and Linux Codex contained-turn owner, deployment authority, deployment resources and Node recipe are explicit not-adopted Host composition seams. Node recipe consumption is a local subject/signer binding helper with a type-only Agent Execution relationship. Claim, resource custody and cleanup remain Host-owned; none of these seams extends passive Assembly scope. At 81b2833af, the independently composed Darwin authority and deployment roots remain explicitly outside the adopted passive setup scope. Their direct Agent Execution, Provider Access and Runtime Security composition dependencies are censused but not converted into passive Assembly nodes. Accepted base 981c11314 exposes the existing Darwin native authority binder and preparation token, and types the kernel custody port. Accepted base 0d7a02451 publicly wires the existing Darwin contained-turn deployment root; this remains a retained contained-turn composition export and does not extend passive Assembly adoption. These retained contained-turn relationships remain outside passive Assembly construction and transfer no authority or cleanup ownership to Assembly. ADR-0090 ordinary session composition is also adopted: the provider owner exports both provider execution and prepare-launch, and the process requires that owner through a static Assembly slot. Unproven process closure retains the ordinary flight and Host-owned resources, including the observation journal, for disposal retry; capabilities confer no independent disposal authority.",
@@ -2565,6 +2571,31 @@
         {
           "from": "packages/apps/embedded-runtime/src/features/ordinary-session-runtime/composition/ordinary-runtime-assembly.ts",
           "to": "@agent-teams/agent-execution/composition",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/interactive-session-host.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/interactive-session-host.root.ts",
+          "to": "packages/apps/embedded-runtime/src/features/interactive-session-runtime/internal.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/interactive-session-host.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/agent-runtime-host-creation-error.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/interactive-session-host.ts",
+          "to": "packages/apps/embedded-runtime/src/composition/interactive-session-host.root.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/composition/interactive-session-host.ts",
+          "to": "packages/apps/embedded-runtime/src/features/interactive-session-runtime/internal.ts",
           "mode": "runtime"
         }
       ]
@@ -4222,7 +4253,10 @@
         "packages/contexts/agent-execution/src/features/runtime-installation-discovery/contracts/runtime-installation-observation.ts",
         "packages/contexts/agent-execution/src/features/runtime-installation-discovery/index.ts",
         "packages/contexts/agent-execution/src/features/runtime-installation-discovery/internal.ts",
-        "packages/contexts/agent-execution/src/index.ts"
+        "packages/contexts/agent-execution/src/index.ts",
+        "packages/contexts/agent-execution/src/features/interactive-agent-session/index.ts",
+        "packages/contexts/agent-execution/src/features/interactive-agent-session/internal.ts",
+        "packages/contexts/agent-execution/src/interactive-contracts.ts"
       ],
       "entrypoints": [
         "packages/contexts/agent-execution/src/composition.ts",
@@ -4230,7 +4264,8 @@
         "packages/contexts/agent-execution/src/features/contained-agent-turn/adapters/outbound/filesystem/darwin-attempt-workspace-backend.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/docker-kernel-host-custody.ts",
         "packages/contexts/agent-execution/src/features/contained-agent-turn/composition/node-kernel-workspace-authority.ts",
-        "packages/contexts/agent-execution/src/index.ts"
+        "packages/contexts/agent-execution/src/index.ts",
+        "packages/contexts/agent-execution/src/interactive-contracts.ts"
       ],
       "status": "not-adopted",
       "rationale": "Existing owner boundary is not migrated by the passive setup adoption; this classification grants no exemption from Foundation or FMS rules. Reviewed at 291684ed9: native broker installation and deferred binding, route enforcement, Docker kernel/effect custody and Node deployment recipe remain not-adopted contained-turn owners. The private route provenance composition shares one issuance/selection registry; consumption observations are an owner-local projection helper. Their exact Codex adapter and Host/Docker custody relationships are retained without transferring resource cleanup or containment authority to Assembly. Retained launch workspace is a private descriptor resource owner under existing workspace custody; Docker native-start diagnostics are local readback helpers, never admission or cleanup authority. At 81b2833af, Darwin post-claim preparation and route enforcement remain direct contained-turn owners outside passive scope; the fixed feature-local route helper and its exact adapter, custody and proof imports are not separate graph nodes. At 981c11314, eleven existing same-feature imports enter the newly explicit contained-turn anti-corruption composition boundary; these are retained static relationships outside passive Assembly adoption. Accepted base 981c11314 exposes the existing Darwin native authority binder and preparation token, and types the kernel custody port. Accepted base 0d7a02451 exports the existing workspace owner and adds an owner-local Darwin effect-custody composition over established ports; these are retained contained-turn relationships, not passive Assembly nodes. The curated composition surface re-exports the existing Codex JSONL envelope decoder, kernel custody adapter, and operation-cutoff revision through the same internal barrel; these remain retained contained-turn relationships, not passive Assembly nodes. Additional retained re-exports for the curated composition surface are not new passive Assembly nodes. These retained contained-turn relationships remain outside passive Assembly construction and transfer no authority or cleanup ownership to Assembly.",
@@ -5580,6 +5615,46 @@
           "from": "packages/contexts/agent-execution/src/index.ts",
           "to": "packages/contexts/agent-execution/src/features/runtime-installation-discovery/index.ts",
           "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/composition.ts",
+          "to": "packages/contexts/agent-execution/src/features/interactive-agent-session/internal.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/interactive-agent-session/index.ts",
+          "to": "packages/contexts/agent-execution/src/features/interactive-agent-session/contracts/interactive-provider-driver.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/interactive-agent-session/index.ts",
+          "to": "packages/contexts/agent-execution/src/features/interactive-agent-session/contracts/interactive-session.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/interactive-agent-session/internal.ts",
+          "to": "packages/contexts/agent-execution/src/features/interactive-agent-session/adapters/outbound/postgres-session-store.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/interactive-agent-session/internal.ts",
+          "to": "packages/contexts/agent-execution/src/features/interactive-agent-session/application/ports/outbound/interactive-session-ports.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/interactive-agent-session/internal.ts",
+          "to": "packages/contexts/agent-execution/src/features/interactive-agent-session/composition/interactive-session-factory.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/index.ts",
+          "to": "packages/contexts/agent-execution/src/features/interactive-agent-session/index.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/interactive-contracts.ts",
+          "to": "packages/contexts/agent-execution/src/features/interactive-agent-session/index.ts",
+          "mode": "type-only"
         }
       ]
     },
@@ -5599,6 +5674,11 @@
         {
           "from": "packages/apps/embedded-runtime/src/index.ts",
           "to": "packages/apps/embedded-runtime/src/features/contained-turn-runtime-access/index.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/index.ts",
+          "to": "packages/apps/embedded-runtime/src/features/interactive-session-runtime/index.ts",
           "mode": "type-only"
         }
       ]
@@ -6245,6 +6325,226 @@
           "mode": "type-only"
         }
       ]
+    },
+    {
+      "id": "adapter.agent-execution.interactive-postgres",
+      "owner": "Embedded Runtime",
+      "status": "not-adopted",
+      "rationale": "Interactive Host application ports, DTOs and adapters implement one owner; these are not Assembly graph nodes.",
+      "reviewTrigger": "New interactive Host role, production relationship, capability or ownership change.",
+      "roots": [
+        "packages/contexts/agent-execution/src/features/interactive-agent-session/adapters"
+      ],
+      "entrypoints": [
+        "packages/contexts/agent-execution/src/features/interactive-agent-session/adapters/outbound/postgres-session-store.ts"
+      ],
+      "relationships": [
+        {
+          "from": "packages/contexts/agent-execution/src/features/interactive-agent-session/adapters/outbound/postgres-session-store.ts",
+          "to": "packages/contexts/agent-execution/src/features/interactive-agent-session/application/ports/outbound/interactive-session-ports.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/interactive-agent-session/adapters/outbound/postgres-session-store.ts",
+          "to": "packages/contexts/agent-execution/src/features/interactive-agent-session/domain/session.ts",
+          "mode": "runtime"
+        }
+      ]
+    },
+    {
+      "id": "adapter.embedded-runtime.interactive-host",
+      "owner": "Embedded Runtime",
+      "status": "not-adopted",
+      "rationale": "Interactive Host application ports, DTOs and adapters implement one owner; these are not Assembly graph nodes.",
+      "reviewTrigger": "New interactive Host role, production relationship, capability or ownership change.",
+      "roots": [
+        "packages/apps/embedded-runtime/src/features/interactive-session-runtime/adapters"
+      ],
+      "entrypoints": [
+        "packages/apps/embedded-runtime/src/features/interactive-session-runtime/adapters/outbound/agent-execution-session.ts",
+        "packages/apps/embedded-runtime/src/features/interactive-session-runtime/adapters/outbound/directory-host-ownership.ts",
+        "packages/apps/embedded-runtime/src/features/interactive-session-runtime/adapters/outbound/provider-generation-fence.ts"
+      ],
+      "relationships": [
+        {
+          "from": "packages/apps/embedded-runtime/src/features/interactive-session-runtime/adapters/outbound/agent-execution-session.ts",
+          "to": "@agent-teams/agent-execution/composition",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/interactive-session-runtime/adapters/outbound/agent-execution-session.ts",
+          "to": "packages/apps/embedded-runtime/src/features/interactive-session-runtime/application/ports/outbound/interactive-host-ports.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/interactive-session-runtime/adapters/outbound/agent-execution-session.ts",
+          "to": "packages/apps/embedded-runtime/src/features/interactive-session-runtime/domain/session-host.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/interactive-session-runtime/adapters/outbound/directory-host-ownership.ts",
+          "to": "@agent-teams/filesystem-custody/composition",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/interactive-session-runtime/adapters/outbound/directory-host-ownership.ts",
+          "to": "packages/apps/embedded-runtime/src/features/interactive-session-runtime/application/ports/outbound/interactive-host-ports.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/interactive-session-runtime/adapters/outbound/provider-generation-fence.ts",
+          "to": "@agent-teams/agent-execution/interactive-contracts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/interactive-session-runtime/adapters/outbound/provider-generation-fence.ts",
+          "to": "packages/apps/embedded-runtime/src/features/interactive-session-runtime/domain/session-host.ts",
+          "mode": "type-only"
+        }
+      ]
+    },
+    {
+      "id": "composition.agent-execution.interactive-session",
+      "owner": "Agent Execution",
+      "status": "not-adopted",
+      "rationale": "ADR-0091 session application, domain, persistence adapter and direct construction seam; these internal roles are not Assembly graph nodes.",
+      "reviewTrigger": "New interactive session capability, production relationship or construction owner.",
+      "roots": [
+        "packages/contexts/agent-execution/src/features/interactive-agent-session/composition"
+      ],
+      "entrypoints": [
+        "packages/contexts/agent-execution/src/features/interactive-agent-session/composition/interactive-session-factory.ts"
+      ],
+      "relationships": [
+        {
+          "from": "packages/contexts/agent-execution/src/features/interactive-agent-session/composition/interactive-session-factory.ts",
+          "to": "packages/contexts/agent-execution/src/features/interactive-agent-session/application/ports/outbound/interactive-session-ports.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/interactive-agent-session/composition/interactive-session-factory.ts",
+          "to": "packages/contexts/agent-execution/src/features/interactive-agent-session/application/use-cases/interactive-session-owner.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/features/interactive-agent-session/composition/interactive-session-factory.ts",
+          "to": "packages/contexts/agent-execution/src/features/interactive-agent-session/contracts/interactive-session.ts",
+          "mode": "type-only"
+        }
+      ]
+    },
+    {
+      "id": "composition.embedded-runtime.interactive-host-feature",
+      "owner": "Embedded Runtime",
+      "status": "adopted",
+      "rationale": "ADR-0091 scoped interactive Host feature composition.",
+      "reviewTrigger": "New interactive Host role, production relationship, capability or ownership change.",
+      "roots": [
+        "packages/apps/embedded-runtime/src/features/interactive-session-runtime/composition",
+        "packages/apps/embedded-runtime/src/features/interactive-session-runtime/internal.ts"
+      ],
+      "entrypoints": [
+        "packages/apps/embedded-runtime/src/features/interactive-session-runtime/composition/host.module.ts",
+        "packages/apps/embedded-runtime/src/features/interactive-session-runtime/composition/interactive-session-runtime.contracts.ts",
+        "packages/apps/embedded-runtime/src/features/interactive-session-runtime/composition/interactive-session-runtime.inputs.ts",
+        "packages/apps/embedded-runtime/src/features/interactive-session-runtime/internal.ts"
+      ],
+      "relationships": [
+        {
+          "from": "packages/apps/embedded-runtime/src/features/interactive-session-runtime/composition/host.module.ts",
+          "to": "@agent-teams/agent-execution/composition",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/interactive-session-runtime/composition/host.module.ts",
+          "to": "packages/apps/embedded-runtime/src/features/interactive-session-runtime/adapters/outbound/agent-execution-session.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/interactive-session-runtime/composition/host.module.ts",
+          "to": "packages/apps/embedded-runtime/src/features/interactive-session-runtime/adapters/outbound/provider-generation-fence.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/interactive-session-runtime/composition/host.module.ts",
+          "to": "packages/apps/embedded-runtime/src/features/interactive-session-runtime/application/use-cases/create-session-host.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/interactive-session-runtime/composition/interactive-session-runtime.contracts.ts",
+          "to": "@agent-teams/agent-execution/composition",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/interactive-session-runtime/composition/interactive-session-runtime.contracts.ts",
+          "to": "packages/apps/embedded-runtime/src/features/interactive-session-runtime/application/ports/outbound/interactive-host-ports.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/interactive-session-runtime/composition/interactive-session-runtime.contracts.ts",
+          "to": "packages/apps/embedded-runtime/src/features/interactive-session-runtime/contracts/interactive-session-host.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/interactive-session-runtime/internal.ts",
+          "to": "packages/apps/embedded-runtime/src/features/interactive-session-runtime/adapters/outbound/directory-host-ownership.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/interactive-session-runtime/internal.ts",
+          "to": "packages/apps/embedded-runtime/src/features/interactive-session-runtime/application/ports/outbound/interactive-host-ports.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/apps/embedded-runtime/src/features/interactive-session-runtime/internal.ts",
+          "to": "packages/apps/embedded-runtime/src/features/interactive-session-runtime/contracts/interactive-session-host.ts",
+          "mode": "type-only"
+        }
+      ]
+    },
+    {
+      "id": "core.agent-execution.interactive-session",
+      "owner": "Agent Execution",
+      "status": "not-adopted",
+      "rationale": "ADR-0091 session application, domain, persistence adapter and direct construction seam; these internal roles are not Assembly graph nodes.",
+      "reviewTrigger": "New interactive session capability, production relationship or construction owner.",
+      "roots": [
+        "packages/contexts/agent-execution/src/features/interactive-agent-session/application",
+        "packages/contexts/agent-execution/src/features/interactive-agent-session/contracts",
+        "packages/contexts/agent-execution/src/features/interactive-agent-session/domain"
+      ],
+      "entrypoints": [
+        "packages/contexts/agent-execution/src/features/interactive-agent-session/application/ports/outbound/interactive-provider-driver.ts",
+        "packages/contexts/agent-execution/src/features/interactive-agent-session/application/ports/outbound/interactive-session-ports.ts",
+        "packages/contexts/agent-execution/src/features/interactive-agent-session/application/use-cases/interactive-session-owner.ts",
+        "packages/contexts/agent-execution/src/features/interactive-agent-session/application/use-cases/normalize-provider-event.ts",
+        "packages/contexts/agent-execution/src/features/interactive-agent-session/application/use-cases/session-mutation.ts",
+        "packages/contexts/agent-execution/src/features/interactive-agent-session/contracts/interactive-provider-driver.ts",
+        "packages/contexts/agent-execution/src/features/interactive-agent-session/contracts/interactive-session.ts",
+        "packages/contexts/agent-execution/src/features/interactive-agent-session/domain/session.ts"
+      ],
+      "relationships": []
+    },
+    {
+      "id": "core.embedded-runtime.interactive-host",
+      "owner": "Embedded Runtime",
+      "status": "not-adopted",
+      "rationale": "Interactive Host application ports, DTOs and adapters implement one owner; these are not Assembly graph nodes.",
+      "reviewTrigger": "New interactive Host role, production relationship, capability or ownership change.",
+      "roots": [
+        "packages/apps/embedded-runtime/src/features/interactive-session-runtime/application",
+        "packages/apps/embedded-runtime/src/features/interactive-session-runtime/contracts",
+        "packages/apps/embedded-runtime/src/features/interactive-session-runtime/domain",
+        "packages/apps/embedded-runtime/src/features/interactive-session-runtime/index.ts"
+      ],
+      "entrypoints": [
+        "packages/apps/embedded-runtime/src/features/interactive-session-runtime/application/ports/outbound/interactive-host-ports.ts",
+        "packages/apps/embedded-runtime/src/features/interactive-session-runtime/application/use-cases/create-session-host.ts",
+        "packages/apps/embedded-runtime/src/features/interactive-session-runtime/contracts/interactive-session-host.ts",
+        "packages/apps/embedded-runtime/src/features/interactive-session-runtime/domain/session-host.ts",
+        "packages/apps/embedded-runtime/src/features/interactive-session-runtime/index.ts"
+      ],
+      "relationships": []
     }
   ],
   "compositions": [
@@ -6279,6 +6579,18 @@
       ],
       "authority": "ADR-0090",
       "scopedFms": "architecture/feature-module-standard/ordinary-scope.json"
+    },
+    {
+      "boundary": "composition.embedded-runtime.interactive-host-feature",
+      "entrypoint": "packages/apps/embedded-runtime/src/features/interactive-session-runtime/internal.ts",
+      "authority": "ADR-0091",
+      "implementation": "packages/apps/embedded-runtime/src/composition/interactive-session-host.root.ts",
+      "declarations": "packages/apps/embedded-runtime/src/features/interactive-session-runtime/composition/host.declaration.ts",
+      "profile": "packages/apps/embedded-runtime/src/composition/interactive-session-host.root.ts",
+      "factories": "packages/apps/embedded-runtime/src/features/interactive-session-runtime/composition/host.module.ts",
+      "tests": [
+        "packages/apps/embedded-runtime/tests/features/interactive-session-runtime/host.test.ts"
+      ]
     }
   ],
   "exceptions": [],
@@ -6360,12 +6672,14 @@
       "packages/apps/embedded-runtime/src/features/contained-turn-runtime-validation",
       "packages/apps/embedded-runtime/src/features/darwin-contained-turn-authority",
       "packages/apps/embedded-runtime/src/features/darwin-contained-turn-deployment",
+      "packages/apps/embedded-runtime/src/features/interactive-session-runtime",
       "packages/apps/embedded-runtime/src/features/linux-codex-deployment",
       "packages/apps/embedded-runtime/src/features/linux-codex-node-recipe",
       "packages/apps/embedded-runtime/src/features/ordinary-session-runtime",
       "packages/apps/embedded-runtime/src/features/setup-inspection-planning",
       "packages/apps/embedded-runtime/src/features/trusted-runtime-access-scope",
       "packages/contexts/agent-execution/src/features/contained-agent-turn",
+      "packages/contexts/agent-execution/src/features/interactive-agent-session",
       "packages/contexts/agent-execution/src/features/runtime-installation-discovery",
       "packages/contexts/provider-access/src/features/contained-turn-access",
       "packages/contexts/runtime-configuration/src/features/claude-code-configuration-inspection",
