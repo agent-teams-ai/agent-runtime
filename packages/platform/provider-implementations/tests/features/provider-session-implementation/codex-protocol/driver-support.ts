@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { setImmediate } from 'node:timers/promises'
 import type { TestContext } from 'node:test'
-import type { Event, OpenConfig } from '@agent-teams/agent-execution/interactive-contracts'
+import type { Event, OpenConfig } from '@agent-teams/provider-session-contracts'
 import { createCodexDriverFactory } from '../../../../src/codex.ts'
 import type { CodexDriverConfig, CodexDriverHost } from '../../../../src/codex.ts'
 import { fixture } from './subprocess-fixture.ts'

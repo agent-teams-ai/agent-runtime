@@ -1,6 +1,6 @@
 import { record } from './v2-projection-helpers.ts'
 import { createHash } from 'node:crypto'
-import type { Limits, OpenConfig } from '@agent-teams/agent-execution/interactive-contracts'
+import type { Limits, OpenConfig } from '@agent-teams/provider-session-contracts'
 export type OpenCodeV1DriverConfig = {
   endpoint: string; version: string; workspacePath: string; nativeSessionId: string
   trustedBinding: string; accountBinding: string; profileBinding: string; runBinding: string

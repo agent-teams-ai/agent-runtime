@@ -50,10 +50,13 @@ async function fixture(t: test.TestContext, options: { interactiveProof?: boolea
   const git = (...args: string[]) => execFileSync('git', args, { cwd: root, env, encoding: 'utf8' }).trim();
   git('clone', '--quiet', '--shared', repository, '.');
   // Classifier unit fixtures retain the original fixed-six admission envelope.
-  // Both later package additions stay FULL in the real repository. Only these
+  // The later package additions stay FULL in the real repository. Only these
   // historical unit snapshots remove them to exercise the fixed-six envelope.
   if (options.interactiveProof !== true) { await rm(join(root, 'experiments/interactive-provider-contract'), { recursive: true, force: true }); }
-  if (options.providerLibrary !== true) { await rm(join(root, 'packages/platform/provider-implementations'), { recursive: true, force: true }); }
+  if (options.providerLibrary !== true) {
+    await rm(join(root, 'packages/platform/provider-implementations'), { recursive: true, force: true });
+    await rm(join(root, 'packages/platform/provider-session-contracts'), { recursive: true, force: true });
+  }
   // Seed the new common policy at both immutable TEST revisions. First adoption
   // is tested separately; these fixtures model the next package-only PR.
   for (const path of ['package.json', 'pnpm-lock.yaml', 'architecture/foundation/ci-pr-regressions.json', 'architecture/foundation/source-dependencies.yaml',

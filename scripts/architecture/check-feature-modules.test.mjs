@@ -1,8 +1,9 @@
 await import("./interactive-host-scope.test.mjs");
 import assert from "node:assert/strict";
-import {interactiveSpiBridgeTest, interactiveSpiInterpretationTest} from "./interactive-session-scope.test.ts";
+import {interactiveSpiBridgeTest, interactiveSpiInterpretationTest, providerContractBoundaryTest} from "./interactive-session-scope.test.ts";
 void interactiveSpiBridgeTest;
 void interactiveSpiInterpretationTest;
+void providerContractBoundaryTest;
 import { execFile } from "node:child_process";
 import { link as createHardlink, mkdtemp, mkdir, readFile, realpath, rename, symlink, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";

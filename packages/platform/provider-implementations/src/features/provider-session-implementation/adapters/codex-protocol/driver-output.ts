@@ -1,4 +1,4 @@
-import type { EventPayload } from '@agent-teams/agent-execution/interactive-contracts'
+import type { EventPayload } from '@agent-teams/provider-session-contracts'
 import type { CodexNativeNormalizedEvent } from '../../contracts/codex-events.ts'
 
 /** Provider DTOs end here. Raw errors/payloads are never forwarded as diagnostics. */

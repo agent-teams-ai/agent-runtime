@@ -1,6 +1,6 @@
 import { record } from './v2-projection-helpers.ts'
 import { createHash } from 'node:crypto'
-import type { Limits, OpenConfig } from '@agent-teams/agent-execution/interactive-contracts'
+import type { Limits, OpenConfig } from '@agent-teams/provider-session-contracts'
 import type { OpenCodeV2TransportConfig } from './v2-execution-transport.ts'
 
 /** Private Host-selected existing session. Runtime owns creation, lease and current generation. */

@@ -1,4 +1,4 @@
-import type { DriverFactory, OpenConfig } from '@agent-teams/agent-execution/interactive-contracts'
+import type { DriverFactory, OpenConfig } from '@agent-teams/provider-session-contracts'
 import { OpenCodeDriverSession } from './driver-session.ts'
 import { createV1DriverBackend } from './v1-driver-backend.ts'
 import { snapshotV1Config, v1Compatibility } from './v1-driver-config.ts'

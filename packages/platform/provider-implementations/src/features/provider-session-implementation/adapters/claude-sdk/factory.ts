@@ -1,4 +1,4 @@
-import type { DriverFactory, OpenConfig } from '@agent-teams/agent-execution/interactive-contracts';
+import type { DriverFactory, OpenConfig } from '@agent-teams/provider-session-contracts';
 import { openClaudeSession } from './open-session.ts';
 import type { ClaudeConfig, ClaudeSdkBoundary } from './open-session.ts';
 

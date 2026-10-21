@@ -1,4 +1,4 @@
-import type { EventPayload, FailureCode } from '@agent-teams/agent-execution/interactive-contracts';
+import type { EventPayload, FailureCode } from '@agent-teams/provider-session-contracts';
 export type Fact = EventPayload;
 export function record(value: unknown): Record<string, unknown> {
   return value !== null && typeof value === 'object' ? value as Record<string, unknown> : {};

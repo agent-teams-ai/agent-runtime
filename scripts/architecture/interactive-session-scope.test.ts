@@ -32,3 +32,28 @@ export const interactiveSpiInterpretationTest = test("scoped SPI interpretation 
   const source = await readFile(new URL(`../../${bridge}`, import.meta.url), "utf8");
   assert.match(source, /^export type \{[A-Za-z, ]+\} from "\.\.\/application\/ports\/outbound\/interactive-provider-driver\.js";\n$/u);
 });
+
+const {curatedModuleImportIssues} = await import(new URL('./feature-module-edges.mjs', import.meta.url).href) as {
+  curatedModuleImportIssues: (context: Record<string, unknown>) => readonly {code: string}[];
+};
+
+export const providerContractBoundaryTest = test('ADR-0093 admits only the canonical erased SPI forwards and rejects values, deep imports and undeclared edges', async () => {
+  const profile = JSON.parse(await readFile(new URL('../../architecture/feature-module-standard/candidate-profile.json', import.meta.url), 'utf8'));
+  const modules = new Map(profile.scope.productionModules.map((module: {sourceRoot: string}) => [module.sourceRoot, module]));
+  const targetPath = 'packages/platform/provider-session-contracts/src/index.ts';
+  const inspectContract = (path: string, kind = 'type', syntax = 're-export', target = targetPath, edges = true) => curatedModuleImportIssues({
+    declaredModules: modules, path, targetPath: target, imported: {kind, syntax, line: 1}, isAssembly: path.endsWith('/src/interactive-contracts.ts'),
+    sourceFeature: path === owner ? feature : undefined, layerForPath: () => 'application',
+    declaredModuleEdges: new Map(edges ? [['agent-execution->provider-session-contracts', new Set(['type'])]] : []),
+    observedModuleEdges: new Map(), moduleEdgeLocations: new Map(), issue: (code: string) => ({code}),
+  }).map(issue => issue.code);
+  for (const path of [owner, 'packages/contexts/agent-execution/src/interactive-contracts.ts']) {
+    assert.deepEqual(inspectContract(path), []);
+    assert.ok(inspectContract(path, 'runtime').includes('FM_INVALID_LAYER_DIRECTION'));
+    assert.ok(inspectContract(path, 'type', 'import').includes('FM_INVALID_LAYER_DIRECTION'));
+    assert.ok(inspectContract(path, 'type', 're-export', targetPath, false).includes('FM_UNDECLARED_MODULE_EDGE'));
+    assert.ok(inspectContract(path, 'type', 're-export', 'packages/platform/provider-session-contracts/src/features/provider-session-contracts/contracts/session.ts').includes('FM_MODULE_DEEP_IMPORT'));
+  }
+  assert.ok(inspectContract(`${root}/domain/session.ts`).includes('FM_INVALID_LAYER_DIRECTION'));
+  assert.ok(inspectContract(`${root}/application/use-cases/interactive-session-owner.ts`).includes('FM_INVALID_LAYER_DIRECTION'));
+});

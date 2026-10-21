@@ -177,6 +177,11 @@ test('original assertions, CLI options and cleanup retain exact bytes with the a
     assert.equal(reviewed.split(before).length, 2, "one exact reviewed amendment location");
     reviewed = reviewed.replace(before, after);
   }
+  // ADR-0093 changes only the exact new package census and two SPI allowlists.
+  reviewed = reviewed
+    .replace('    "packages/platform/provider-implementations": true,\n', '    "packages/platform/provider-implementations": true,\n    "packages/platform/provider-session-contracts": true,\n')
+    .replace('assert.deepEqual(selected.allow, {boundaries: [], packages: [], builtins: [], runtimeReferences: []});', 'assert.deepEqual(selected.allow, {boundaries: ["contracts.provider-session"], packages: ["@agent-teams/provider-session-contracts"], builtins: [], runtimeReferences: []});')
+    .replace('    assert.deepEqual(production.allowedBoundaries, [\n      "core.agent-execution.interactive-session",', '    assert.deepEqual(production.allowedBoundaries, [\n      "contracts.provider-session",\n      "core.agent-execution.interactive-session",');
   assert.equal(await readFile(join(root, boundary), 'utf8'), reviewed);
 });
 

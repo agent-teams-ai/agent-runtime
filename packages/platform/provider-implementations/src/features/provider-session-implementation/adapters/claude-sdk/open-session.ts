@@ -1,5 +1,5 @@
 import { query } from '@anthropic-ai/claude-agent-sdk';
-import type { Reply, Session } from '@agent-teams/agent-execution/interactive-contracts';
+import type { Reply, Session } from '@agent-teams/provider-session-contracts';
 import { compatibility, freshNativeSession, readCheckpoint, SDK_REVISION, snapshotConfig, validConfig } from './config.ts';
 import type { ClaudeConfig } from './config.ts';
 import { bounded } from '../provider-session-io/io.ts';

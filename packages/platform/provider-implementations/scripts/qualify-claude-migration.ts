@@ -33,7 +33,7 @@ try {
     const source: string = execFileSync('git', ['show', `${revision}:experiments/interactive-provider-contract/${path}`], { cwd: resolve(donor), encoding: 'utf8' });
     // Only qualification fixtures are staged. No donor production algorithm enters this consumer.
     let adapted: string = source.replaceAll('../src/claude/index.ts', '@agent-teams/provider-implementations/claude')
-      .replaceAll('../src/draft-contracts/index.ts', '@agent-teams/agent-execution/interactive-contracts');
+      .replaceAll('../src/draft-contracts/index.ts', '@agent-teams/provider-session-contracts');
     // C makes the input contract readonly; only the test-owned builder remains mutable.
     if (path === 'test/support.ts') {
       const builder = "export function config(ref = 'runtime-session-A'): ClaudeConfig {";

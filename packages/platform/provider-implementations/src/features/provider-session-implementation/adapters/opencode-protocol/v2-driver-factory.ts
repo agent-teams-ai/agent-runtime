@@ -1,4 +1,4 @@
-import type { DriverFactory, OpenConfig } from '@agent-teams/agent-execution/interactive-contracts'
+import type { DriverFactory, OpenConfig } from '@agent-teams/provider-session-contracts'
 import { checkDriverCheckpoint, snapshotDriverConfig } from './v2-driver-config.ts'
 import type { OpenCodeV2DriverConfig } from './v2-driver-config.ts'
 import { createV2DriverSession } from './v2-driver-session.ts'

@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import type { McpServerConfig, Options } from '@anthropic-ai/claude-agent-sdk';
-import type { Limits } from '@agent-teams/agent-execution/interactive-contracts';
+import type { Limits } from '@agent-teams/provider-session-contracts';
 import type { ClaudeToolBinding } from './tool-binding.ts';
 export const SDK_REVISION = '0.3.305';
 export type ClaudeConfig = {

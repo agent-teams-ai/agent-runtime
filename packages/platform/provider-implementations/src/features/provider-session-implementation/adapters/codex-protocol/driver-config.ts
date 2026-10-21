@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import type { Limits, OpenConfig } from '@agent-teams/agent-execution/interactive-contracts'
+import type { Limits, OpenConfig } from '@agent-teams/provider-session-contracts'
 import type { CodexInitializeParams } from './app-server.ts'
 import type { CodexAppServerTransport, CodexRpcLimits } from './rpc-types.ts'
 

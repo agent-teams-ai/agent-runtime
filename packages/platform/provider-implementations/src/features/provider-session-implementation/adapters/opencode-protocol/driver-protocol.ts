@@ -1,4 +1,4 @@
-import type { EventPayload, Limits } from '@agent-teams/agent-execution/interactive-contracts'
+import type { EventPayload, Limits } from '@agent-teams/provider-session-contracts'
 
 /** Private seam for the two actual native dialects; no runtime ownership or native DTOs. */
 export type DriverPermission = { requestId: string; tool: string; input: unknown }

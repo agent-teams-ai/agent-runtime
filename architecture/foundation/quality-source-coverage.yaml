@@ -14,6 +14,7 @@ compilerProjects:
   - packages/contexts/runtime-security/tsconfig.json
   - packages/platform/filesystem-custody/tsconfig.json
   - packages/platform/provider-implementations/tsconfig.json
+  - packages/platform/provider-session-contracts/tsconfig.json
 scripts:
   fast: check:fast
   full: check

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { setImmediate } from 'node:timers/promises';
 import { test } from 'node:test';
-import type { DriverFactory, Event, OpenConfig } from '@agent-teams/agent-execution/interactive-contracts';
+import type { DriverFactory, Event, OpenConfig } from '@agent-teams/provider-session-contracts';
 import { createClaudeDriverFactory } from '../../../../src/claude.ts';
 import { configuration, QueryFixture, request } from './support.ts';
 

@@ -17,7 +17,7 @@ test('packed consumer imports codecs and declarations without donor checkout or 
 import type { CodexDriverHost } from '@agent-teams/provider-implementations/codex';
 import { createClaudeDriverFactory, openClaudeSession } from '@agent-teams/provider-implementations/claude';
 import { EventFeed } from '@agent-teams/provider-implementations/session-io';
-import type { DriverFactory, Session } from '@agent-teams/agent-execution/interactive-contracts';
+import type { DriverFactory, Session } from '@agent-teams/provider-session-contracts';
 import type { ClaudeDriverHost } from '@agent-teams/provider-implementations/claude';
 const factory: (host: ClaudeDriverHost) => DriverFactory = createClaudeDriverFactory;
 const codexFactory: (host: CodexDriverHost) => DriverFactory = createCodexDriverFactory;
@@ -87,7 +87,7 @@ const factory = createCodexDriverFactory({ capabilities: ['text', 'checkpoint'],
   limits: { queuedInputs: 1, inputBytes: 4096, outputBytes: 8192, outputEvents: 20, pendingInteractions: 1, timeoutMs: 2000 },
   async probe() { return true; }, async confirmStopped() { return false; }
 }; } });
-let driver: import('@agent-teams/agent-execution/interactive-contracts').Session | undefined;
+let driver: import('@agent-teams/provider-session-contracts').Session | undefined;
 try {
   ({ driver } = await factory.open(request));
   const completed = (async () => { for await (const event of driver!.observe()) if (event.kind === 'result') return event; throw Error('missing terminal'); })();
@@ -102,8 +102,8 @@ try {
   execFileSync(process.execPath, ['lifecycle.ts', resolve(root, 'tests/fixtures/codex-app-server.ts')], { cwd: sandbox, stdio: 'pipe', timeout: 10000 })
   const manifest = JSON.parse(await readFile(join(packageDir, 'package.json'), 'utf8'))
   assert.deepEqual(manifest.engines, { node: '>=24.21.0 <25 || >=26.11.1 <27' })
-  assert.deepEqual(manifest.dependencies, { '@anthropic-ai/claude-agent-sdk': '0.3.305', zod: '4.6.7', '@anthropic-ai/sdk': '0.122.0', '@modelcontextprotocol/sdk': '1.30.0' })
-  assert.deepEqual(manifest.peerDependencies, { '@agent-teams/agent-execution': '0.0.0' })
+  assert.deepEqual(manifest.dependencies, { '@anthropic-ai/claude-agent-sdk': '0.3.305', zod: '4.6.7', '@anthropic-ai/sdk': '0.122.0', '@modelcontextprotocol/sdk': '1.30.0', '@agent-teams/provider-session-contracts': '0.0.0' })
+  assert.equal(manifest.peerDependencies, undefined)
   const lock = await readFile(join(sandbox, 'pnpm-lock.yaml'), 'utf8')
   assert.ok(!lock.includes('link:'))
   if (process.env.AGENT_TEAMS_PROVIDER_PACK_TEST_RETAIN_DIR) {console.log(JSON.stringify(await retainCheckedArchive(archive, process.env.AGENT_TEAMS_PROVIDER_PACK_TEST_RETAIN_DIR)))}

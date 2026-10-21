@@ -26,6 +26,8 @@ governedRoots:
   - packages/platform/provider-implementations/src
   - packages/platform/provider-implementations/tests
   - packages/platform/provider-implementations/scripts
+  - packages/platform/provider-session-contracts/src
+  - packages/platform/provider-session-contracts/tests
 nonWaivableRulePrefixes:
   - access-control.
   - security.

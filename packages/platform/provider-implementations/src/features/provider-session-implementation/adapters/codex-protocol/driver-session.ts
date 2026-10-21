@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import type { CloseReceipt, Event, EventPayload, FailureCode, Handoff, Input, InteractionReply, Reply, Session } from '@agent-teams/agent-execution/interactive-contracts'
+import type { CloseReceipt, Event, EventPayload, FailureCode, Handoff, Input, InteractionReply, Reply, Session } from '@agent-teams/provider-session-contracts'
 import { bounded, deferred, EventFeed } from '../provider-session-io/io.ts'
 import { CodexAppServerClient } from './app-server.ts'
 import { driverCompatibility } from './driver-config.ts'

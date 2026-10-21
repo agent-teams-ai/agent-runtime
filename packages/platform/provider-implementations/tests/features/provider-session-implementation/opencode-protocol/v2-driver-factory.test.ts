@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import type { DriverFactory, OpenConfig } from '@agent-teams/agent-execution/interactive-contracts'
+import type { DriverFactory, OpenConfig } from '@agent-teams/provider-session-contracts'
 import { createOpenCodeV2DriverFactory } from '../../../../src/opencode.ts'
 import { nativeConfig } from './v2-driver-support.ts'
 import { driverPeer } from './v2-driver-peer.ts'

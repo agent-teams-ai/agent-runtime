@@ -29,7 +29,7 @@ export function runConsumer(args: readonly string[], cwd: string): string {
 /** Actual workspace archives, never historical contract bytes or a source alias. */
 export async function installPackedConsumer(root: string, sandbox: string) {
   const workspace = resolve(root, '../../..');
-  const roots = [root, join(workspace, 'packages/contexts/agent-execution'), join(workspace, 'packages/platform/filesystem-custody')];
+  const roots = [root, join(workspace, 'packages/platform/provider-session-contracts')];
   const archives = new Map<string, string>();
   for (const [index, packageRoot] of roots.entries()) {
     const destination = join(sandbox, `pack-${index}`);
@@ -42,18 +42,19 @@ export async function installPackedConsumer(root: string, sandbox: string) {
     archives.set(manifest.name, archive);
   }
   const archive = archives.get('@agent-teams/provider-implementations'); assert.ok(archive);
-  const canonical = archives.get('@agent-teams/agent-execution'); assert.ok(canonical);
-  const custody = archives.get('@agent-teams/filesystem-custody'); assert.ok(custody);
+  const canonical = archives.get('@agent-teams/provider-session-contracts'); assert.ok(canonical);
   const packedManifest = JSON.parse(execFileSync('tar', ['-xOf', archive, 'package/package.json'], { encoding: 'utf8' })) as { dependencies: Record<string, string> };
   await writeFile(join(sandbox, 'package.json'), JSON.stringify({
     private: true, type: 'module', packageManager: 'pnpm@11.18.0',
-    dependencies: { '@agent-teams/provider-implementations': `file:${archive}`, '@agent-teams/agent-execution': `file:${canonical}`, ...packedManifest.dependencies },
+    dependencies: { '@agent-teams/provider-implementations': `file:${archive}`, ...packedManifest.dependencies, '@agent-teams/provider-session-contracts': `file:${canonical}` },
     devDependencies: { typescript: '7.0.2', '@types/node': '24.13.3' },
   }, null, 2));
   // These are explicit isolated test archive bindings, not production delivery or registry claims.
-  await writeFile(join(sandbox, 'pnpm-workspace.yaml'), `engineStrict: true\nstrictPeerDependencies: true\noverrides:\n  '@agent-teams/filesystem-custody': 'file:${custody}'\n`);
+  await writeFile(join(sandbox, 'pnpm-workspace.yaml'), `engineStrict: true\nstrictPeerDependencies: true\noverrides:\n  '@agent-teams/provider-session-contracts': 'file:${canonical}'\n`);
   runConsumer(['install', '--prefer-offline', '--ignore-scripts'], sandbox);
-  const installed = JSON.parse(await readFile(join(sandbox, 'node_modules/@agent-teams/agent-execution/package.json'), 'utf8')) as { name: string; exports: Record<string, unknown> };
-  assert.equal(installed.name, '@agent-teams/agent-execution'); assert.ok(installed.exports['./interactive-contracts']);
+  const installed = JSON.parse(await readFile(join(sandbox, 'node_modules/@agent-teams/provider-session-contracts/package.json'), 'utf8')) as { name: string; exports: Record<string, unknown> };
+  assert.equal(installed.name, '@agent-teams/provider-session-contracts'); assert.ok(installed.exports['.']);
+  const lock = await readFile(join(sandbox, 'pnpm-lock.yaml'), 'utf8');
+  for (const forbidden of ['@agent-teams/agent-execution', '@agent-teams/filesystem-custody', 'pg@', 'claude-runtime', 'link:']) {assert.ok(!lock.includes(forbidden), `forbidden consumer closure: ${forbidden}`);}
   return { archive, packageDir: join(sandbox, 'node_modules/@agent-teams/provider-implementations') };
 }

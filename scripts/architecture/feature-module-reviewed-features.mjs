@@ -2,6 +2,7 @@ const STANDARD_ROLES = ["contracts", "domain", "application", "adapters", "compo
 const hostFeature = (id, roles) => ({ root: `packages/apps/embedded-runtime/src/features/${id}`, roles });
 
 export const REVIEWED_FEATURES = Object.freeze({
+  "provider-session-contracts": { root: "packages/platform/provider-session-contracts/src/features/provider-session-contracts", roles: ["contracts"] },
   "provider-session-implementation": { root: "packages/platform/provider-implementations/src/features/provider-session-implementation", roles: ["contracts", "adapters"] },
   "runtime-installation-discovery": { root: "packages/contexts/agent-execution/src/features/runtime-installation-discovery", roles: ["contracts", "application", "adapters", "composition"] },
   "contained-agent-turn": { root: "packages/contexts/agent-execution/src/features/contained-agent-turn", roles: STANDARD_ROLES },

@@ -1,4 +1,4 @@
-import type { EventPayload } from '@agent-teams/agent-execution/interactive-contracts'
+import type { EventPayload } from '@agent-teams/provider-session-contracts'
 import { record } from './v2-projection-helpers.ts'
 import type { OpenCodeV2NativeTurn, OpenCodeV2NativeTurnCut } from './v2-projection-types.ts'
 

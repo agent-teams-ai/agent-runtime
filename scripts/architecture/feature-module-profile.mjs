@@ -68,6 +68,7 @@ export const REVIEWED_WORKSPACE_CONTAINERS = Object.freeze(["packages/apps", "pa
 // this reviewed registry, so widening the governed tree is a reviewed source
 // change and never a silent profile edit.
 const REVIEWED_PRODUCTION_MODULES = Object.freeze([
+  { id: "provider-session-contracts", role: "platform", moduleRoot: "packages/platform/provider-session-contracts", packageName: "@agent-teams/provider-session-contracts", ownerDocument: "ADR-0093", curatedExports: ["."], adoption: "active", activationAuthority: "ADR-0093" },
   { id: "agent-execution", role: "bounded-context", moduleRoot: "packages/contexts/agent-execution", packageName: "@agent-teams/agent-execution", ownerDocument: "ADR-0005", curatedExports: [".", "./composition", "./interactive-contracts"], adoption: "active", activationAuthority: "ADR-0013" },
   { id: "embedded-runtime", role: "host-app", moduleRoot: "packages/apps/embedded-runtime", packageName: "@agent-teams/embedded-runtime", ownerDocument: "ADR-0008", curatedExports: EMBEDDED_RUNTIME_EXPORT_SET, adoption: "active", activationAuthority: "ADR-0023" },
   { id: "filesystem-custody", role: "platform", moduleRoot: "packages/platform/filesystem-custody", packageName: "@agent-teams/filesystem-custody", ownerDocument: "ADR-0017", curatedExports: [".", "./composition"], adoption: "active", activationAuthority: "ADR-0019" },

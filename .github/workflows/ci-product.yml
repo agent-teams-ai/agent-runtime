@@ -28,6 +28,7 @@ jobs:
           - embedded-runtime
           - filesystem-custody
           - provider-implementations
+          - provider-session-contracts
     uses: ./.github/workflows/ci-product-shard.yml
     with:
       shard: ${{ matrix.shard }}

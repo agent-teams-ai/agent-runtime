@@ -27,6 +27,11 @@ function fixture(t) {
     mkdirSync(dirname(join(directory, path)), { recursive: true });
     cpSync(join(root, path), join(directory, path));
   }
+  const extraction = JSON.parse(readFileSync(join(root, "architecture/sdk-growth/provider-session-contracts-extraction.json"), "utf8"));
+  for (const {path} of extraction.currentInputs) {
+    mkdirSync(dirname(join(directory, path)), {recursive: true});
+    cpSync(join(root, path), join(directory, path));
+  }
   return directory;
 }
 function mutate(directory, path, change) {
@@ -37,7 +42,7 @@ function mutate(directory, path, change) {
 }
 
 test("EF 1.7.2 tooling retains EF 1.6.0 qualification and historical EF 1.5.1 observation with admission blocked", t => {
-  assert.deepEqual(checkSdkGrowthProfile(fixture(t)), { status: "pending-authority-qualification", packages: 7, metadataRoots: 1, releaseEligible: false });
+  assert.deepEqual(checkSdkGrowthProfile(fixture(t)), { status: "pending-authority-qualification", packages: 8, metadataRoots: 1, releaseEligible: false });
 });
 test("provider qualification rejects an omitted package and an unqualified curated export", t => {
   const missing = fixture(t);
@@ -45,12 +50,12 @@ test("provider qualification rejects an omitted package and an unqualified curat
   assert.throws(() => checkSdkGrowthProfile(missing), /SDK_PROVIDER_SCOPE_DRIFT/u);
   const extra = fixture(t);
   mutate(extra, `${providerRoot}/package.json`, value => { value.exports["./unqualified"] = value.exports["./claude"]; });
-  assert.throws(() => checkSdkGrowthProfile(extra), /SDK_PROVIDER_PUBLIC_IMPORT_DRIFT/u);
+  assert.throws(() => checkSdkGrowthProfile(extra), /SDK_PROVIDER_SOURCE_DRIFT/u);
 });
 test("provider qualification rejects artifact SPI substitution and publication overclaims", t => {
   const substituted = fixture(t);
-  mutate(substituted, `${providerRoot}/package.json`, value => { value.peerDependencies["@agent-teams/agent-execution"] = "file:/TEST/canonical.tgz"; });
-  assert.throws(() => checkSdkGrowthProfile(substituted), /SDK_PROVIDER_SPI_DRIFT/u);
+  mutate(substituted, `${providerRoot}/package.json`, value => { value.dependencies["@agent-teams/provider-session-contracts"] = "file:/TEST/canonical.tgz"; });
+  assert.throws(() => checkSdkGrowthProfile(substituted), /SDK_PROVIDER_SOURCE_DRIFT/u);
   const published = fixture(t);
   mutate(published, providerProofPath, value => { value.releaseEligible = true; });
   assert.throws(() => checkSdkGrowthProfile(published), /SDK_PROVIDER_ADMISSION_OVERCLAIM/u);
@@ -226,7 +231,7 @@ test("scoped interactive proof cannot qualify another or omit its actual public 
   ]) {
     const directory = fixture(t);
     mutate(directory, "packages/contexts/agent-execution/package.json", change);
-    assert.throws(() => checkSdkGrowthProfile(directory), /SDK_PUBLIC_IMPORT_QUALIFICATION_DRIFT/u);
+    assert.throws(() => checkSdkGrowthProfile(directory), /SDK_PROVIDER_SOURCE_DRIFT/u);
   }
 });
 test("historical and scoped public import qualifications must remain disjoint", t => {
@@ -237,7 +242,7 @@ test("historical and scoped public import qualifications must remain disjoint", 
 test("scoped proof rejects substituted manifest targets and release admission", t => {
   const directory = fixture(t);
   mutate(directory, "packages/contexts/agent-execution/package.json", value => {value.exports["./interactive-contracts"].import = "./dist/index.js";});
-  assert.throws(() => checkSdkGrowthProfile(directory), /SDK_SCOPED_IMPORT_PROOF_DRIFT/u);
+  assert.throws(() => checkSdkGrowthProfile(directory), /SDK_PROVIDER_SOURCE_DRIFT/u);
   const promoted = fixture(t);
   mutate(promoted, "architecture/sdk-growth/interactive-contracts-public-import.json", value => {value.releaseEligible = true;});
   assert.throws(() => checkSdkGrowthProfile(promoted), /SDK_SCOPED_IMPORT_PROOF_DRIFT/u);
@@ -246,7 +251,7 @@ for (const path of ["architecture/sdk-growth/evidence/interactive-contracts-publ
   test(`scoped public import proof rejects changed evidence or executable consumer: ${path}`, t => {
     const directory = fixture(t);
     writeFileSync(join(directory, path), "unqualified replacement\n");
-    assert.throws(() => checkSdkGrowthProfile(directory), /SDK_SCOPED_IMPORT_PROOF_DRIFT/u);
+    assert.throws(() => checkSdkGrowthProfile(directory), path.startsWith("packages/") ? /SDK_PROVIDER_SOURCE_DRIFT/u : /SDK_SCOPED_IMPORT_PROOF_DRIFT/u);
   });
 }
 test("scoped public import proof rejects missing successor", t => {
@@ -430,4 +435,21 @@ test("historical PR C0 transition matches exact Git bytes and only the authorize
     beforeWorkflowBytes.toString("utf8").replace("    timeout-minutes: 35\n", "    timeout-minutes: 60\n"),
     afterWorkflowBytes.toString("utf8")
   );
+});
+
+test("Session contracts reject omitted adoption, runtime dependencies, peers and an unqualified public subpath", t => {
+  const missing = fixture(t);
+  mutate(missing, "architecture/sdk-growth/profile.yaml", value => {value.packages = value.packages.filter(pkg => pkg.packageName !== "@agent-teams/provider-session-contracts");});
+  assert.throws(() => checkSdkGrowthProfile(missing), /SDK_CONTRACT_SCOPE_DRIFT/u);
+  for (const change of [
+    value => {value.dependencies = {pg: "8.23.0"};},
+    value => {value.peerDependencies = {"@agent-teams/agent-execution": "0.0.0"};},
+  ]) {
+    const directory = fixture(t);
+    mutate(directory, "packages/platform/provider-session-contracts/package.json", change);
+    assert.throws(() => checkSdkGrowthProfile(directory), /SDK_CONTRACT_CLOSURE_DRIFT/u);
+  }
+  const extra = fixture(t);
+  mutate(extra, "packages/platform/provider-session-contracts/package.json", value => {value.exports["./private"] = value.exports["."];});
+  assert.throws(() => checkSdkGrowthProfile(extra), /SDK_CONTRACT_SCOPE_DRIFT/u);
 });

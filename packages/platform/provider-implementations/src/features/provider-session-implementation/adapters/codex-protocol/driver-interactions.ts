@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import type { EventPayload, InteractionReply, Reply } from '@agent-teams/agent-execution/interactive-contracts'
+import type { EventPayload, InteractionReply, Reply } from '@agent-teams/provider-session-contracts'
 import { deferred } from '../provider-session-io/io.ts'
 import type { CodexAppServerToolApprovalRequest } from '../../contracts/codex-approval.ts'
 import type { CodexApprovalReply } from './approval-response.ts'

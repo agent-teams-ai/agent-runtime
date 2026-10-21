@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import type { EventPayload } from '@agent-teams/agent-execution/interactive-contracts'
+import type { EventPayload } from '@agent-teams/provider-session-contracts'
 import { OpenCodeV2DriverOutput } from '../../../../src/features/provider-session-implementation/adapters/opencode-protocol/v2-driver-output.ts'
 import { projectOpenCodeV2NativeTurn } from '../../../../src/opencode.ts'
 import { cut, assistantID } from './v2-cut-fixture.ts'

@@ -1,4 +1,4 @@
-import type { EventPayload } from '@agent-teams/agent-execution/interactive-contracts'
+import type { EventPayload } from '@agent-teams/provider-session-contracts'
 import type { readV1DriverCut } from './v1-driver-cut.ts'
 
 /** Retains raw native part indices and exact message/tool identity, never product receipts. */

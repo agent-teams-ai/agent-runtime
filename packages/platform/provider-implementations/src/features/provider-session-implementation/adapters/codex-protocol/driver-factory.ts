@@ -1,4 +1,4 @@
-import type { DriverFactory, OpenConfig } from '@agent-teams/agent-execution/interactive-contracts'
+import type { DriverFactory, OpenConfig } from '@agent-teams/provider-session-contracts'
 import { captureDriverConfig, selectedDriverCheckpoint } from './driver-config.ts'
 import type { CodexDriverCheckpoint, CodexDriverConfig } from './driver-config.ts'
 import { CodexDriverSession } from './driver-session.ts'

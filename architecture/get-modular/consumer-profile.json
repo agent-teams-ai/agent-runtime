@@ -20,7 +20,7 @@
   },
   "fms": {
     "profile": "architecture/feature-module-standard/candidate-profile.json",
-    "sha256": "a24aaff96f5e87a1b0c656524c51e6630fa0741cf9a9f0877f104cf599829c9a",
+    "sha256": "5e406d240847de227e1ca13d34632b4f90bc0743de6a0e4f9c5a11a73edf5c23",
     "features": [
       "runtime-installation-discovery",
       "contained-agent-turn",
@@ -59,7 +59,8 @@
       "trusted-runtime-access-scope",
       "interactive-agent-session",
       "interactive-session-runtime",
-      "provider-session-implementation"
+      "provider-session-implementation",
+      "provider-session-contracts"
     ]
   },
   "productionRoots": [
@@ -69,7 +70,8 @@
     "packages/contexts/runtime-configuration/src",
     "packages/contexts/runtime-security/src",
     "packages/platform/filesystem-custody/src",
-    "packages/platform/provider-implementations/src"
+    "packages/platform/provider-implementations/src",
+    "packages/platform/provider-session-contracts/src"
   ],
   "boundaries": [
     {
@@ -4280,6 +4282,11 @@
         },
         {
           "from": "packages/contexts/agent-execution/src/composition.ts",
+          "to": "packages/contexts/agent-execution/src/features/interactive-agent-session/internal.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/composition.ts",
           "to": "packages/contexts/agent-execution/src/features/runtime-installation-discovery/internal.ts",
           "mode": "runtime"
         },
@@ -5604,26 +5611,6 @@
           "mode": "type-only"
         },
         {
-          "from": "packages/contexts/agent-execution/src/features/runtime-installation-discovery/adapters/outbound/node-executable-file-observer.ts",
-          "to": "@agent-teams/filesystem-custody/composition",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/agent-execution/src/index.ts",
-          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/index.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/agent-execution/src/index.ts",
-          "to": "packages/contexts/agent-execution/src/features/runtime-installation-discovery/index.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/agent-execution/src/composition.ts",
-          "to": "packages/contexts/agent-execution/src/features/interactive-agent-session/internal.ts",
-          "mode": "runtime"
-        },
-        {
           "from": "packages/contexts/agent-execution/src/features/interactive-agent-session/index.ts",
           "to": "packages/contexts/agent-execution/src/features/interactive-agent-session/contracts/interactive-provider-driver.ts",
           "mode": "type-only"
@@ -5649,13 +5636,28 @@
           "mode": "runtime"
         },
         {
+          "from": "packages/contexts/agent-execution/src/features/runtime-installation-discovery/adapters/outbound/node-executable-file-observer.ts",
+          "to": "@agent-teams/filesystem-custody/composition",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/index.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/index.ts",
+          "mode": "type-only"
+        },
+        {
           "from": "packages/contexts/agent-execution/src/index.ts",
           "to": "packages/contexts/agent-execution/src/features/interactive-agent-session/index.ts",
           "mode": "type-only"
         },
         {
+          "from": "packages/contexts/agent-execution/src/index.ts",
+          "to": "packages/contexts/agent-execution/src/features/runtime-installation-discovery/index.ts",
+          "mode": "type-only"
+        },
+        {
           "from": "packages/contexts/agent-execution/src/interactive-contracts.ts",
-          "to": "packages/contexts/agent-execution/src/features/interactive-agent-session/index.ts",
+          "to": "@agent-teams/provider-session-contracts",
           "mode": "type-only"
         }
       ]
@@ -6525,7 +6527,13 @@
         "packages/contexts/agent-execution/src/features/interactive-agent-session/contracts/interactive-session.ts",
         "packages/contexts/agent-execution/src/features/interactive-agent-session/domain/session.ts"
       ],
-      "relationships": []
+      "relationships": [
+        {
+          "from": "packages/contexts/agent-execution/src/features/interactive-agent-session/application/ports/outbound/interactive-provider-driver.ts",
+          "to": "@agent-teams/provider-session-contracts",
+          "mode": "type-only"
+        }
+      ]
     },
     {
       "id": "core.embedded-runtime.interactive-host",
@@ -6624,37 +6632,37 @@
       "relationships": [
         {
           "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/config.ts",
-          "to": "@agent-teams/agent-execution/interactive-contracts",
+          "to": "@agent-teams/provider-session-contracts",
           "mode": "type-only"
         },
         {
           "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/factory.ts",
-          "to": "@agent-teams/agent-execution/interactive-contracts",
+          "to": "@agent-teams/provider-session-contracts",
           "mode": "type-only"
         },
         {
           "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/interactions.ts",
-          "to": "@agent-teams/agent-execution/interactive-contracts",
+          "to": "@agent-teams/provider-session-contracts",
           "mode": "type-only"
         },
         {
           "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/normalize.ts",
-          "to": "@agent-teams/agent-execution/interactive-contracts",
+          "to": "@agent-teams/provider-session-contracts",
           "mode": "type-only"
         },
         {
           "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/open-session.ts",
-          "to": "@agent-teams/agent-execution/interactive-contracts",
+          "to": "@agent-teams/provider-session-contracts",
           "mode": "type-only"
         },
         {
           "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/primitives.ts",
-          "to": "@agent-teams/agent-execution/interactive-contracts",
+          "to": "@agent-teams/provider-session-contracts",
           "mode": "type-only"
         },
         {
           "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/session.ts",
-          "to": "@agent-teams/agent-execution/interactive-contracts",
+          "to": "@agent-teams/provider-session-contracts",
           "mode": "type-only"
         },
         {
@@ -6674,17 +6682,17 @@
         },
         {
           "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/driver-config.ts",
-          "to": "@agent-teams/agent-execution/interactive-contracts",
+          "to": "@agent-teams/provider-session-contracts",
           "mode": "type-only"
         },
         {
           "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/driver-factory.ts",
-          "to": "@agent-teams/agent-execution/interactive-contracts",
+          "to": "@agent-teams/provider-session-contracts",
           "mode": "type-only"
         },
         {
           "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/driver-interactions.ts",
-          "to": "@agent-teams/agent-execution/interactive-contracts",
+          "to": "@agent-teams/provider-session-contracts",
           "mode": "type-only"
         },
         {
@@ -6694,7 +6702,7 @@
         },
         {
           "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/driver-output.ts",
-          "to": "@agent-teams/agent-execution/interactive-contracts",
+          "to": "@agent-teams/provider-session-contracts",
           "mode": "type-only"
         },
         {
@@ -6704,7 +6712,7 @@
         },
         {
           "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/driver-session.ts",
-          "to": "@agent-teams/agent-execution/interactive-contracts",
+          "to": "@agent-teams/provider-session-contracts",
           "mode": "type-only"
         },
         {
@@ -6749,47 +6757,47 @@
         },
         {
           "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/driver-protocol.ts",
-          "to": "@agent-teams/agent-execution/interactive-contracts",
+          "to": "@agent-teams/provider-session-contracts",
           "mode": "type-only"
         },
         {
           "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/driver-session.ts",
-          "to": "@agent-teams/agent-execution/interactive-contracts",
+          "to": "@agent-teams/provider-session-contracts",
           "mode": "type-only"
         },
         {
           "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v1-driver-config.ts",
-          "to": "@agent-teams/agent-execution/interactive-contracts",
+          "to": "@agent-teams/provider-session-contracts",
           "mode": "type-only"
         },
         {
           "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v1-driver-factory.ts",
-          "to": "@agent-teams/agent-execution/interactive-contracts",
+          "to": "@agent-teams/provider-session-contracts",
           "mode": "type-only"
         },
         {
           "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v1-driver-output.ts",
-          "to": "@agent-teams/agent-execution/interactive-contracts",
+          "to": "@agent-teams/provider-session-contracts",
           "mode": "type-only"
         },
         {
           "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-driver-backend.ts",
-          "to": "@agent-teams/agent-execution/interactive-contracts",
+          "to": "@agent-teams/provider-session-contracts",
           "mode": "type-only"
         },
         {
           "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-driver-config.ts",
-          "to": "@agent-teams/agent-execution/interactive-contracts",
+          "to": "@agent-teams/provider-session-contracts",
           "mode": "type-only"
         },
         {
           "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-driver-factory.ts",
-          "to": "@agent-teams/agent-execution/interactive-contracts",
+          "to": "@agent-teams/provider-session-contracts",
           "mode": "type-only"
         },
         {
           "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-driver-output.ts",
-          "to": "@agent-teams/agent-execution/interactive-contracts",
+          "to": "@agent-teams/provider-session-contracts",
           "mode": "type-only"
         }
       ]
@@ -7110,6 +7118,31 @@
           "mode": "runtime"
         }
       ]
+    },
+    {
+      "id": "contracts.provider-session",
+      "owner": "provider-session-contracts",
+      "roots": [
+        "packages/platform/provider-session-contracts/src"
+      ],
+      "entrypoints": [
+        "packages/platform/provider-session-contracts/src/index.ts"
+      ],
+      "status": "not-adopted",
+      "rationale": "ADR-0093 dependency-free consumer SPI artifact; named erased type definitions and reexports have no Host, resource lifetime or independently composed behavior. Foundation and FMS enforce the actual contract boundary.",
+      "reviewTrigger": "Runtime values, external dependencies, lifecycle or configurable composition requires explicit successor adoption.",
+      "relationships": [
+        {
+          "from": "packages/platform/provider-session-contracts/src/composition.ts",
+          "to": "packages/platform/provider-session-contracts/src/features/provider-session-contracts/internal.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-session-contracts/src/index.ts",
+          "to": "packages/platform/provider-session-contracts/src/features/provider-session-contracts/index.ts",
+          "mode": "type-only"
+        }
+      ]
     }
   ],
   "compositions": [
@@ -7218,6 +7251,10 @@
       {
         "name": "@agent-teams/provider-implementations",
         "root": "packages/platform/provider-implementations"
+      },
+      {
+        "name": "@agent-teams/provider-session-contracts",
+        "root": "packages/platform/provider-session-contracts"
       }
     ],
     "featureRoots": [
@@ -7258,7 +7295,8 @@
       "packages/contexts/runtime-security/src/features/provider-process-egress-authorization",
       "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization",
       "packages/platform/filesystem-custody/src/features/stable-filesystem-custody",
-      "packages/platform/provider-implementations/src/features/provider-session-implementation"
+      "packages/platform/provider-implementations/src/features/provider-session-implementation",
+      "packages/platform/provider-session-contracts/src/features/provider-session-contracts"
     ]
   },
   "sdkGrowth": {

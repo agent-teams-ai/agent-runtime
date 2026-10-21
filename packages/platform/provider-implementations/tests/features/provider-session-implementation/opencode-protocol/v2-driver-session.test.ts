@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { setTimeout as delay } from 'node:timers/promises'
-import type { Event } from '@agent-teams/agent-execution/interactive-contracts'
+import type { Event } from '@agent-teams/provider-session-contracts'
 import { createV2DriverSession } from '../../../../src/features/provider-session-implementation/adapters/opencode-protocol/v2-driver-session.ts'
 import { nativeConfig } from './v2-driver-support.ts'
 import { driverPeer } from './v2-driver-peer.ts'

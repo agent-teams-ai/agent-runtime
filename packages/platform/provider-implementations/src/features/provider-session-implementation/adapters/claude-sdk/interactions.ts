@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { CanUseTool, PermissionResult } from '@anthropic-ai/claude-agent-sdk';
-import type { EventPayload, InteractionReply, Reply } from '@agent-teams/agent-execution/interactive-contracts';
+import type { EventPayload, InteractionReply, Reply } from '@agent-teams/provider-session-contracts';
 import { fail } from './primitives.ts';
 type Pending = { kind: 'question' | 'permission'; input: Record<string, unknown>; finish: (result: PermissionResult) => void };
 function plainData(value: unknown): Record<string, unknown> | undefined {

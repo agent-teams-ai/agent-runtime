@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 const git = (cwd: string, ...args: string[]) => execFileSync('git', args, { cwd, encoding: 'utf8' }).trim();
-const shardIds = ['agent-execution-1', 'agent-execution-2', 'agent-execution-3', 'provider-access', 'runtime-configuration', 'runtime-security', 'embedded-runtime', 'filesystem-custody', 'provider-implementations'];
+const shardIds = ['agent-execution-1', 'agent-execution-2', 'agent-execution-3', 'provider-access', 'runtime-configuration', 'runtime-security', 'embedded-runtime', 'filesystem-custody', 'provider-implementations', 'provider-session-contracts'];
 const phaseEntries = ['check:ci:product:root', 'check:ci:product:typed', 'check:ci:product:native'];
 const object = (value: unknown): Record<string, unknown> => { assert.ok(value && typeof value === 'object' && !Array.isArray(value)); return value as Record<string, unknown>; };
 const array = (value: unknown): unknown[] => { assert.ok(Array.isArray(value)); return value; };

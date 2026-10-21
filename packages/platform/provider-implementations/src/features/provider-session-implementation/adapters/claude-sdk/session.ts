@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { CanUseTool, Options, Query, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
-import type { CloseReceipt, Event, EventPayload, FailureCode, Handoff, Input, InteractionReply, Reply, Session } from '@agent-teams/agent-execution/interactive-contracts';
+import type { CloseReceipt, Event, EventPayload, FailureCode, Handoff, Input, InteractionReply, Reply, Session } from '@agent-teams/provider-session-contracts';
 import { compatibility, options, SDK_REVISION } from './config.ts';
 import type { ClaudeConfig } from './config.ts';
 import { toolBindingHook } from './tool-binding.ts';

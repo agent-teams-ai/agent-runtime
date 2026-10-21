@@ -1,4 +1,4 @@
-import type { EventPayload } from '@agent-teams/agent-execution/interactive-contracts'
+import type { EventPayload } from '@agent-teams/provider-session-contracts'
 import type { DriverProtocol, DriverSnapshot } from './driver-protocol.ts'
 import type { OpenCodeV2DriverConfig } from './v2-driver-config.ts'
 import { createDriverNative } from './v2-driver-native.ts'

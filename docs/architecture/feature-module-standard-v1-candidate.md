@@ -25,6 +25,26 @@ code_anchors:
 
 # Feature Module Standard v1 scoped active adoption
 
+## Provider Session contracts extraction
+
+[ADR-0093](../decisions/0093-provider-session-contracts-package.md) supersedes
+ADR-0092's install coupling. The eighth production package,
+`packages/platform/provider-session-contracts`, is a `platform` with one
+contracts-only feature and no dependencies, peers or runtime values. Its root
+exposes the unchanged fourteen provider Session SPI types. Provider adapters and
+Agent Execution depend directly on this root; the old curated import remains a
+compatibility reexport of those same definitions.
+
+The local FMS interpretation admits exactly two existing Agent Execution files
+as named type-only forwarders to the canonical package root: `src/interactive-contracts.ts`
+and the interactive-session outbound `interactive-provider-driver.ts` port.
+This is a scoped local interpretation, not a claim of unmodified FMS v1
+conformance. It admits no general cross-module application/domain imports.
+The blocking checker and rejecting fixture retain runtime-value, deep-import,
+undeclared-edge and other-layer rejection. The package owns no Host, lifecycle
+or configurable composition graph; CMS records it as a technical contract
+boundary. Other composition owners and their existing adoption remain unchanged.
+
 ## Provider implementation workspace scope
 
 [ADR-0092](../decisions/0092-provider-implementation-workspace-library.md)
@@ -36,8 +56,9 @@ created. The root entry exports existing portable types only. `./composition`
 and the four finite `./claude`, `./codex`, `./opencode`, `./session-io` facades
 use named re-exports through the feature's internal entry. Their exact admitted
 paths carry the same no-inline-behavior grammar; this does not permit arbitrary
-extra platform assembly files. The only cross-module source edge is the type-only
-public Agent Execution interactive SPI.
+extra platform assembly files. Under ADR-0093, its cross-module source edge is the type-only public
+`@agent-teams/provider-session-contracts` root. The earlier Agent Execution peer
+and its historical qualification remain recorded in ADR-0092.
 
 The native active registry, package census and rejecting scope fixtures enforce
 this successor without changing the immutable FMS v1 authority or any former

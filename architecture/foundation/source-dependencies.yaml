@@ -11,6 +11,7 @@ packageRoots:
 - packages/contexts/runtime-security
 - packages/platform/filesystem-custody
 - packages/platform/provider-implementations
+- packages/platform/provider-session-contracts
 rootPackage: true
 governedRoots:
 - experiments/interactive-provider-contract
@@ -44,6 +45,8 @@ governedRoots:
 - packages/platform/provider-implementations/src
 - packages/platform/provider-implementations/tests
 - packages/platform/provider-implementations/scripts
+- packages/platform/provider-session-contracts/src
+- packages/platform/provider-session-contracts/tests
 boundaries:
 - id: core.agent-execution.interactive-session
   dependencyMode: runtime
@@ -61,8 +64,8 @@ boundaries:
   - packages/contexts/agent-execution/src/features/interactive-agent-session/contracts/interactive-session.ts
   - packages/contexts/agent-execution/src/features/interactive-agent-session/domain/session.ts
   allow:
-    boundaries: []
-    packages: []
+    boundaries: [contracts.provider-session]
+    packages: ["@agent-teams/provider-session-contracts"]
     builtins: []
     runtimeReferences: []
 - id: adapter.agent-execution.interactive-postgres
@@ -615,6 +618,7 @@ boundaries:
   - packages/contexts/agent-execution/src/features/contained-agent-turn/composition/node-kernel-workspace-authority.ts
   allow:
     boundaries:
+    - contracts.provider-session
     - core.agent-execution.interactive-session
     - adapter.agent-execution.interactive-postgres
     - composition.agent-execution.interactive-session
@@ -638,6 +642,7 @@ boundaries:
     - adapter.agent-execution.ordinary-postgres
     - composition.agent-execution.ordinary
     packages:
+    - "@agent-teams/provider-session-contracts"
     - '@agent-teams/filesystem-custody'
     - pg
     - zod
@@ -3378,8 +3383,8 @@ boundaries:
   - packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-turn-projection.ts
   - packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/provider-session-io/io.ts
   allow:
-    boundaries: ["contracts.provider-implementations","core.agent-execution.interactive-session"]
-    packages: ["@agent-teams/agent-execution","@anthropic-ai/claude-agent-sdk"]
+    boundaries: ["contracts.provider-implementations","contracts.provider-session"]
+    packages: ["@agent-teams/provider-session-contracts","@anthropic-ai/claude-agent-sdk"]
     builtins: ["node:crypto","node:buffer","node:timers/promises"]
     runtimeReferences: []
 - id: composition.provider-implementations
@@ -3407,7 +3412,41 @@ boundaries:
   - packages/platform/provider-implementations/scripts
   entrypoints: []
   allow:
-    boundaries: ["adapter.provider-implementations","contracts.provider-implementations","composition.provider-implementations","core.agent-execution.interactive-session"]
-    packages: ["@agent-teams/agent-execution","@agent-teams/provider-implementations","@anthropic-ai/claude-agent-sdk","typescript","oxc-parser"]
+    boundaries: ["adapter.provider-implementations","contracts.provider-implementations","composition.provider-implementations","contracts.provider-session"]
+    packages: ["@agent-teams/provider-session-contracts","@agent-teams/provider-implementations","@anthropic-ai/claude-agent-sdk","typescript","oxc-parser"]
     builtins: ["node:assert/strict","node:buffer","node:child_process","node:crypto","node:events","node:fs","node:fs/promises","node:http","node:module","node:net","node:os","node:path","node:readline","node:test","node:timers/promises","node:url"]
+    runtimeReferences: []
+- id: contracts.provider-session
+  dependencyMode: runtime
+  packageExports:
+    - "."
+  roots:
+    - packages/platform/provider-session-contracts/src
+  entrypoints:
+    - packages/platform/provider-session-contracts/src/index.ts
+  allow:
+    boundaries: []
+    packages: []
+    builtins: []
+    runtimeReferences: []
+- id: development.provider-session-contracts
+  dependencyMode: development
+  roots:
+    - packages/platform/provider-session-contracts/tests
+  entrypoints: []
+  allow:
+    boundaries:
+      - contracts.provider-session
+    packages:
+      - "@agent-teams/provider-session-contracts"
+      - typescript
+    builtins:
+      - node:assert/strict
+      - node:child_process
+      - node:fs/promises
+      - node:module
+      - node:os
+      - node:path
+      - node:test
+      - node:url
     runtimeReferences: []

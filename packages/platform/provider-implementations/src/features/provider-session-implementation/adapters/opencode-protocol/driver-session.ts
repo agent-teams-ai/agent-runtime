@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import { setTimeout as delay } from 'node:timers/promises'
-import type { CloseReceipt, Event, EventPayload, FailureCode, Input, InteractionReply, Reply, Session } from '@agent-teams/agent-execution/interactive-contracts'
+import type { CloseReceipt, Event, EventPayload, FailureCode, Input, InteractionReply, Reply, Session } from '@agent-teams/provider-session-contracts'
 import { bounded, deferred, EventFeed } from '../provider-session-io/io.ts'
 import type { DriverPermission, DriverProtocol, DriverSessionConfig, DriverTurn } from './driver-protocol.ts'
 import { executionWasNotSubmitted } from './v2-failures.ts'

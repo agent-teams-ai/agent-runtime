@@ -121,6 +121,11 @@
       "id": "ADR-0092",
       "path": "docs/decisions/0092-provider-implementation-workspace-library.md",
       "immutableDigest": "sha256:190c87866e7d39767374939c9cafed58aa9ccae1b68dc50bfee759eb2c95cc33"
+    },
+    {
+      "id": "ADR-0093",
+      "path": "docs/decisions/0093-provider-session-contracts-package.md",
+      "immutableDigest": "sha256:2be5e0a71c610f4f727d8825fb13b8c8112364fe6d2e4607ad4552e973446959"
     }
   ]
 }

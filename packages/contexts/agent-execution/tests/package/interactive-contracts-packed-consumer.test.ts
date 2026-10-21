@@ -26,9 +26,32 @@ test("packed canonical SPI compiles outside checkout with no SDK/workspace depen
     await mkdir(modules, {recursive: true});
     await run("tar", ["-xzf", archive, "-C", modules]);
     await rename(join(modules, "package"), join(modules, "agent-execution"));
+    const contractRoot = resolve(packageRoot, "../../platform/provider-session-contracts");
+    const contractTarget = join(modules, "provider-session-contracts");
+    await mkdir(contractTarget, {recursive: true});
+    await cp(join(contractRoot, "dist"), join(contractTarget, "dist"), {recursive: true});
+    await cp(join(contractRoot, "package.json"), join(contractTarget, "package.json"));
     await writeFile(join(consumer, "package.json"), '{"type":"module"}\n');
     await writeFile(join(consumer, "tsconfig.json"), JSON.stringify({compilerOptions: {target: "ES2024", module: "NodeNext", moduleResolution: "NodeNext", strict: true, skipLibCheck: false, types: [], noEmit: true}, files: ["consumer.ts"]}));
     await writeFile(join(consumer, "consumer.ts"), `import type {DriverFactory, Event, Session} from "@agent-teams/agent-execution/interactive-contracts";
+import type * as Old from "@agent-teams/agent-execution/interactive-contracts";
+import type * as New from "@agent-teams/provider-session-contracts";
+type Equal<A, B> = (<T>() => T extends A ? 1 : 2) extends (<T>() => T extends B ? 1 : 2) ? true : false;
+type Assert<T extends true> = T;
+type CheckCloseReceipt = Assert<Equal<Old.CloseReceipt, New.CloseReceipt>>;
+type CheckDriverFactory = Assert<Equal<Old.DriverFactory, New.DriverFactory>>;
+type CheckEvent = Assert<Equal<Old.Event, New.Event>>;
+type CheckEventPayload = Assert<Equal<Old.EventPayload, New.EventPayload>>;
+type CheckFailure = Assert<Equal<Old.Failure, New.Failure>>;
+type CheckFailureCode = Assert<Equal<Old.FailureCode, New.FailureCode>>;
+type CheckHandoff = Assert<Equal<Old.Handoff, New.Handoff>>;
+type CheckInput = Assert<Equal<Old.Input, New.Input>>;
+type CheckInteractionReply = Assert<Equal<Old.InteractionReply, New.InteractionReply>>;
+type CheckLimits = Assert<Equal<Old.Limits, New.Limits>>;
+type CheckOpenConfig = Assert<Equal<Old.OpenConfig, New.OpenConfig>>;
+type CheckOpenedSession = Assert<Equal<Old.OpenedSession, New.OpenedSession>>;
+type CheckSession = Assert<Equal<Old.Session, New.Session>>;
+type CheckReply = Assert<Equal<Old.Reply<unknown>, New.Reply<unknown>>>;
       export const consume = async (factory: DriverFactory, event: Event): Promise<Session> => {
         const opened = await factory.open({tenantId:"TEST",projectId:"TEST",sessionId:"TEST",generation:1,configRevision:"TEST",requiredCapabilities:[]});
         if (event.operationRef) {await opened.driver.interrupt(event.operationRef);}

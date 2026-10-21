@@ -1,5 +1,5 @@
 import type { Options, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
-import type { OpenConfig } from '@agent-teams/agent-execution/interactive-contracts';
+import type { OpenConfig } from '@agent-teams/provider-session-contracts';
 import type { ClaudeConfig, ClaudeSdkBoundary } from '../../../../src/claude.ts';
 
 function latch() {

@@ -189,7 +189,7 @@ function macDecoderFixture(receipts: PackageReceipt[], expected: ExpectedEvidenc
 }
 export function registerProductFanoutTests(): void {
 registerProductSourceCustodyTests(); registerProductWorkflowTests(); registerDarwinFanoutTests();
-test('source-derived full coverage preserves all nine runners and old root/type/native commands', async t => {
+test('source-derived full coverage preserves all ten runners and old root/type/native commands', async t => {
   const { root, expected } = await fixture(); t.after(() => rm(root, { recursive: true, force: true }));
   assert.equal(expected.universe.filter(file => !file.includes('/interactive-agent-session/')).length, 7);
   assert.equal(expected.universe.length, 10); assert.deepEqual(expected.universe, expected.universe.toSorted());
@@ -280,7 +280,7 @@ test('source-derived full coverage preserves all nine runners and old root/type/
     await writeFile(join(current, 'full-ci-product-package-agent-execution-1-current', 'receipt.json'), JSON.stringify(retried));
     assert.deepEqual(await readFile(siblingPath), siblingBefore);
     const loaded = await reports(current);
-    assert.equal(loaded.length, 9);
+    assert.equal(loaded.length, 10);
     assertJobResults({ packages: { result: 'success' }, root: { result: 'success' } }, 'linux-x64');
     assertFanoutEvidence(expected, loaded, phases);
 
@@ -294,7 +294,7 @@ test('source-derived full coverage preserves all nine runners and old root/type/
         encoding: 'utf8', env: { ...process.env, EXECUTION_TARGET: 'linux-x64', NEEDS: JSON.stringify(needs), CI_PACKAGE_REPORT_DIR: current, CI_ROOT_REPORT_DIR: current },
       });
       assert.equal(result.status, 1); assert.match(result.stderr, new RegExp(`${job} incomplete`, 'u'));
-      assert.equal((await reports(current)).length, 9);
+      assert.equal((await reports(current)).length, 10);
     }
   });
 });

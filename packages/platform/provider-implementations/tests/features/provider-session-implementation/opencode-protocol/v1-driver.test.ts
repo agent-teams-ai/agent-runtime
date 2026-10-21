@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { setTimeout as delay } from 'node:timers/promises'
-import type { DriverFactory, Event, OpenConfig, Session } from '@agent-teams/agent-execution/interactive-contracts'
+import type { DriverFactory, Event, OpenConfig, Session } from '@agent-teams/provider-session-contracts'
 import { createOpenCodeV1DriverFactory } from '../../../../src/opencode.ts'
 import type { OpenCodeV1DriverConfig } from '../../../../src/opencode.ts'
 import { v1Peer } from './v1-driver-peer.ts'
