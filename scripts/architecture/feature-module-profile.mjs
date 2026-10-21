@@ -58,6 +58,10 @@ export const MODULE_ROLES = Object.freeze(["bounded-context", "host-app", "platf
 export const MODULE_ADOPTION_STATES = Object.freeze(["active", "pending"]);
 const CURATED_EXPORT_SET = Object.freeze([".", "./composition"]);
 const EMBEDDED_RUNTIME_EXPORT_SET = Object.freeze([...CURATED_EXPORT_SET, "./scripts/run-package-tests.mjs"]);
+// ADR-0092: finite, named re-export facades of one technical adapter feature.
+export const PROVIDER_IMPLEMENTATION_FACADES = Object.freeze(["claude", "codex", "opencode", "session-io"]
+  .map(name => `packages/platform/provider-implementations/src/${name}.ts`));
+const PROVIDER_IMPLEMENTATION_EXPORT_SET = Object.freeze([...CURATED_EXPORT_SET, "./claude", "./codex", "./opencode", "./session-io"]);
 export const REVIEWED_WORKSPACE_CONTAINERS = Object.freeze(["packages/apps", "packages/contexts", "packages/platform"]);
 // Every production module that exists in the reviewed workspace is named here
 // with its real role and its exact adoption state. The JSON profile must match
@@ -70,6 +74,7 @@ const REVIEWED_PRODUCTION_MODULES = Object.freeze([
   { id: "provider-access", role: "bounded-context", moduleRoot: "packages/contexts/provider-access", packageName: "@agent-teams/provider-access", ownerDocument: "ADR-0005", curatedExports: [".", "./composition"], adoption: "active", activationAuthority: "ADR-0013" },
   { id: "runtime-configuration", role: "bounded-context", moduleRoot: "packages/contexts/runtime-configuration", packageName: "@agent-teams/runtime-configuration", ownerDocument: "ADR-0005", curatedExports: [".", "./composition"], adoption: "active", activationAuthority: "ADR-0020" },
   { id: "runtime-security", role: "bounded-context", moduleRoot: "packages/contexts/runtime-security", packageName: "@agent-teams/runtime-security", ownerDocument: "ADR-0005", curatedExports: [".", "./composition"], adoption: "active", activationAuthority: "ADR-0021" },
+  { id: "provider-implementations", role: "platform", moduleRoot: "packages/platform/provider-implementations", packageName: "@agent-teams/provider-implementations", ownerDocument: "ADR-0092", curatedExports: PROVIDER_IMPLEMENTATION_EXPORT_SET, adoption: "active", activationAuthority: "ADR-0092" },
 ]);
 const REVIEWED_OUT_OF_SCOPE = Object.freeze(["Module Kit", "experiments", "tooling other than scripts/architecture/check-feature-modules.mjs"]);
 const reviewedModules = (predicate) => REVIEWED_PRODUCTION_MODULES.filter(predicate);
@@ -300,6 +305,9 @@ const hostAppCompositionAssemblyPath = (path, productionRoots, hostAppRoots) => 
 const profileTopologyIssues = (profile, profilePath) => {
   const issues = [], productionRoots = profile.scope.productionRoots, features = profile.features;
   const expectedCurated = [...productionRoots.flatMap((root) => [`${root}/index.ts`, `${root}/composition.ts`]),
+    ...profile.scope.productionModules.filter(module => module.id === "provider-implementations"
+      && module.sourceRoot === "packages/platform/provider-implementations/src" && module.adoption === "active")
+      .flatMap(() => PROVIDER_IMPLEMENTATION_FACADES),
     ...profile.scope.productionModules.filter(module => module.id === "agent-execution" && module.sourceRoot === "packages/contexts/agent-execution/src")
       .map(module => `${module.sourceRoot}/interactive-contracts.ts`)];
   const hostAppRoots = new Set(profile.scope.productionModules

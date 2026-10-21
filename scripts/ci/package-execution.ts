@@ -28,11 +28,12 @@ export const packages = [
   { name: '@agent-teams/provider-access', root: 'packages/contexts/provider-access', build, test: 'node --test --test-concurrency=1 tests/features/contained-turn-access/*.test.ts', processes: 1 },
   { name: '@agent-teams/runtime-configuration', root: 'packages/contexts/runtime-configuration', build, test: 'node --test --test-concurrency=1 tests/features/codex-configuration-inspection/codex-configuration-inspection.test.ts tests/features/codex-configuration-inspection/codex-application-boundary.test.ts tests/features/codex-configuration-inspection/semantic-boundary.test.ts tests/features/claude-code-configuration-inspection/claude-code-contract.test.ts tests/features/claude-code-configuration-inspection/claude-code-configuration-inspection.test.ts tests/features/claude-code-configuration-inspection/claude-code-vocabulary-parity.test.ts tests/features/claude-code-configuration-inspection/claude-code-configuration-source-reader.test.ts tests/package/claude-code-contract-custody.test.ts tests/package/curated-assembly-surface.test.ts', processes: 1 },
   { name: '@agent-teams/runtime-security', root: 'packages/contexts/runtime-security', build, test: 'node --test --test-concurrency=1 tests/features/*/*.test.ts tests/package/*.test.ts', processes: 1 },
+  { name: '@agent-teams/provider-implementations', root: 'packages/platform/provider-implementations', build, test: 'node --test --test-concurrency=1 --test-timeout=60000 tests/features/provider-session-implementation/*/*.test.ts tests/package/*.test.ts', processes: 1 },
 ] as const;
 type Package = (typeof packages)[number];
 // Scheduling only: every original test file remains an obligation.
 export const shardIds = ['agent-execution-1', 'agent-execution-2', 'agent-execution-3',
-  'provider-access', 'runtime-configuration', 'runtime-security', 'embedded-runtime', 'filesystem-custody'] as const;
+  'provider-access', 'runtime-configuration', 'runtime-security', 'embedded-runtime', 'filesystem-custody', 'provider-implementations'] as const;
 export type ShardId = (typeof shardIds)[number];
 export interface Shard { id: ShardId; package: Package; partitionIndex: number; partitionCount: number }
 export function selectShard(id: unknown): Shard {
@@ -119,9 +120,9 @@ export function validateInventory(entries: readonly { root: string; manifest: un
   assert.equal(proof.length, requiresProof ? 1 : 0, 'exact experimental package census');
   for (const entry of proof) { assertInteractiveProviderPackage(entry.manifest); }
   entries = entries.filter(item => item.root !== interactiveProviderPackageRoot);
-  assert.deepEqual(entries.map(item => item.root).toSorted(), packages.map(item => item.root).toSorted(), 'fixed six roots mismatch');
+  assert.deepEqual(entries.map(item => item.root).toSorted(), packages.map(item => item.root).toSorted(), 'fixed seven roots mismatch');
   const names = entries.map(item => object(item.manifest).name);
-  assert.equal(new Set(names).size, 6, 'duplicate package name');
+  assert.equal(new Set(names).size, 7, 'duplicate package name');
   for (const entry of entries) {
     const expected = packages.find(item => item.root === entry.root);
     assert.ok(expected);
@@ -382,7 +383,7 @@ export async function executePackage(root: string, id: unknown, revision: string
     runnerImage: { os: process.env.ImageOS ?? null, version: process.env.ImageVersion ?? null, runnerOS: process.env.RUNNER_OS ?? null, runnerArch: process.env.RUNNER_ARCH ?? null },
     runnerHash: hash(await readFile(self)), before: {} as Record<string, string>, after: {} as Record<string, string>,
     sourceBefore: {}, sourceAfter: {}, commands: [], exitCode: 1, failure: null,
-    coverage: 'one of eight required target-specific shards; complete-file AE partition or unchanged whole-package command; all-six clean/build; all other obligations separate' };
+    coverage: 'one of nine required target-specific shards; complete-file AE partition or reviewed whole-package command; all-seven clean/build; all other obligations separate' };
   const save = () => writeFile(join(output, 'receipt.json'), JSON.stringify(report, null, 2) + '\n'); await save();
   try {
     const shard = selectShard(id), selected = shard.package;

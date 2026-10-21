@@ -10,6 +10,7 @@ packageRoots:
 - packages/contexts/runtime-configuration
 - packages/contexts/runtime-security
 - packages/platform/filesystem-custody
+- packages/platform/provider-implementations
 rootPackage: true
 governedRoots:
 - experiments/interactive-provider-contract
@@ -40,6 +41,9 @@ governedRoots:
 - packages/apps/embedded-runtime/scripts
 - packages/contexts/provider-access/scripts
 - packages/contexts/runtime-security/scripts
+- packages/platform/provider-implementations/src
+- packages/platform/provider-implementations/tests
+- packages/platform/provider-implementations/scripts
 boundaries:
 - id: core.agent-execution.interactive-session
   dependencyMode: runtime
@@ -3258,7 +3262,8 @@ boundaries:
   - experiments/interactive-provider-contract/src/draft-contracts/index.ts
   allow:
     boundaries: []
-    packages: []
+    packages:
+    - '@agent-teams/agent-execution'
     builtins: []
     runtimeReferences: []
 - id: experiments.interactive-claude-driver
@@ -3268,12 +3273,10 @@ boundaries:
   entrypoints:
   - experiments/interactive-provider-contract/src/claude/index.ts
   allow:
-    boundaries:
-    - experiments.interactive-draft-contracts
+    boundaries: []
     packages:
-    - '@anthropic-ai/claude-agent-sdk'
-    builtins:
-    - node:crypto
+    - '@agent-teams/provider-implementations'
+    builtins: []
     runtimeReferences: []
 - id: experiments.interactive-harness
   dependencyMode: development
@@ -3314,4 +3317,97 @@ boundaries:
     boundaries: []
     packages: []
     builtins: []
+    runtimeReferences: []
+
+- id: contracts.provider-implementations
+  dependencyMode: runtime
+  roots:
+  - packages/platform/provider-implementations/src/features/provider-session-implementation/contracts
+  - packages/platform/provider-implementations/src/features/provider-session-implementation/index.ts
+  - packages/platform/provider-implementations/src/index.ts
+  entrypoints:
+  - packages/platform/provider-implementations/src/features/provider-session-implementation/contracts/codex-approval.ts
+  - packages/platform/provider-implementations/src/features/provider-session-implementation/contracts/codex-events.ts
+  allow:
+    boundaries: []
+    packages: []
+    builtins: []
+    runtimeReferences: []
+- id: adapter.provider-implementations
+  dependencyMode: runtime
+  roots:
+  - packages/platform/provider-implementations/src/features/provider-session-implementation/adapters
+  entrypoints:
+  - packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/factory.ts
+  - packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/normalize.ts
+  - packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/open-session.ts
+  - packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/tool-binding.ts
+  - packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/app-server.ts
+  - packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/approval-request.ts
+  - packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/approval-response.ts
+  - packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/driver-config.ts
+  - packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/driver-factory.ts
+  - packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/exec-jsonl.ts
+  - packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/rpc-client.ts
+  - packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/rpc-types.ts
+  - packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/session-types.ts
+  - packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/thread-session.ts
+  - packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/wire-frames.ts
+  - packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/OpenCodeClientFactory.ts
+  - packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/OpenCodeMessageIds.ts
+  - packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/OpenCodeSseEventStream.ts
+  - packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/bound-session.ts
+  - packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/canonical-message-types.ts
+  - packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/session-binding-types.ts
+  - packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/session-bindings.ts
+  - packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/terminal-proof.ts
+  - packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/types.ts
+  - packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v1-driver-config.ts
+  - packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v1-driver-factory.ts
+  - packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-control-transport.ts
+  - packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-driver-config.ts
+  - packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-driver-factory.ts
+  - packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-driver-native.ts
+  - packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-driver-output.ts
+  - packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-driver-session.ts
+  - packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-execution-transport.ts
+  - packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-failures.ts
+  - packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-native-cut.ts
+  - packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-projection-types.ts
+  - packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-session-control.ts
+  - packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-turn-projection.ts
+  - packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/provider-session-io/io.ts
+  allow:
+    boundaries: ["contracts.provider-implementations","core.agent-execution.interactive-session"]
+    packages: ["@agent-teams/agent-execution","@anthropic-ai/claude-agent-sdk"]
+    builtins: ["node:crypto","node:buffer","node:timers/promises"]
+    runtimeReferences: []
+- id: composition.provider-implementations
+  dependencyMode: runtime
+  roots:
+  - packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts
+  - packages/platform/provider-implementations/src/composition.ts
+  - packages/platform/provider-implementations/src/claude.ts
+  - packages/platform/provider-implementations/src/codex.ts
+  - packages/platform/provider-implementations/src/opencode.ts
+  - packages/platform/provider-implementations/src/session-io.ts
+  entrypoints:
+  - packages/platform/provider-implementations/src/claude.ts
+  - packages/platform/provider-implementations/src/codex.ts
+  - packages/platform/provider-implementations/src/opencode.ts
+  allow:
+    boundaries: ["adapter.provider-implementations","contracts.provider-implementations"]
+    packages: []
+    builtins: []
+    runtimeReferences: []
+- id: development.provider-implementations
+  dependencyMode: development
+  roots:
+  - packages/platform/provider-implementations/tests
+  - packages/platform/provider-implementations/scripts
+  entrypoints: []
+  allow:
+    boundaries: ["adapter.provider-implementations","contracts.provider-implementations","composition.provider-implementations","core.agent-execution.interactive-session"]
+    packages: ["@agent-teams/agent-execution","@agent-teams/provider-implementations","@anthropic-ai/claude-agent-sdk","typescript","oxc-parser"]
+    builtins: ["node:assert/strict","node:buffer","node:child_process","node:crypto","node:events","node:fs","node:fs/promises","node:http","node:module","node:net","node:os","node:path","node:readline","node:test","node:timers/promises","node:url"]
     runtimeReferences: []

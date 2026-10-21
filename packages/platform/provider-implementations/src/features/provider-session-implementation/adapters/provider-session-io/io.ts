@@ -1,5 +1,3 @@
-import type { Failure, FailureCode } from '../draft-contracts/index.ts';
-export const fail = (code: FailureCode): Failure => ({ ok: false, code });
 export function deferred<T>() {
   let settle!: (value: T) => void;
   const promise = new Promise<T>((resolve) => { settle = resolve; });
@@ -9,13 +7,13 @@ export async function bounded<T>(promise: Promise<T>, timeoutMs: number): Promis
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([promise, new Promise<never>((_resolve, reject) => {
-      timer = setTimeout(() => reject(new Error('deadline')), timeoutMs);
+      timer = setTimeout(() => { reject(new Error('deadline')); }, timeoutMs);
     })]);
   } finally { clearTimeout(timer); }
 }
 /** Single-consumer, byte-and-count bounded event feed. Never silently drops output. */
 export class EventFeed<T> implements AsyncIterable<T> {
-  private values: { value: T; bytes: number }[] = [];
+  private readonly values: { value: T; bytes: number }[] = [];
   private bytes = 0;
   private ended = false;
   private waiter = deferred<void>();
@@ -39,7 +37,7 @@ export class EventFeed<T> implements AsyncIterable<T> {
   async *[Symbol.asyncIterator](): AsyncGenerator<T> {
     if (this.claimed) {throw new Error('single observer required');}
     this.claimed = true;
-    while (true) {
+    for (;;) {
       const next = this.values.shift();
       if (next) { this.bytes -= next.bytes; yield next.value; }
       else if (this.ended) {

@@ -21,7 +21,7 @@ import {
   repositoryPath,
   sameFilesystemIdentity,
 } from "./feature-module-paths.mjs";
-import { ACCEPTED_DECISIONS, LOCAL_MODULE_FILES, acceptedDecisionsFromRegistry, applyGovernedRecords, isOptionalPublicEntrypoint, validateProfile } from "./feature-module-profile.mjs";
+import { ACCEPTED_DECISIONS, LOCAL_MODULE_FILES, PROVIDER_IMPLEMENTATION_FACADES, acceptedDecisionsFromRegistry, applyGovernedRecords, isOptionalPublicEntrypoint, validateProfile } from "./feature-module-profile.mjs";
 import { curatedModuleImportIssues, detectCycles, recordObservedEdge, unusedEdgeIssues } from "./feature-module-edges.mjs";
 import { packagePolicyIssues } from "./feature-module-tests.mjs";
 import { activeGateIssues } from "./feature-module-root-gates.mjs";
@@ -244,7 +244,8 @@ const parseFileImports = async (absoluteFile, path, resources) => {
   };
 };
 
-const isCuratedModuleFile = (path) => LOCAL_MODULE_FILES.includes(posix.basename(path)) || path === "packages/contexts/agent-execution/src/interactive-contracts.ts";
+const isCuratedModuleFile = (path) => LOCAL_MODULE_FILES.includes(posix.basename(path))
+  || path === "packages/contexts/agent-execution/src/interactive-contracts.ts" || PROVIDER_IMPLEMENTATION_FACADES.includes(path);
 const isHostCompositionAssembly = (path, isAssembly) => Boolean(isAssembly) && !isCuratedModuleFile(path);
 
 const assemblyGrammarIssues = ({ isAssembly, path, sourceFeature, program, source }) => {

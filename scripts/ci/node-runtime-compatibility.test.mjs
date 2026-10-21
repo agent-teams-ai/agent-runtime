@@ -34,6 +34,9 @@ test("workspace artifacts expose the same bounded Node support policy", async ()
     const manifest = JSON.parse(await read(path));
     assert.equal(manifest.engines.node, ">=24.18.0 <25 || >=26.10.0 <27", path);
   }
+  // ADR-0092 retains the provider library's actually qualified, narrower floors.
+  const provider = JSON.parse(await read("packages/platform/provider-implementations/package.json"));
+  assert.equal(provider.engines.node, ">=24.21.0 <25 || >=26.11.1 <27");
 });
 
 test("Node APIs used by runtime adapters retain observable semantics", async () => {

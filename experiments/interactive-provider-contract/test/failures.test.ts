@@ -111,7 +111,7 @@ test('callback expiry releases waiter; a normal prompt and late reply cannot ans
   const callback = fake.options.canUseTool?.('AskUserQuestion', { questions: [{ question: 'Choice?' }] }, { signal: new AbortController().signal, requestId: 'expires-1', toolUseID: 'expires-tool' });
   await tick(); const interaction = events.find((event) => event.kind === 'interaction'); assert(interaction?.kind === 'interaction');
   const second = session.submit(input(2)); assert.equal((await callback)?.behavior, 'deny');
-  assert.deepEqual(session.respondToInteraction(interaction.interactionRef, { kind: 'question', answers: { 'Choice?': 'late' } }), { ok: false, code: 'stale' });
+  assert.deepEqual((await session.respondToInteraction(interaction.interactionRef, { kind: 'question', answers: { 'Choice?': 'late' } })), { ok: false, code: 'stale' });
   assert.equal(fake.inputs.length, 1); await session.close(); assert.equal((await second).ok, false);
 });
 

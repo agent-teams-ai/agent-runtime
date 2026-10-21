@@ -1,14 +1,14 @@
-import type { EventPayload, FailureCode } from '../draft-contracts/index.ts';
+import type { EventPayload, FailureCode } from '@agent-teams/agent-execution/interactive-contracts';
 export type Fact = EventPayload;
 export function record(value: unknown): Record<string, unknown> {
-  return value && typeof value === 'object' ? value as Record<string, unknown> : {};
+  return value !== null && typeof value === 'object' ? value as Record<string, unknown> : {};
 }
 export class OutputLimitError extends Error {}
 export class Normalizer {
   private streamMessage: string | undefined;
-  private blocks = new Map<string, string>();
-  private completeIndex = new Map<string, number>();
-  private seenWrappers = new Set<string>();
+  private readonly blocks = new Map<string, string>();
+  private readonly completeIndex = new Map<string, number>();
+  private readonly seenWrappers = new Set<string>();
   private readonly maxBytes: number;
   constructor(maxBytes: number) { this.maxBytes = maxBytes; }
   reset(): void { this.streamMessage = undefined; this.blocks.clear(); this.completeIndex.clear(); this.seenWrappers.clear(); }
@@ -26,8 +26,8 @@ export class Normalizer {
     return { facts: [{ kind: 'diagnostic', code: 'unknown-event' }] };
   }
   private partial(e: Record<string, unknown>): Fact[] {
-    if (e.type === 'message_start') { this.streamMessage = String(record(e.message).id ?? ''); return []; }
-    if (!this.streamMessage || typeof e.index !== 'number') {return [];}
+    if (e.type === 'message_start') { const id = record(e.message).id; this.streamMessage = typeof id === 'string' ? id : '';  return []; }
+    if (this.streamMessage === undefined || this.streamMessage.length === 0 || typeof e.index !== 'number') {return [];}
     const key = `${this.streamMessage}:${e.index}`;
     if (e.type === 'content_block_start') {
       const b = record(e.content_block);
