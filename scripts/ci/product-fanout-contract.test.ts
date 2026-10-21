@@ -75,7 +75,10 @@ async function fixture() {
   const files = ['tests/package/z.test.ts', 'tests/features/contained-agent-turn/b.test.ts',
     'tests/features/runtime-installation-discovery/a.test.ts', 'tests/package/a.test.ts',
     'tests/features/contained-agent-turn/contained-turn-live-canary-lifecycle.test.mjs',
-    'tests/features/contained-agent-turn/a.test.ts', 'tests/package/m.test.ts'];
+    'tests/features/contained-agent-turn/a.test.ts', 'tests/package/m.test.ts',
+    'tests/features/interactive-agent-session/owner.test.ts',
+    'tests/features/interactive-agent-session/postgres-store.test.ts',
+    'tests/features/interactive-agent-session/composition.test.ts'];
   for (const file of files) { await put(`${packageRoots['agent-execution']}/${file}`, "import test from 'node:test'; test('actual fixture file', () => {}); test('other passing identity', () => {}); for (const name of ['repeat', 'repeat']) { test(name, () => {}); } test('deliberate TEST skip', {skip:true}, () => {});"); }
   const source = await readProductSource(root, tracked);
   const expected: ExpectedEvidence = { ...source, target: 'linux-x64', workflow: { runId: '42', attempt: 2, workflowSha: 'a'.repeat(40) }, sha: 'a'.repeat(40), inputTree: 'b'.repeat(40), nodeExecutable: process.execPath, measureDigests: { 'package.json': 'c'.repeat(64) } };
@@ -188,7 +191,11 @@ export function registerProductFanoutTests(): void {
 registerProductSourceCustodyTests(); registerProductWorkflowTests(); registerDarwinFanoutTests();
 test('source-derived full coverage preserves all eight runners and old root/type/native commands', async t => {
   const { root, expected } = await fixture(); t.after(() => rm(root, { recursive: true, force: true }));
-  assert.equal(expected.universe.length, 7); assert.deepEqual(expected.universe, expected.universe.toSorted());
+  assert.equal(expected.universe.filter(file => !file.includes('/interactive-agent-session/')).length, 7);
+  assert.equal(expected.universe.length, 10); assert.deepEqual(expected.universe, expected.universe.toSorted());
+  for (const leaf of ['owner', 'postgres-store', 'composition']) {
+    assert.equal(expected.universe.filter(file => file === `tests/features/interactive-agent-session/${leaf}.test.ts`).length, 1);
+  }
   const packages = await packageReports(root, expected), phases = phaseReports(expected);
   assertFanoutEvidence(expected, packages.toReversed(), phases.toReversed());
   if (process.env.CI_FOCUSED_EVIDENCE_DIR) { await writeFile(join(process.env.CI_FOCUSED_EVIDENCE_DIR, 'synthetic-fanout-processes.json'), JSON.stringify({ scope: 'actual disposable TEST commands; no product qualification', expected, packages, phases }, null, 2)); }
@@ -306,6 +313,23 @@ test('source oracle rejects ignored inputs, runner drift, and missing literal AE
       if (fault === 'root-script') { await writeFile(join(root, 'package.json'), JSON.stringify({ scripts: { ...scripts, test: 'node --test dropped.test.ts' } })); }
       await assert.rejects(readProductSource(root, tracked));
     });
+  }
+});
+test('independent source oracle rejects each omitted or duplicated C spec and missing C file', async t => {
+  const f = await fixture(); t.after(() => rm(f.root, {recursive:true,force:true}));
+  const manifest = join(f.root, packageRoots['agent-execution'], 'package.json');
+  const original = await readFile(manifest), parsed = JSON.parse(original.toString());
+  for (const leaf of ['owner', 'postgres-store', 'composition']) {
+    const spec = `tests/features/interactive-agent-session/${leaf}.test.ts`;
+    for (const runner of [parsed.scripts.test.replace(` ${spec}`, ''), `${parsed.scripts.test} ${spec}`]) {
+      await writeFile(manifest, JSON.stringify({...parsed, scripts:{...parsed.scripts, test:runner}}));
+      await assert.rejects(readProductSource(f.root, f.tracked), /frozen AE runner drift/);
+    }
+    await writeFile(manifest, original);
+    const path = `${packageRoots['agent-execution']}/${spec}`, file = join(f.root, path), bytes = await readFile(file);
+    await rm(file); f.tracked.splice(f.tracked.indexOf(path), 1);
+    await assert.rejects(readProductSource(f.root, f.tracked), /missing AE pattern/);
+    await writeFile(file, bytes); f.tracked.push(path);
   }
 });
 }

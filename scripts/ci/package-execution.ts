@@ -22,7 +22,7 @@ const build = 'tsc --project tsconfig.json --pretty false';
 const clean = 'node -e "const fs=require(\'node:fs\'); for (const path of [\'dist\',\'.cache\']) fs.rmSync(path, { recursive: true, force: true })"';
 // Independent source-reviewed whole-suite inventory. Script drift requires review.
 export const packages = [
-  { name: '@agent-teams/agent-execution', root: 'packages/contexts/agent-execution', build: `${build} && node scripts/copy-runtime-assets.mjs`, test: 'node --test --test-concurrency=1 tests/features/runtime-installation-discovery/*.test.ts tests/features/contained-agent-turn/*.test.ts tests/features/contained-agent-turn/contained-turn-live-canary-lifecycle.test.mjs tests/package/*.test.ts', processes: 1 },
+  { name: '@agent-teams/agent-execution', root: 'packages/contexts/agent-execution', build: `${build} && node scripts/copy-runtime-assets.mjs`, test: 'node --test --test-concurrency=1 tests/features/runtime-installation-discovery/*.test.ts tests/features/contained-agent-turn/*.test.ts tests/features/contained-agent-turn/contained-turn-live-canary-lifecycle.test.mjs tests/features/interactive-agent-session/owner.test.ts tests/features/interactive-agent-session/postgres-store.test.ts tests/features/interactive-agent-session/composition.test.ts tests/package/*.test.ts', processes: 1 },
   { name: '@agent-teams/embedded-runtime', root: 'packages/apps/embedded-runtime', build, test: 'node scripts/run-package-tests.mjs', processes: 3 },
   { name: '@agent-teams/filesystem-custody', root: 'packages/platform/filesystem-custody', build: `${build} && node scripts/build-native-helper.mjs`, test: 'node --test --test-concurrency=1 --test-force-exit tests/features/stable-filesystem-custody/stable-path-custody.test.ts tests/features/stable-filesystem-custody/stable-directory-process-lock.test.ts tests/features/stable-filesystem-custody/host-descriptors.test.mjs tests/features/stable-filesystem-custody/darwin-acquisition-guard.test.mjs tests/features/stable-filesystem-custody/host-errno.test.mjs tests/package/curated-assembly-surface.test.ts tests/package/handle-guard-coverage.test.ts', processes: 1 },
   { name: '@agent-teams/provider-access', root: 'packages/contexts/provider-access', build, test: 'node --test --test-concurrency=1 tests/features/contained-turn-access/*.test.ts', processes: 1 },
@@ -53,7 +53,7 @@ async function executionInventory(root: string): Promise<{ universe: string[]; f
   const manifest = object(json(await readFile(join(packageRoot, 'package.json'), 'utf8')));
   assert.equal(object(manifest.scripts).test, packages[0].test, 'Agent Execution runner drift');
   const universe: string[] = [];
-  // The four reviewed patterns have no recursive glob, shell quoting or expansion.
+  // Four historical patterns plus three admitted C specs; no recursive glob or shell expansion.
   for (const pattern of executionPatterns) {
     for (const segment of pattern.split('/').slice(0, -1)) {assert.match(segment, /^[a-z-]+$/u);}
     const directory = resolve(packageRoot, pattern.slice(0, pattern.lastIndexOf('/')));
