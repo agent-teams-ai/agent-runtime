@@ -37,7 +37,7 @@ function positivePid(value: string): number {
   if (!Number.isSafeInteger(pid) || pid <= 0) {throw new Error('positive PID required');}
   return pid;
 }
-async function identity(pid: number): Promise<Identity> {
+export async function identity(pid: number): Promise<Identity> {
   const root = `/proc/${pid}`;
   const [raw, status, executable, comm, metadata] = await Promise.all([
     readFile(root + '/stat', 'utf8'), readFile(root + '/status', 'utf8'), readlink(root + '/exe'), readFile(root + '/comm', 'utf8'), stat(root),
@@ -47,7 +47,7 @@ async function identity(pid: number): Promise<Identity> {
   if (!/^\d+$/u.test(fields[19] ?? '') || group === undefined) {throw new Error('process identity unavailable');}
   return {pid, parentPid: positivePid(fields[1]!), startTicks: fields[19]!, executable, comm: comm.trim(), uid: metadata.uid, threadGroupPid: positivePid(group)};
 }
-async function workerAncestor(): Promise<Identity> {
+export async function workerAncestor(): Promise<Identity> {
   let pid = process.pid; const seen = new Set<number>(); const matches: Identity[] = [];
   while (pid > 1 && !seen.has(pid)) {
     seen.add(pid); const current = await identity(pid);
