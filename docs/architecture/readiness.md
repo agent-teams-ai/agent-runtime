@@ -48,6 +48,16 @@ product.
 
 ## Status vocabulary
 
+Accepted interactive C contract is tracked in
+[ADR-0091](../decisions/0091-interactive-agent-session-synthetic-vertical-slice.md)
+and its [candidate qualification plan](../spikes/interactive-session-c-first-slice-qualification.md).
+No interactive implementation, Host adoption, real Claude credential route or
+deployment tuple is qualified by that contract. Its synthetic acceptance and
+remaining real-provider/Host gates remain prospective; existing qualified
+targets and frozen contained-turn contracts are unchanged. Root technical review
+accepted the scoped successor and prospective qualification plan on 2026-10-21
+under the existing A–F owner direction; no campaign PASS is asserted.
+
 - `foundation accepted`: ownership and contracts may be implemented.
 - `scoped qualified`: the named revision/platform/scenario passed its retained
   evidence campaign.

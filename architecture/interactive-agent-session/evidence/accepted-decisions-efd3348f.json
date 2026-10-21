@@ -1,0 +1,116 @@
+{
+  "schemaVersion": 1,
+  "algorithm": "sha256",
+  "decisions": [
+    {
+      "id": "ADR-0001",
+      "path": "docs/decisions/0001-runtime-profile-and-activation-boundaries.md",
+      "immutableDigest": "sha256:a43a1b6339d09544689176388f56272bf03658f82490caa8faf26be19c5a4da4"
+    },
+    {
+      "id": "ADR-0002",
+      "path": "docs/decisions/0002-architecture-reconciliation-tenancy-and-operator-recovery.md",
+      "immutableDigest": "sha256:0733d07765cd43ee80ce5347e8098655065b01a683d00974dafde9763e864e94"
+    },
+    {
+      "id": "ADR-0003",
+      "path": "docs/decisions/0003-runtime-cutoff-barriers-and-scope-disposition.md",
+      "immutableDigest": "sha256:2b67c84978f85aceac9b5767badf8aa9f490907c4249e62873feef9545bde89d"
+    },
+    {
+      "id": "ADR-0004",
+      "path": "docs/decisions/0004-pre-materialization-dispatch-prevention.md",
+      "immutableDigest": "sha256:ebe1510cba80693c5b6ec6215bde2ff827578b1428e0fafc8a7e8d40531f06da"
+    },
+    {
+      "id": "ADR-0005",
+      "path": "docs/decisions/0005-runtime-context-package-identities.md",
+      "immutableDigest": "sha256:42a7daa1702053ec2cc4190dd73dfb4afae7fade77a2b8ab1992c947a57253d9"
+    },
+    {
+      "id": "ADR-0007",
+      "path": "docs/decisions/0007-deterministic-documentation-governance.md",
+      "immutableDigest": "sha256:d01e3d25fcc094645087e33656590543c3fe7bd741c24d2adedd66691afeb3fb"
+    },
+    {
+      "id": "ADR-0008",
+      "path": "docs/decisions/0008-private-embedded-runtime-access-entrypoint.md",
+      "immutableDigest": "sha256:cc01253865e4292e1160363f211b0ccb675fb50860fab7c23c3925fa6bb033c7"
+    },
+    {
+      "id": "ADR-0009",
+      "path": "docs/decisions/0009-contained-turn-private-access-and-host-shutdown-boundary.md",
+      "immutableDigest": "sha256:43e03f0db43ca6df7316089e28fec146536be0061e497e408dacdea798b870ca"
+    },
+    {
+      "id": "ADR-0010",
+      "path": "docs/decisions/0010-contained-agent-turn-v1-operation-authority.md",
+      "immutableDigest": "sha256:ae93100d235748090f441b12d98a7cfe7075ba886a126ab78df4037138c5f89e"
+    },
+    {
+      "id": "ADR-0012",
+      "path": "docs/decisions/0012-provider-access-authority-in-contained-turn-composition.md",
+      "immutableDigest": "sha256:65084ea45ec06419bbbd859c0835e51125014a184f2e5b746289fc092593c297"
+    },
+    {
+      "id": "ADR-0013",
+      "path": "docs/decisions/0013-feature-module-standard-v1-candidate-adoption.md",
+      "immutableDigest": "sha256:a925f597fc3ae0a5b4c241650582d534df2254ca45384a7008085370dbda83da"
+    },
+    {
+      "id": "ADR-0014",
+      "path": "docs/decisions/0014-darwin-provider-candidate-platform-qualification.md",
+      "immutableDigest": "sha256:b923c5f780461715861e829391fd7a01f7f7cb81586760655f5f8218c6d9b7e3"
+    },
+    {
+      "id": "ADR-0015",
+      "path": "docs/decisions/0015-passive-setup-static-assembly-adoption.md",
+      "immutableDigest": "sha256:f8bd0ab5f9d7a4937095b45fd533da34f83964b8da6b766dc2a93d459396e9df"
+    },
+    {
+      "id": "ADR-0017",
+      "path": "docs/decisions/0017-feature-module-production-scope-roles.md",
+      "immutableDigest": "sha256:a7b5030f94eeb3ec1abaab0919237f8359c7d0b24c997abf133d9007b8d0a86f"
+    },
+    {
+      "id": "ADR-0018",
+      "path": "docs/decisions/0018-declared-production-module-edges.md",
+      "immutableDigest": "sha256:30047bd8af157f3190ed149d55a972bbccf8d5dd4ad8b72857099c53c8151843"
+    },
+    {
+      "id": "ADR-0019",
+      "path": "docs/decisions/0019-stable-filesystem-custody-feature-activation.md",
+      "immutableDigest": "sha256:0d14957269756e25a91fa3598b42034d335b1f27eddedd18c267d8069d7612b4"
+    },
+    {
+      "id": "ADR-0020",
+      "path": "docs/decisions/0020-runtime-configuration-feature-activation.md",
+      "immutableDigest": "sha256:bb333c3543ebb96fe273a516cc5727fe2a2ff7388a51028a60327d6160376068"
+    },
+    {
+      "id": "ADR-0021",
+      "path": "docs/decisions/0021-runtime-security-feature-activation.md",
+      "immutableDigest": "sha256:d069d8bc82019c7efb582ba28f8006e53469be6ee873cc2b5bd5e55dc79962b0"
+    },
+    {
+      "id": "ADR-0022",
+      "path": "docs/decisions/0022-host-app-composition-directory-assembly-grammar.md",
+      "immutableDigest": "sha256:13def70c8554d01fbf254ef3afce598f0a18edc44d7d3af4eaf634b0635fddd8"
+    },
+    {
+      "id": "ADR-0023",
+      "path": "docs/decisions/0023-embedded-runtime-host-app-feature-activation.md",
+      "immutableDigest": "sha256:6932ada5202b24d2f5f05c7da52638dcb2f0e19c44a13b9218d63a2f4c149019"
+    },
+    {
+      "id": "ADR-0024",
+      "path": "docs/decisions/0024-get-modular-resource-scopes-for-ordinary-owners-and-provider-access-grants.md",
+      "immutableDigest": "sha256:925670691825177147316faf90aeffe2390a038f44b1a7f474673757c335d133"
+    },
+    {
+      "id": "ADR-0090",
+      "path": "docs/decisions/0090-ordinary-user-session-codex-execution-profile.md",
+      "immutableDigest": "sha256:ce26ce717bd00701b2ddf4d073999591cda8b9f0e08b3238290e6646bfe02bf1"
+    }
+  ]
+}

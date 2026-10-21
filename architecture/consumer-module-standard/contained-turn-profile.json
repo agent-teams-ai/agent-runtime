@@ -6,8 +6,8 @@
       "repository": "agent-teams-ai/get-modular",
       "path": "docs/architecture/common-assembly.md",
       "anchor": "consumer-module-standard",
-      "gitCommit": "81063add7de50ffe2b91cc74bf7271b298624c21",
-      "sha256": "49d08b6d1762e94308157fb59b3aa82ac1630c91f529f6efcd4915dfffee7ba7"
+      "gitCommit": "ddf1e0b0053f546f12ca70190b237b4f7e78d09d",
+      "sha256": "c2fe582a14ff6e79620b232ca7ffc914afb0474ec21fd43f208251dd7252f4a3"
     },
     "featureModuleStandard": {
       "repository": "agent-teams-ai/.github",

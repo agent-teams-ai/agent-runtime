@@ -25,6 +25,21 @@ export function registerCmsPinReviewTests(): void {
   test('pure CMS review validates an independently stated document transition', async () => {
     verifyCmsPinReview(await fixture());
   });
+  test('pure CMS review accepts truthful Git retrieval and rejects a transplanted observation', async () => {
+    const inputs = await fixture();
+    Object.assign(inputs.review.provenance, {supplier: 'runtime-interactive-admission',
+      retrieval: 'exact-git-object-and-live-upstream-ref', independentRetrieval: true,
+      gitObservation: {repository: inputs.review.repository, ref: 'refs/heads/main', commit: inputs.review.after.commit,
+        documentBlob: '3e757656cf36eca53338e520d134963a44f793f8'}});
+    verifyCmsPinReview(inputs);
+    for (const fault of [
+      (x: CmsReviewInputs) => {x.review.provenance.gitObservation!.documentBlob = '0'.repeat(40);},
+      (x: CmsReviewInputs) => {x.review.provenance.gitObservation!.commit = '0'.repeat(40);},
+      (x: CmsReviewInputs) => {x.review.provenance.gitObservation!.ref = 'refs/heads/unreviewed';},
+      (x: CmsReviewInputs) => {x.review.provenance.gitObservation!.repository = 'another/repository';},
+      (x: CmsReviewInputs) => {x.review.provenance.independentRetrieval = false;},
+    ]) {const changed = structuredClone(inputs); fault(changed); assert.throws(() => verifyCmsPinReview(changed));}
+  });
   test('pure CMS review rejects authenticated-looking false evidence and scope claims', async () => {
     const faults: Array<(x: CmsReviewInputs) => void> = [
       x => { x.deltaBytes = Buffer.from('fabricated\n'); Object.assign(x.review.delta, { sha256: hash(x.deltaBytes), byteLength: x.deltaBytes.length }); },

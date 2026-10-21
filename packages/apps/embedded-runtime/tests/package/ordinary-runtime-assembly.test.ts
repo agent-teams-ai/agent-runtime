@@ -6,9 +6,9 @@ import {join} from "node:path";
 import {parseSync} from "oxc-parser";
 import {Pool} from "pg";
 import {compileComposition} from "@get-modular/core";
-import {assemblyFor} from "@get-modular/assembly";
+import {assemblyFor, implement} from "@get-modular/assembly";
 import {guardHandles, isolate, smoke} from "@get-modular/conformance";
-import {createScope, type Resources} from "@get-modular/resources";
+import {createScope, type Resources, scoped} from "@get-modular/resources";
 import {createAgentRuntimeHost} from "../../dist/composition.js";
 import {runtimeOrdinarySetupDeclarations, runtimeOrdinarySetupProfile, runtimeSetupDeclarations, runtimeSetupProfile, bindRuntimeSetup, composeRuntimeSetup, createRuntimeSetupFactories, type RuntimeSetupCapabilities} from "../../dist/composition/runtime-setup-assembly.js";
 import type {AgentRuntimeHost} from "../../dist/composition/agent-runtime-host.js";
@@ -141,7 +141,7 @@ test("ordinary preparation fails before owner construction when a selected facto
   });
   const composition = await compileComposition({declarations: runtimeOrdinarySetupDeclarations, profile: runtimeOrdinarySetupProfile});
   assert.equal(composition.ok, true);
-  const prepared = await api.prepare({composition, factories: bound.factories.slice(1), roots: bound.roots});
+  const prepared = await api.prepare({composition, modules: bound.modules.slice(1), roots: bound.roots});
   assert.equal(prepared.status, "failed"); assert.equal(calls, 0);
 });
 
@@ -193,7 +193,7 @@ test("materialized ordinary root injects the provider owner's launch capability 
     assert.equal(invalid.ok, false); assert.equal(counts.calls, 0);
     const composition = await compileComposition({declarations: runtimeOrdinarySetupDeclarations, profile: runtimeOrdinarySetupProfile});
     if (!composition.ok) {assert.fail(JSON.stringify(composition));}
-    const preparation = await api.prepare({composition, factories: bound.factories, roots: bound.roots});
+    const preparation = await api.prepare({composition, modules: bound.modules, roots: bound.roots});
     assert.equal(preparation.status, "prepared");
     if (preparation.status !== "prepared") {assert.fail(JSON.stringify(preparation));}
     const result = await preparation.prepared.run({scope: owners.resources});
@@ -231,8 +231,7 @@ test("smoke: the ordinary composition root releases every created owner under in
 
 test("isolate: the provider module releases its Codex owner exactly once", async () => {
   const fakes = createFakeOrdinaryFactories();
-  await using isolated = await isolate(assemblyFor<OrdinaryRuntimeCapabilities>(), {
-    declaration: ordinaryProviderDeclaration, factory: createOrdinaryModuleFactories(fakes.factories).provider, dependencies: {}});
+  await using isolated = await isolate(implement<OrdinaryRuntimeCapabilities>()(ordinaryProviderDeclaration, createOrdinaryModuleFactories(fakes.factories).provider, scoped), { dependencies: {} });
   assert.equal(isolated.instance.provider, fakes.ports.provider);
   assert.equal(fakes.counts.created, 1); assert.equal(fakes.counts.released, 0);
   const report = await isolated.close();

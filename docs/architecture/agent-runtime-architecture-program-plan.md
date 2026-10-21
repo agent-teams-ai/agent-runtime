@@ -31,6 +31,16 @@ Authority: the owner decisions log, decisions 1-49 and defaults D1-D9 (`decision
 
 ## 1. Purpose and owner goals
 
+Scoped successor accepted on 2026-10-21:
+[ADR-0091](../decisions/0091-interactive-agent-session-synthetic-vertical-slice.md)
+admits the owner-directed A–F interactive Claude/session path as an additive
+feature, narrowly succeeding this section's Codex-only/no-feature-growth/Claude
+exclusions, decision 1 and §8.1 for that scope. Decision 32's contained freeze and
+existing Codex ordinary contracts remain unchanged. The
+[prospective C qualification plan](../spikes/interactive-session-c-first-slice-qualification.md)
+starts with synthetic provider/authority/workspace and real owner/store seams;
+acceptance is no claim of implementation, Host adoption or real authentication.
+
 The program makes the Codex ordinary path of agent-runtime a clean, modular reference architecture before any further feature growth, and turns the parts that other harnesses need into reusable libraries.
 
 Owner goals (handoff section 1, decisions 1-4):

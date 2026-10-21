@@ -46,6 +46,7 @@ export const assemblyErrorCodes = {
   "assembly.bind.invalid-declaration": "invalid_composition",
   "assembly.bind.limit": "invalid_composition",
   "assembly.bind.invalid-factory": "invalid_composition",
+  "assembly.bind.invalid-group": "invalid_composition",
   "assembly.prepare.invalid-input": "invalid_composition",
   "assembly.prepare.limit": "invalid_composition",
   "assembly.prepare.handles": "invalid_composition",
@@ -53,6 +54,8 @@ export const assemblyErrorCodes = {
   "assembly.prepare.roots": "invalid_composition",
   "assembly.prepare.core-rejected": "invalid_composition",
   "assembly.prepare.plan-mismatch": "invalid_composition",
+  "assembly.prepare.unresolved-binding": "invalid_composition",
+  "assembly.prepare.duplicate-module": "invalid_composition",
   "assembly.run.invalid-inputs": "internal_failure", // unreachable without inputs: an internal defect
   "assembly.run.factory-threw": "factory_failed",
   "assembly.run.factory-rejected": "factory_failed",
