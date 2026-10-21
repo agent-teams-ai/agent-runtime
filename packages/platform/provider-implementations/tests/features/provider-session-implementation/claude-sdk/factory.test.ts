@@ -97,3 +97,117 @@ test('close during the awaited per-input readiness probe cannot release a late S
     assert.equal(sdk.inputs.length, 0);
   } finally { finishProbe(false); await opened.driver.close(); }
 });
+
+
+test('selected trusted native configuration is forwarded, snapshotted and checked at initialization', async () => {
+  const sdk = new QueryFixture(); const c = configuration();
+  c.configNamespace = 'native-default'; delete c.environment.CLAUDE_CONFIG_DIR;
+  c.nativeOptions = { permissionMode: 'acceptEdits', settingSources: ['user', 'project'],
+    projectInstructions: { append: 'TEST trusted instructions' }, effort: 'high', fastMode: false, context: 'one-million' };
+  const opened = await createClaudeDriverFactory({ capabilities: ['text'], resolveConfiguration: async () => c, readCheckpoint: async () => {} }, sdk.boundary).open(request);
+  try {
+    c.nativeOptions.settingSources?.push('local'); c.nativeOptions.projectInstructions!.append = 'mutated';
+    assert.equal(sdk.options.permissionMode, 'acceptEdits');
+    assert.deepEqual(sdk.options.settingSources, ['user', 'project']);
+    assert.deepEqual(sdk.options.systemPrompt, { type: 'preset', preset: 'claude_code', append: 'TEST trusted instructions' });
+    assert.equal(sdk.options.effort, 'high'); assert.deepEqual(sdk.options.settings, { fastMode: false });
+    assert.deepEqual(sdk.options.betas, ['context-1m-2025-08-07']);
+    assert.equal(Object.hasOwn(sdk.options.env ?? {}, 'CLAUDE_CONFIG_DIR'), false);
+    assert.equal(sdk.options.env?.HOME, '/TEST-unused/home');
+    assert.equal(sdk.options.strictMcpConfig, true); assert.deepEqual(sdk.options.tools, c.nativeTools);
+    sdk.emit({ type: 'system', subtype: 'init', session_id: sdk.options.sessionId, permissionMode: 'acceptEdits' });
+    await setImmediate();
+    assert.equal((await opened.driver.submit({ inputId: 'selected', operationRef: 'selected', content: 'TEST' })).ok, true);
+  } finally { await opened.driver.close(); }
+});
+
+test('default native configuration remains isolated and unoverridden', async () => {
+  const sdk = new QueryFixture();
+  const opened = await createClaudeDriverFactory({ capabilities: ['text'], resolveConfiguration: async () => configuration(), readCheckpoint: async () => {} }, sdk.boundary).open(request);
+  try {
+    assert.equal(sdk.options.permissionMode, 'default'); assert.deepEqual(sdk.options.settingSources, []);
+    for (const key of ['settings', 'systemPrompt', 'effort', 'betas', 'allowDangerouslySkipPermissions']) { assert.equal(Object.hasOwn(sdk.options, key), false); }
+    assert.equal(sdk.options.env?.CLAUDE_CONFIG_DIR, '/TEST-unused/config');
+  } finally { await opened.driver.close(); }
+});
+
+test('invalid namespace, permission escalation and arbitrary native bags reject before constructing SDK', async () => {
+  const sdk = new QueryFixture();
+  const invalid = [
+    { nativeOptions: { permissionMode: 'bypassPermissions' } },
+    { nativeOptions: { settings: { hooks: {} } } },
+    { nativeOptions: { hooks: {} } },
+    { nativeOptions: { projectInstructions: { arbitrary: true } } },
+    { nativeOptions: { effort: 'unknown' } },
+    { nativeOptions: { settingSources: ['unknown'] } },
+    { configNamespace: 'native-default' },
+    { configNamespace: 'ambient' },
+    { environment: { HOME: '/TEST-home', PATH: '/bin' } },
+  ];
+  for (const change of invalid) {
+    const c = { ...configuration(), ...change } as ReturnType<typeof configuration>;
+    await assert.rejects(createClaudeDriverFactory({ capabilities: ['text'], resolveConfiguration: async () => c, readCheckpoint: async () => {} }, sdk.boundary).open(request), /invalid-config/u);
+  }
+  assert.equal(sdk.calls, 0);
+});
+
+test('effective selected config changes reject checkpoint restore without constructing SDK', async () => {
+  const sdk = new QueryFixture(); const c = configuration();
+  c.nativeOptions = { permissionMode: 'plan', fastMode: true };
+  const first = await createClaudeDriverFactory({ capabilities: ['text'], resolveConfiguration: async () => c, readCheckpoint: async () => {} }, sdk.boundary).open(request);
+  const cp = first.driver.checkpoint(); assert.ok(cp.ok); await first.driver.close();
+  for (const nativeOptions of [{ permissionMode: 'default' as const, fastMode: true }, { permissionMode: 'plan' as const, fastMode: false }, { permissionMode: 'plan' as const, fastMode: true, effort: 'high' as const }]) {
+    const next = new QueryFixture();
+    await assert.rejects(createClaudeDriverFactory({ capabilities: ['text'], resolveConfiguration: async () => ({ ...c, nativeOptions }), readCheckpoint: async () => cp.value }, next.boundary).open({ ...request, generation: 2, checkpointRef: 'TEST' }), /checkpoint-incompatible/u);
+    assert.equal(next.calls, 0);
+  }
+});
+
+test('compaction remains session scoped without a native input echo, deduplicates across turns and ignores child boundaries', async () => {
+  const sdk = new QueryFixture();
+  const opened = await createClaudeDriverFactory({ capabilities: ['text'], resolveConfiguration: async () => configuration(), readCheckpoint: async () => {} }, sdk.boundary).open(request);
+  const events: Event[] = []; const observer = (async () => { for await (const event of opened.driver.observe()) { events.push(event); } })();
+  try {
+    await opened.driver.submit({ inputId: 'one', operationRef: 'one', content: 'TEST' }); await setImmediate();
+    const compact = { type: 'system', subtype: 'compact_boundary', uuid: 'boundary-one', session_id: sdk.options.sessionId, compact_metadata: { trigger: 'auto', pre_tokens: 190000 } };
+    sdk.emit({ ...compact, agent_id: 'child' }); sdk.emit({ ...compact, parent_tool_use_id: 'child-tool' });
+    sdk.emit(compact); sdk.emit({ ...compact, user_message_uuid: sdk.inputs[0]?.uuid });
+    sdk.emit({ type: 'result', subtype: 'success', session_id: sdk.options.sessionId, user_message_uuid: sdk.inputs[0]?.uuid });
+    await setImmediate();
+    await opened.driver.submit({ inputId: 'two', operationRef: 'two', content: 'TEST' }); await setImmediate();
+    sdk.emit(compact); sdk.emit({ ...compact, uuid: 'boundary-two', user_message_uuid: sdk.inputs[1]?.uuid });
+    await setImmediate();
+    const observations = events.filter(event => event.kind === 'compaction'); assert.equal(observations.length, 2);
+    assert.equal(observations[0]?.sessionRef, request.sessionId); assert.equal(observations[0]?.operationRef, undefined);
+    assert.equal(observations[1]?.operationRef, 'two'); assert.equal(observations[1]?.inputId, 'two');
+  } finally { await opened.driver.close(); await observer; }
+});
+
+
+test('explicit permission opt-in forwards only selected options and cannot replace the mandatory tool hook', async () => {
+  const sdk = new QueryFixture(); const c = configuration();
+  c.nativeOptions = { permissionMode: 'bypassPermissions', allowDangerouslySkipPermissions: true, settingSources: [], effort: 'low', fastMode: true, context: 'model-default' };
+  c.toolBinding = { matchedToolNames: ['mcp__TEST__write'], prepare: async () => { throw new Error('must not run without tool ownership'); } };
+  const opened = await createClaudeDriverFactory({ capabilities: ['text'], resolveConfiguration: async () => c, readCheckpoint: async () => {} }, sdk.boundary).open(request);
+  try {
+    assert.equal(sdk.options.permissionMode, 'bypassPermissions'); assert.equal(sdk.options.allowDangerouslySkipPermissions, true);
+    assert.equal(sdk.options.effort, 'low'); assert.deepEqual(sdk.options.settings, { fastMode: true });
+    assert.equal(sdk.options.betas, undefined); assert.equal(sdk.options.model, c.model);
+    assert.equal(sdk.options.hooks?.PreToolUse?.[0]?.hooks.length, 1);
+    assert.equal(typeof sdk.options.canUseTool, 'function');
+    sdk.emit({ type: 'system', subtype: 'init', session_id: sdk.options.sessionId, permissionMode: 'default' });
+    await setImmediate();
+    assert.deepEqual(await opened.driver.submit({ inputId: 'TEST', operationRef: 'TEST', content: 'TEST' }), { ok: false, code: 'unsupported' });
+  } finally { await opened.driver.close(); }
+});
+
+test('native-default checkpoints bind the captured HOME and explicit namespace', async () => {
+  const sdk = new QueryFixture(); const c = configuration(); c.configNamespace = 'native-default'; delete c.environment.CLAUDE_CONFIG_DIR;
+  const opened = await createClaudeDriverFactory({ capabilities: ['text'], resolveConfiguration: async () => c, readCheckpoint: async () => {} }, sdk.boundary).open(request);
+  const cp = opened.driver.checkpoint(); assert.ok(cp.ok); await opened.driver.close();
+  for (const changed of [{ ...c, environment: { ...c.environment, HOME: '/TEST-other-home' } }, { ...configuration(), configNamespace: 'custom-directory' as const }]) {
+    const next = new QueryFixture();
+    await assert.rejects(createClaudeDriverFactory({ capabilities: ['text'], resolveConfiguration: async () => changed, readCheckpoint: async () => cp.value }, next.boundary).open({ ...request, generation: 2, checkpointRef: 'TEST' }), /checkpoint-incompatible/u);
+    assert.equal(next.calls, 0);
+  }
+});

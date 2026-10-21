@@ -21,7 +21,7 @@ export interface InteractiveHostPorts {
 }
 
 export const Store = defineContract<InteractiveHostPorts["store"]>()({id: "agent-runtime/interactive-host/store", revision: 1});
-export const Provider = defineContract<InteractiveHostPorts["provider"]>()({id: "agent-runtime/interactive-host/provider", revision: 1});
+export const Provider: Contract<"agent-runtime/interactive-host/provider", InteractiveHostPorts["provider"], 1> = defineContract<InteractiveHostPorts["provider"]>()({id: "agent-runtime/interactive-host/provider", revision: 1});
 export const Authority = defineContract<InteractiveHostPorts["authority"]>()({id: "agent-runtime/interactive-host/authority", revision: 1});
 export const Custody: Contract<"agent-runtime/interactive-host/custody", InteractiveHostPorts["custody"], 1> = defineContract<InteractiveHostPorts["custody"]>()({id: "agent-runtime/interactive-host/custody", revision: 1});
 export const Context = defineContract<InteractiveHostPorts["context"]>()({id: "agent-runtime/interactive-host/context", revision: 1});

@@ -18,6 +18,10 @@ const providerExports = [".", "./composition", "./claude", "./codex", "./opencod
 
 function checkProviderQualification(repository, profile, json) {
   const extraction = json(`${directory}/provider-session-contracts-extraction.json`);
+  const current = json(`${directory}/provider-claude-capabilities.json`);
+  assert.equal(current.authority, "ADR-0093", "SDK_CONTRACT_EXTRACTION_DRIFT");
+  assert.equal(current.releaseEligible, false, "SDK_PROVIDER_ADMISSION_OVERCLAIM");
+  assert.equal(createHash("sha256").update(readFileSync(resolve(repository, `${directory}/provider-session-contracts-extraction.json`))).digest("hex"), current.predecessorSha256, "SDK_PROVIDER_SOURCE_DRIFT");
   const contractName = "@agent-teams/provider-session-contracts";
   const contractRoot = "packages/platform/provider-session-contracts";
   assert.equal(extraction.authority, "ADR-0093", "SDK_CONTRACT_EXTRACTION_DRIFT");
@@ -36,13 +40,21 @@ function checkProviderQualification(repository, profile, json) {
   ]).concat(["packages/contexts/agent-execution/package.json",
     "packages/contexts/agent-execution/src/interactive-contracts.ts",
     "packages/contexts/agent-execution/src/features/interactive-agent-session/application/ports/outbound/interactive-provider-driver.ts",
-    "packages/contexts/agent-execution/tests/package/interactive-contracts-packed-consumer.test.ts"]);
-  assert.deepEqual(extraction.currentInputs.map(input => input.path).toSorted(), currentPaths.toSorted(), "SDK_PROVIDER_SOURCE_DRIFT");
-  for (const input of [...extraction.currentInputs, ...extraction.evidence]) {
+    "packages/contexts/agent-execution/tests/package/interactive-contracts-packed-consumer.test.ts",
+    "packages/contexts/agent-execution/src/features/interactive-agent-session/application/ports/outbound/interactive-session-ports.ts",
+    "packages/contexts/agent-execution/src/features/interactive-agent-session/contracts/interactive-session.ts",
+    "packages/contexts/agent-execution/src/features/interactive-agent-session/domain/session.ts",
+    "packages/apps/embedded-runtime/src/features/interactive-session-runtime/contracts/interactive-session-host.ts",
+    "packages/apps/embedded-runtime/src/features/interactive-session-runtime/domain/session-host.ts",
+    "packages/apps/embedded-runtime/src/features/interactive-session-runtime/composition/interactive-session-runtime.contracts.ts",
+    "packages/contexts/agent-execution/tests/features/interactive-agent-session/owner.test.ts"]);
+  assert.deepEqual(current.currentInputs.map(input => input.path).toSorted(), currentPaths.toSorted(), "SDK_PROVIDER_SOURCE_DRIFT");
+  for (const input of [...current.currentInputs, ...current.evidence, ...extraction.evidence]) {
     assert.match(input.sha256, /^[a-f0-9]{64}$/u, "SDK_PROVIDER_SOURCE_DRIFT");
     assert.equal(createHash("sha256").update(readFileSync(resolve(repository, input.path))).digest("hex"), input.sha256, "SDK_PROVIDER_SOURCE_DRIFT");
   }
   assert.deepEqual(extraction.checks, {contractsPacked: true, providerPacked: true, legacyTypeCompatibility: true}, "SDK_CONTRACT_EXTRACTION_DRIFT");
+  assert.deepEqual(current.checks, {contractsPacked: true, providerPacked: true, legacyTypeCompatibility: true, claudeSyntheticCapabilities: true}, "SDK_CONTRACT_EXTRACTION_DRIFT");
 
   const entry = profile.packages.filter(pkg => pkg.packageName === providerPackage);
   assert.equal(entry.length, 1, "SDK_PROVIDER_SCOPE_DRIFT");

@@ -2,7 +2,19 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {InteractiveSessionOwner} from "../../../dist/features/interactive-agent-session/application/use-cases/interactive-session-owner.js";
 import {utf8Bytes} from "../../../dist/features/interactive-agent-session/domain/session.js";
+import {normalizeProviderEvent} from "../../../dist/features/interactive-agent-session/application/use-cases/normalize-provider-event.js";
 import {deferred, fixture, MemorySessionStore, open, ref, submit} from "./support.ts";
+
+test("compaction roundtrips through the neutral persisted event without inventing operation attribution", async () => {
+  const f = fixture(); await open(f);
+  const observation = normalizeProviderEvent({kind: "compaction", sessionRef: "TEST-native", sourceRef: "TEST-opaque", reason: "automatic"}, 200);
+  assert.equal((await f.owner.record(ref, observation)).status, "accepted");
+  const persisted = (await f.owner.read(ref))!.events.find(event => event.kind === "compaction");
+  assert.deepEqual(persisted?.data, {kind: "compaction", sourceRef: "TEST-opaque", reason: "automatic"});
+  assert.equal(persisted?.operationId, undefined); assert.equal(persisted?.inputId, undefined);
+  const restarted = new InteractiveSessionOwner(f.deps);
+  assert.deepEqual((await restarted.read(ref))!.events, (await f.owner.read(ref))!.events);
+});
 
 test("durable admission replay returns its original runtime-generated operation; conflicting payload cannot dispatch", async () => {
   const f = fixture(); await open(f);

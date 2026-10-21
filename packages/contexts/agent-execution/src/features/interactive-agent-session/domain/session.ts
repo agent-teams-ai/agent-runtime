@@ -7,7 +7,7 @@ export interface SessionEvent {
   readonly generation: number;
   readonly operationId?: string;
   readonly inputId?: string;
-  readonly kind: "text" | "tool" | "tool-result" | "usage" | "result" | "interaction" | "diagnostic";
+  readonly kind: "text" | "tool" | "tool-result" | "usage" | "compaction" | "result" | "interaction" | "diagnostic";
   readonly data: JsonValue;
 }
 export interface SessionLimits {

@@ -1,0 +1,621 @@
+{
+  "schemaVersion": 1,
+  "authority": "ADR-0093",
+  "sourceBase": "dfc1aa5ce1d357b732f66b9294651f96799c140a",
+  "releaseEligible": false,
+  "predecessorSha256": "97a0c9c7eac965d6b7f09cab9419fc15f0b7aa9f1d467b4da2e7bc038a55b9a6",
+  "currentInputs": [
+    {
+      "path": "packages/contexts/agent-execution/package.json",
+      "sha256": "d320d84e0b4befe2085224cbbe4d93695a88efc4f13c1ae73ea371524ac51b38"
+    },
+    {
+      "path": "packages/contexts/agent-execution/src/features/interactive-agent-session/application/ports/outbound/interactive-provider-driver.ts",
+      "sha256": "26964f8d57a0cdd7eba11b8e22fa7914e23370912a898eca71632dcaf316754c"
+    },
+    {
+      "path": "packages/contexts/agent-execution/src/interactive-contracts.ts",
+      "sha256": "26964f8d57a0cdd7eba11b8e22fa7914e23370912a898eca71632dcaf316754c"
+    },
+    {
+      "path": "packages/contexts/agent-execution/tests/package/interactive-contracts-packed-consumer.test.ts",
+      "sha256": "2e8f8de2ff6c8d41a110b310e62d4d7ed0f51a14f82d9299bff5398f7b8c651e"
+    },
+    {
+      "path": "packages/platform/provider-implementations/package.json",
+      "sha256": "842a1b185b034060e21000b8333040ed6787a533735b98077d77a43ed536a38e"
+    },
+    {
+      "path": "packages/platform/provider-implementations/scripts/qualify-claude-migration.ts",
+      "sha256": "a4a332984cffb9c90aa6c9f024455dbb96789c31847a3f35e4698b4cf891266f"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/claude.ts",
+      "sha256": "265541b78d299220461096c20c6499ecc08e4fac7ff4fbe2a355f56284a295b3"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/codex.ts",
+      "sha256": "3c1e2d4cb82257e40d8d51f012cae87f385f89488183dbf416e9285490347706"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/composition.ts",
+      "sha256": "9d51402d45c213e4a8421640f930963d09aedd842892d51a7b9e1f0503cb5733"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/config.ts",
+      "sha256": "6b38905e9a80c0ab163411e85861df82b7cf7f31ef9f341a453a9c9499212fb9"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/factory.ts",
+      "sha256": "69a14b86a8aba94df9c101910a8737f7485fb47f5b3419e3da55e1965c7ad45b"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/interactions.ts",
+      "sha256": "e6b8e64706f305b336ccfb4bc83acc8ddebc6062dc64a005c1f058fa6060ba52"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/normalize.ts",
+      "sha256": "3cb2759ee740b80c2b9bb026e871551d3b09097d32c7ce205c45481cd4655c89"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/open-session.ts",
+      "sha256": "7bf6f099c858f0b17f572f0282b8219bf89234d24516de77bc8a7203173eca10"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/primitives.ts",
+      "sha256": "6fc112384d8bb623f5f00518ff21694d854ceb714a47944d037c514c8ac5a014"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/session.ts",
+      "sha256": "2704f00055bdbf2ea61dd3f74ffba70fe68da0b7d8997b20bccd4e9d7a109d35"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/tool-binding.ts",
+      "sha256": "4d73999cd164dd574158d62824a12326d9bb35cde1cf2a76a92c29aee7466228"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/app-server.ts",
+      "sha256": "8000f0ae82a73e56c9c1367220b9737c172d84eaa4324cb313c51a4c8c10f503"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/approval-request.ts",
+      "sha256": "3006d8dd48f25908003f43279211cd3c4c70ff205839d048cb2290effab9be8e"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/approval-response.ts",
+      "sha256": "606641429b83d8d53917719d8409df57ca8d97c93c11a17641960ac2c19c923f"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/driver-config.ts",
+      "sha256": "499fd6cbd536ae52c9dba0fb68c635865e0676f5f8d179472922c8e6bc1fc69d"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/driver-factory.ts",
+      "sha256": "8ea0a1239a2b5b0ca76c284a8b1dd6eabbb3d4e7677eee0a83389e301ffc162f"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/driver-interactions.ts",
+      "sha256": "eb31d98983f0e350fcea94d200639872f209741bf1dbb765e8ecccac984d70e7"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/driver-output.ts",
+      "sha256": "679e3656d4184e7359bbc8c241f75b2cbf750839226956c29b763e777d2d5931"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/driver-session.ts",
+      "sha256": "1afa59fb6e211956d6f54cae11b0bd55ab412015fffbd080bd4d15f252d09197"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/exec-jsonl.ts",
+      "sha256": "7c702222f524d4209bee3dc4e98e36eaafdbb9f9577f1f08645b1f640ab941c9"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/notification-items.ts",
+      "sha256": "804d67dbef79cc0f8bb41ded237499ca09cb4e6f422bae65d1e81f1f45e8c10c"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/notification-mapper.ts",
+      "sha256": "3f16f36d32f66daffa23197dadbf2fe7afee1f33220960812bff9e84306e0935"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/rpc-client.ts",
+      "sha256": "a82fede724229d0a44bcd88217e7a5f736f6a621403dd37f79c1027e949afd0c"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/rpc-types.ts",
+      "sha256": "51e62fe4a6ddd9e8a91de07ecf2c344491dbbfcd765214cb7926d05a06fd3304"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/session-types.ts",
+      "sha256": "244b21be8eb79d707336bf903c2aeda7753d320d51decbbaf9d6af0bf92c2a56"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/thread-session.ts",
+      "sha256": "93b9ba3cf8d8f0f4f47aad8450f1574b636bc5397df8de1bf205c2480205a549"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/wire-frames.ts",
+      "sha256": "e11b3ab42b60f4be932de9358c695c75cf8bfaeb1ed5ff255674f522ea5ecf01"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/OpenCodeBoundedHttpResponse.ts",
+      "sha256": "d87df768ad7b851ba1386f04758037e741c370fb1a3dc2736bc9339285b6fd90"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/OpenCodeClientFactory.ts",
+      "sha256": "5c3f586ec6f3dc9e85279688e3293f467d1c395fb41942ef020ed994ed03eb0e"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/OpenCodeClientRequestContext.ts",
+      "sha256": "8bd99540d8f05bd0b62e5cf978431f85eb08a09f448d416b468198e7886a3a0d"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/OpenCodeMessageIds.ts",
+      "sha256": "9105f9acc2bdf37bb9d68cff0c674179675aa2efbc24f0fa8ded7173a54c7bc2"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/OpenCodeSseEventStream.ts",
+      "sha256": "db25ac64a2e132c2ed266b089cb8739a3af39f58d7f5854e1373f4db47000d09"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/bound-session.ts",
+      "sha256": "2c82e7e1b47f58eaf2807807e66634e468279a4de6fa410e8d20359097406f85"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/canonical-message-types.ts",
+      "sha256": "de68dc0b8302e425fcd9d419228166422aa5538dca249f24a2190641133bca7a"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/catalog-operations.ts",
+      "sha256": "c531cc8a95e13c5ddd90e12fbbc1565fc54f688a0084a6f386d54003ad24c169"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/client-types.ts",
+      "sha256": "65c5d8680e787437d54ef071f3254bd0e2f298e06d06bdf2a89f24141cd43ef5"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/driver-protocol.ts",
+      "sha256": "dba478d10ec9dd047c14de869b326dcf426f8826b28a65a636a5e58bdd2fff32"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/driver-session.ts",
+      "sha256": "dced2ab78665eff1863f17fe044dfca29a91dacfd79207f816e437954818e3ba"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/http-request.ts",
+      "sha256": "322f0d8dd2b606ade6d29ea8073744496bb4d8983ff3e61f16298248e392f58a"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/query-path.ts",
+      "sha256": "f3c7ab2fb281cb4b13368913af8ea33b416cb7a3775aaa215c7c984f5c3aa42d"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/request-limits.ts",
+      "sha256": "591f69ad3999cef3b022e9a2829b8d01bbda96fce73ce92e6fe7976bcf6ceab0"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/session-binding-codec.ts",
+      "sha256": "8a566e7ff5dd051662e2b824eb3612fb17555284d72b8d5e29c1d274dcf5fa39"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/session-binding-types.ts",
+      "sha256": "87180262a122cbb9716d95f5b2ee0a42be9cb52f6017f9f2a0b46218da33782e"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/session-bindings.ts",
+      "sha256": "c852a70516f2b271cfbfb4856f7ce0a1666bc2f066dd07da3c4d1dc7d0ce75a9"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/session-operations.ts",
+      "sha256": "817e7fe39d48f2f3c2143f3009976d9d441a525c7ed85c4e6614f435833a3450"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/terminal-proof.ts",
+      "sha256": "baf9d2ba767087b9ba480657f3e82ad551044197056849267c28972780685a6c"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/types.ts",
+      "sha256": "360b999251079dc4e3d3757a59cad99cc12ff20be08979d4834a20efe92fa89c"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v1-driver-backend.ts",
+      "sha256": "7c24c1b9e9025e5e103dee1656499ef3e4fac8094dd195f2d6b783f590b4a248"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v1-driver-config.ts",
+      "sha256": "8886884da49f22467bf4a1681ba5eafd5c88e4dfe8d3d0dac9c1157a15e58795"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v1-driver-cut.ts",
+      "sha256": "bc836dab48ba580fd6c67483068efa4644982109c7966b858f0710674309d1e6"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v1-driver-factory.ts",
+      "sha256": "8bde7c53d67016c38505143107a9937f109b5da9b08a163cd58474d738b38c53"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v1-driver-output.ts",
+      "sha256": "d5e5081ae678df2e5a7d8fabae7591541cfbab81229d682734f05a00f2e3f800"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v1-driver-wire.ts",
+      "sha256": "f5c9f3338c2fae67d3295327402e5f606a9a805805e400c89200cb97e35c0bd6"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v1-native-read.ts",
+      "sha256": "4f948b04bc2364a378a8ccd7187adaf8ac938bdd4f1d0e776dd9ad78f2ac47a9"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v1-permission-normalizer.ts",
+      "sha256": "43c6238d2872eae458b54b79088f66a8d1a95e4addf6e091a7daf813e701a16e"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v1-transcript-projector.ts",
+      "sha256": "29e2b75f01161f7a39fc4ebfbbe6e46dab0ba78ce404695d7dfcae31e087ca18"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-assistant-projection.ts",
+      "sha256": "63d45f84c0a027fd1015f21c136e3c50bf796b0f6ece934639296a717292c7bf"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-bounded-await.ts",
+      "sha256": "8b036594d2d2baa98beaf744253ab3f26ef15bdc5ccd3d12c36f681501d3ffbe"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-canonical-json.ts",
+      "sha256": "63488cd178fa358eaedd03ae4f83112191ccfb3854e89f0533bc617feb8ce9ab"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-control-transport.ts",
+      "sha256": "58d22f5cc8b555670783c6fe7e8fa3c48b06573934e59b15a346bd62e12ab7e2"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-cut-codecs.ts",
+      "sha256": "dd96a53ee2dc82e64049b94bfb2ecd57806d0a49358bd3746d83497e50cd1875"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-driver-backend.ts",
+      "sha256": "8caf30e7b20fb3e0865635f1fdac4d7687bb3f493c3068525d506635f059743f"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-driver-config.ts",
+      "sha256": "d553f7c9d35a2f87a8856bdee4e19eedb473928cb6d9ad4fe7b0f64bd7877a1b"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-driver-factory.ts",
+      "sha256": "f05c2ad8ba9c38ec12037cea6d8080f35843b8184c6f7baab16336463f0d443d"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-driver-native.ts",
+      "sha256": "babbbcdee405e4db66427cb397523dec66af1e6d235a69a6e369e3fb2d485b7b"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-driver-output.ts",
+      "sha256": "3b24fed452469e2208e37c5778eb5c27a6205b1616673335ee1af7189dbb57df"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-driver-session.ts",
+      "sha256": "5af66a82bd2019104ab9c984f0d5708304b4ab701cdc63324be60f6d38cfe920"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-execution-transport.ts",
+      "sha256": "57b21336a577b01e5231e9ee7ddd83c42a1a1f546af0839defc682011aeb4cb1"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-failures.ts",
+      "sha256": "d3e8c716706af47870f23f2ef58773edf5c919e58a68536907b513d2db3563ef"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-input-validation.ts",
+      "sha256": "76ae82c17232e484e65f0b6b370badf3721041ab4c6659b8af59364dcbaeb0b7"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-json-budget.ts",
+      "sha256": "dc74f216c095749efd93b71ac5902cf6cfd317959e4c5541fbac67280e613585"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-native-cut.ts",
+      "sha256": "d930e52342ef19ac55dc056e043b115ed5ebf2e66ef84ddd41ef7e055350c5ec"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-projection-helpers.ts",
+      "sha256": "8b8578d00e1afd356cd3d9a022c0250014639c3c9d82be474869a2f7749a58fb"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-projection-types.ts",
+      "sha256": "313cbe736e8059e822f1e083284d7df418d90929780a357377129cd82c44c9cb"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-session-control.ts",
+      "sha256": "4e4a9a5a7d9a0adb387264a86a05eaeafd293f7cc36cc25af38211accbeb4ce0"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-turn-projection.ts",
+      "sha256": "fcf5e4cbeee9a8b28935263f09f049bc69644b13ca95fc02e0c79fa1a70f1741"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/provider-session-io/io.ts",
+      "sha256": "220262032c00ce58ba2d52931b07f7b1ed727d034e5ef40f8895deafccfdab81"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/contracts/codex-approval.ts",
+      "sha256": "d40591c18dc17853e8537ec0f7700396775100998cd67291547d8749caaffe28"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/contracts/codex-events.ts",
+      "sha256": "118c30b61ea1d2c8863c8236d709e966dc9a24fe4553d2b475bc6ce60d1f236e"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/index.ts",
+      "sha256": "1281ec3430dc50ad9d379f79656c11a8cd79b18030ed811d779680b4c7c6ec9b"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+      "sha256": "dd0d3e199e4b7b7d9dccbbbb3d1e3269d92350d16206dbcd174ae366f5036251"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/index.ts",
+      "sha256": "8416c97b6138d2c0b99f3828945f8ca2b073a2e9ab8ddc8cadfe7ec281238904"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/opencode.ts",
+      "sha256": "2471aeaa8d2603f72a94fa91e9fae655309a23cb475458465474a03a5f6b1a05"
+    },
+    {
+      "path": "packages/platform/provider-implementations/src/session-io.ts",
+      "sha256": "5124c3472289156e0662b65de49c7ca9a5f031f92d8b097f01bdbec667f64218"
+    },
+    {
+      "path": "packages/platform/provider-implementations/tests/features/provider-session-implementation/claude-sdk/factory.test.ts",
+      "sha256": "2ad4b77d95f3dd3b2063c990e2d134b3190693c94426b35ebb28dfa63bbe3cde"
+    },
+    {
+      "path": "packages/platform/provider-implementations/tests/features/provider-session-implementation/claude-sdk/normalize.test.ts",
+      "sha256": "f59847739ed7ea4a1d148466dd69bfa2683e688b05c1b9ef90a727ad6b3fe6f0"
+    },
+    {
+      "path": "packages/platform/provider-implementations/tests/features/provider-session-implementation/claude-sdk/support.ts",
+      "sha256": "744366965c1d7cbde8a0df8d736c371387eaacf211e2a4de361d0ca2991e239e"
+    },
+    {
+      "path": "packages/platform/provider-implementations/tests/features/provider-session-implementation/claude-sdk/tool-binding.test.ts",
+      "sha256": "d3af0c3953482c47b6785a341715421230cec23a98d868be4578b0accb7ec5c8"
+    },
+    {
+      "path": "packages/platform/provider-implementations/tests/features/provider-session-implementation/codex-protocol/app-server.test.ts",
+      "sha256": "5ce4743c5301901806b8e4b48603c121848668cf5c99aed738f505f07f135b2d"
+    },
+    {
+      "path": "packages/platform/provider-implementations/tests/features/provider-session-implementation/codex-protocol/driver-checkpoint.test.ts",
+      "sha256": "20d08bd8ef73f3efa6d6e2765760240cc4018b66d12a64b1a53760f292e91486"
+    },
+    {
+      "path": "packages/platform/provider-implementations/tests/features/provider-session-implementation/codex-protocol/driver-factory.test.ts",
+      "sha256": "07ff01a4042cecf4163a168123fa564ef5750fa723b62ebf2e443981ac97d5ad"
+    },
+    {
+      "path": "packages/platform/provider-implementations/tests/features/provider-session-implementation/codex-protocol/driver-limits.test.ts",
+      "sha256": "2a30bdb5aee3ccda79c28f2ec450eafca51c3fb2a05ca9b17f79bba57d769275"
+    },
+    {
+      "path": "packages/platform/provider-implementations/tests/features/provider-session-implementation/codex-protocol/driver-permissions.test.ts",
+      "sha256": "b8573bf6e7fdfc64a6af3b74dbf3575315f08c3e1d6cc97b174b7f6fc0738e42"
+    },
+    {
+      "path": "packages/platform/provider-implementations/tests/features/provider-session-implementation/codex-protocol/driver-session.test.ts",
+      "sha256": "10baddf6f8b6e1dd05ab21e743515bc41890d301ee83def05f341165b8573bab"
+    },
+    {
+      "path": "packages/platform/provider-implementations/tests/features/provider-session-implementation/codex-protocol/driver-support.ts",
+      "sha256": "e21b53dcde6925c787bd82ff7461ed52685e530cc4f13dfec6f8f51f10dc15a2"
+    },
+    {
+      "path": "packages/platform/provider-implementations/tests/features/provider-session-implementation/codex-protocol/framing.test.ts",
+      "sha256": "11f7fbd9b92d01b257a5b40266105079703c4fb88c6eaee209b813a3154b2866"
+    },
+    {
+      "path": "packages/platform/provider-implementations/tests/features/provider-session-implementation/codex-protocol/protocol.test.ts",
+      "sha256": "732001f058d6710a332ccefd45710280b3661c223046f4955cafd67ee2c6d927"
+    },
+    {
+      "path": "packages/platform/provider-implementations/tests/features/provider-session-implementation/codex-protocol/subprocess-fixture.ts",
+      "sha256": "c2f846702a5c19251ed1a95c796aa31cadaefc99463a4a110eec5ca689dfaebb"
+    },
+    {
+      "path": "packages/platform/provider-implementations/tests/features/provider-session-implementation/opencode-protocol/protocol.test.ts",
+      "sha256": "59c1eeea18328ffa62dd0ec874b707cbff57403fe733d2bdf9908e5920cd25d8"
+    },
+    {
+      "path": "packages/platform/provider-implementations/tests/features/provider-session-implementation/opencode-protocol/session-bindings.test.ts",
+      "sha256": "371acd18e1e448cf7b7c1efac56c3ca400504235079293b6d1ca6a169e116423"
+    },
+    {
+      "path": "packages/platform/provider-implementations/tests/features/provider-session-implementation/opencode-protocol/terminal-proof.test.ts",
+      "sha256": "1546c011b8b44f0f2cab52c324e6a0c9dd30a0ec974648db47311f6b3af373bb"
+    },
+    {
+      "path": "packages/platform/provider-implementations/tests/features/provider-session-implementation/opencode-protocol/v1-driver-peer.ts",
+      "sha256": "0aaae7a462c335dc554af7ea3d12c9e12f132fb3314ff90c7f682115af0b68c6"
+    },
+    {
+      "path": "packages/platform/provider-implementations/tests/features/provider-session-implementation/opencode-protocol/v1-driver.test.ts",
+      "sha256": "b3ccc2b5d98c54385e37dd30e70ddf3ad2c3723e089a4958ae18bd84740bb53d"
+    },
+    {
+      "path": "packages/platform/provider-implementations/tests/features/provider-session-implementation/opencode-protocol/v2-control.test.ts",
+      "sha256": "7e98f4691b6e788782aea25e7a37058987d3f6ff2cd2894587997aee3d13f731"
+    },
+    {
+      "path": "packages/platform/provider-implementations/tests/features/provider-session-implementation/opencode-protocol/v2-cut-fixture.ts",
+      "sha256": "25d8c59832c7b6256a51c5ae879b0d4445c4e1da5dbdecbf98346e24b6f264f8"
+    },
+    {
+      "path": "packages/platform/provider-implementations/tests/features/provider-session-implementation/opencode-protocol/v2-driver-factory.test.ts",
+      "sha256": "1b77f85ae7a995da2ad61e761c008c091b6037afed1024c7ca798eb0123451d8"
+    },
+    {
+      "path": "packages/platform/provider-implementations/tests/features/provider-session-implementation/opencode-protocol/v2-driver-native.test.ts",
+      "sha256": "30c4a6b58d77eab039f49e7f201c047fd83c07cc346c5a1f57083b77bf257288"
+    },
+    {
+      "path": "packages/platform/provider-implementations/tests/features/provider-session-implementation/opencode-protocol/v2-driver-output.test.ts",
+      "sha256": "c7931e78ebcb382c198fa0fae243d7fd2a31a1846006ce35b999de715b02ec58"
+    },
+    {
+      "path": "packages/platform/provider-implementations/tests/features/provider-session-implementation/opencode-protocol/v2-driver-peer.ts",
+      "sha256": "3bd72c4a4853324ae088acda0b35c4ec7349f940431f79d8a63b5ec957777163"
+    },
+    {
+      "path": "packages/platform/provider-implementations/tests/features/provider-session-implementation/opencode-protocol/v2-driver-session.test.ts",
+      "sha256": "6d88be375439667330a307268353c0339ea8b67b28c8c79ddccaf815cb3ce3ff"
+    },
+    {
+      "path": "packages/platform/provider-implementations/tests/features/provider-session-implementation/opencode-protocol/v2-driver-support.ts",
+      "sha256": "60367d7f155c060ca9ec64c696ac29a1dd02f2906a11526f3ba1b4efa40907ff"
+    },
+    {
+      "path": "packages/platform/provider-implementations/tests/features/provider-session-implementation/opencode-protocol/v2-native-cut.test.ts",
+      "sha256": "f6a33b8ed146dde4aacd842f14c03b3787af922c7164640ed02a7779f300df94"
+    },
+    {
+      "path": "packages/platform/provider-implementations/tests/features/provider-session-implementation/opencode-protocol/v2-projection.test.ts",
+      "sha256": "d989cab2c8188f3eb3d0ec09db70d432a9ead4d2f5cbc2b4447851a3fcb7937e"
+    },
+    {
+      "path": "packages/platform/provider-implementations/tests/features/provider-session-implementation/opencode-protocol/v2-transport.test.ts",
+      "sha256": "15d04d7851aad6e20e8b16dcb99926be90a1f9cce93a9192ddc70698747aca0c"
+    },
+    {
+      "path": "packages/platform/provider-implementations/tests/features/provider-session-implementation/provider-session-io/io.test.ts",
+      "sha256": "396671e9c6178e9cbd3d923e39da8c6766ba6abe93e566732a6781ef073559f6"
+    },
+    {
+      "path": "packages/platform/provider-implementations/tests/fixtures/codex-app-server.ts",
+      "sha256": "8727f25036160061cfff0936655439c91bfaac8770acdb746e6ee2383002312d"
+    },
+    {
+      "path": "packages/platform/provider-implementations/tests/package/install-consumer.ts",
+      "sha256": "611c82ca0a7fb7befefea95fe82171be131610675abefd1e5c2045b01c4c6bba"
+    },
+    {
+      "path": "packages/platform/provider-implementations/tests/package/packed-consumer.test.ts",
+      "sha256": "10cd335e38bc2c002e3a442f77d2fa494444011b7dbee7828ee3fcc44555c2cb"
+    },
+    {
+      "path": "packages/platform/provider-implementations/tsconfig.json",
+      "sha256": "0feb2c3463748e6c6f839f61535902eb79104d4b50b0c3ba6ebf4e16a2c65160"
+    },
+    {
+      "path": "packages/platform/provider-implementations/tsconfig.test.json",
+      "sha256": "381a77cdc3c6b923776eaf6d439a1d5af2d379706cb686b3357f84fe05969eab"
+    },
+    {
+      "path": "packages/platform/provider-session-contracts/package.json",
+      "sha256": "b9ce93870e4234d143648ce5f802ea200d191b09830b0d16300d80552aff5021"
+    },
+    {
+      "path": "packages/platform/provider-session-contracts/src/composition.ts",
+      "sha256": "9202490607defcb3485d37d4f246cebae1968e77900690cdbcbdbddf5a242233"
+    },
+    {
+      "path": "packages/platform/provider-session-contracts/src/features/provider-session-contracts/contracts/session.ts",
+      "sha256": "dc66a900dad8813723993ade9e095bd31b74aea2b2fe373362447c67f6184b23"
+    },
+    {
+      "path": "packages/platform/provider-session-contracts/src/features/provider-session-contracts/index.ts",
+      "sha256": "56a5ed97f0030407b23e6da555b4568be14d73ce9b481457a41d55bb3a84f81e"
+    },
+    {
+      "path": "packages/platform/provider-session-contracts/src/features/provider-session-contracts/internal.ts",
+      "sha256": "56a5ed97f0030407b23e6da555b4568be14d73ce9b481457a41d55bb3a84f81e"
+    },
+    {
+      "path": "packages/platform/provider-session-contracts/src/index.ts",
+      "sha256": "ce0bb1d7a45c835561f0056b42b3e801e02af971dd749bc1519e9f38bf4cd157"
+    },
+    {
+      "path": "packages/platform/provider-session-contracts/tests/package/packed-consumer.test.ts",
+      "sha256": "a89b64a839a50f150381182efd743a013dd237cbc0512956fd0040918f3fff2f"
+    },
+    {
+      "path": "packages/platform/provider-session-contracts/tsconfig.json",
+      "sha256": "0feb2c3463748e6c6f839f61535902eb79104d4b50b0c3ba6ebf4e16a2c65160"
+    },
+    {
+      "path": "packages/platform/provider-session-contracts/tsconfig.test.json",
+      "sha256": "381a77cdc3c6b923776eaf6d439a1d5af2d379706cb686b3357f84fe05969eab"
+    },
+    {
+      "path": "packages/apps/embedded-runtime/src/features/interactive-session-runtime/composition/interactive-session-runtime.contracts.ts",
+      "sha256": "2cc82aa36866a43a49561b6f71f51be1a6974f7058ede197df3f5bf612b0781e"
+    },
+    {
+      "path": "packages/apps/embedded-runtime/src/features/interactive-session-runtime/contracts/interactive-session-host.ts",
+      "sha256": "0667e89841bf92863e13f19e5e2469dd9971e557279e06e778d5a3fdf9559a46"
+    },
+    {
+      "path": "packages/apps/embedded-runtime/src/features/interactive-session-runtime/domain/session-host.ts",
+      "sha256": "9c861866609fee574f4687270aaca081cd2cb5d209ffe5b865905d9b78553cf3"
+    },
+    {
+      "path": "packages/contexts/agent-execution/src/features/interactive-agent-session/domain/session.ts",
+      "sha256": "f3da1bdcf62fe7592190dcc464131024269a8cf9a53352305d1805da44d30971"
+    },
+    {
+      "path": "packages/contexts/agent-execution/src/features/interactive-agent-session/application/ports/outbound/interactive-session-ports.ts",
+      "sha256": "62e70114ba8af2f47d4cf3a3bcc820624445947aa3106ea0ec23a9b33b5f55cd"
+    },
+    {
+      "path": "packages/contexts/agent-execution/src/features/interactive-agent-session/contracts/interactive-session.ts",
+      "sha256": "c572fe4423130812c20346f3237579c2337afaff83b32f614b99c3fe2bad2eed"
+    },
+    {
+      "path": "packages/contexts/agent-execution/tests/features/interactive-agent-session/owner.test.ts",
+      "sha256": "35660dfd83512ca71e3eb4d9b72e256056a7bffeeecd8608f2d877388dda9709"
+    }
+  ],
+  "evidence": [
+    {
+      "path": "architecture/sdk-growth/evidence/provider-claude-owner-roundtrip.txt",
+      "sha256": "7543885a33570a01b172b3b8854c13c01bd8edd2fae77a7c8b40598d357edd29"
+    },
+    {
+      "path": "architecture/sdk-growth/evidence/provider-claude-capabilities-node26.txt",
+      "sha256": "b9dc506a6ce70c93ffe8abb20ea365edb8883bb97b77e9f5bfd4acd7c8fb9d0d"
+    },
+    {
+      "path": "architecture/sdk-growth/evidence/provider-claude-capabilities-node24.txt",
+      "sha256": "c669dcd697e74ede9ba6bb58d0b09212442acbe991222b1c29ca2f870db6594c"
+    },
+    {
+      "path": "architecture/sdk-growth/evidence/provider-claude-contracts-node26.txt",
+      "sha256": "7d819c7ec0f1649232bdb8dcc35c2b1293fead6907cb2d4b2870b1c871c4f6df"
+    },
+    {
+      "path": "architecture/sdk-growth/evidence/provider-claude-contracts-node24.txt",
+      "sha256": "5fd1df470f42d3ddf34c9d321125fccfa4af59981500d80b0b5101a1d15fe3a9"
+    },
+    {
+      "path": "architecture/sdk-growth/evidence/provider-claude-compatibility.txt",
+      "sha256": "fa4e343ec61eae5f3efcb1c68472cf9053fe8840930527d10dcf5bedabdb4560"
+    }
+  ],
+  "checks": {
+    "contractsPacked": true,
+    "providerPacked": true,
+    "legacyTypeCompatibility": true,
+    "claudeSyntheticCapabilities": true
+  },
+  "engines": [
+    "v24.21.0",
+    "v26.11.1"
+  ],
+  "scope": "Synthetic Claude compact-boundary observations and trusted selected native options; no native auth, live SDK process, Team, Host, subagents or attachments qualification.",
+  "remainingGaps": [
+    "No hosted native permission/settings/context or account-storage qualification in this checkpoint.",
+    "Host owns model/context selection; model-default preserves its exact selected model, including [1m]. The optional one-million beta is not a hard 200K context cap.",
+    "Subagent sessions, attachments and user-hook composition remain outside this checkpoint.",
+    "Compaction dedup tombstones are physical-session scoped and bounded; restored Host consumers must deduplicate the same stable sourceRef.",
+    "Broad Linux aggregate remains environment-pending on macOS Bash 3.2."
+  ]
+}

@@ -178,6 +178,12 @@ export class ClaudeSession implements Session {
     const m = record(message);
     if (Boolean(m.session_id) && m.session_id !== this.nativeSession) { this.unavailable('unknown'); return; }
     const input = this.correlate(m);
+    if (m.type === 'system' && m.subtype === 'compact_boundary') {
+      if (m.session_id !== this.nativeSession || Boolean(m.parent_tool_use_id) || Boolean(m.agent_id) || Boolean(m.resume_reason)) { return; }
+      // One session-lifetime dedup owner, independent of foreground/background attribution.
+      for (const fact of this.normalizer.normalize(message).facts) { this.emit(fact, input); }
+      return;
+    }
     if (input && !this.ownPartialTool(m, input)) { return; }
     const { facts, terminal, failure } = (input ? this.normalizer : this.backgroundNormalizer).normalize(message);
     this.knownTerminal = terminal && input ? { sessionRef: this.sessionRef, inputId: input.inputId, operationRef: input.operationRef, kind: 'result', outcome: terminal, ...(failure ? { code: failure } : {}) } : undefined;
@@ -207,7 +213,7 @@ export class ClaudeSession implements Session {
   }
   private acceptInitialization(m: Record<string, unknown>): void {
     if (m.type !== 'system' || m.subtype !== 'init') { return; }
-    if (m.permissionMode !== 'default') {this.unavailable('unsupported');}
+    if (m.permissionMode !== (this.config.nativeOptions?.permissionMode ?? 'default')) {this.unavailable('unsupported');}
     if (Array.isArray(m.mcp_servers) && m.mcp_servers.some((s) => { const server = record(s); return Object.hasOwn(this.config.requiredTools, String(server.name)) && !['connected', 'pending'].includes(String(server.status)); })) {this.unavailable('dependency-unavailable');}
   }
   private correlate(m: Record<string, unknown>): Input | undefined {

@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { EventPayload, FailureCode } from '@agent-teams/provider-session-contracts';
 export type Fact = EventPayload;
 export function record(value: unknown): Record<string, unknown> {
@@ -9,11 +10,24 @@ export class Normalizer {
   private readonly blocks = new Map<string, string>();
   private readonly completeIndex = new Map<string, number>();
   private readonly seenWrappers = new Set<string>();
+  // Session-lifetime tombstones survive turn resets; never evict and replay a boundary.
+  private readonly compactions = new Set<string>();
   private readonly maxBytes: number;
   constructor(maxBytes: number) { this.maxBytes = maxBytes; }
   reset(): void { this.streamMessage = undefined; this.blocks.clear(); this.completeIndex.clear(); this.seenWrappers.clear(); }
   normalize(value: unknown): { facts: Fact[]; terminal?: 'succeeded' | 'failed' | 'unknown'; failure?: FailureCode } {
     const m = record(value);
+    if (m.type === 'system' && m.subtype === 'compact_boundary') {
+      if (typeof m.uuid !== 'string' || !m.uuid || typeof m.session_id !== 'string' || !m.session_id) {
+        return { facts: [{ kind: 'diagnostic', code: 'unknown-event' }] };
+      }
+      const sourceRef = createHash('sha256').update(JSON.stringify([m.session_id, m.uuid])).digest('hex');
+      if (this.compactions.has(sourceRef)) { return { facts: [] }; }
+      if ((this.compactions.size + 1) * 64 > this.maxBytes) { throw new OutputLimitError('output-limit'); }
+      this.compactions.add(sourceRef);
+      const trigger = record(m.compact_metadata).trigger;
+      return { facts: [{ kind: 'compaction', sourceRef, reason: trigger === 'auto' ? 'automatic' : trigger === 'manual' ? 'manual' : 'unknown' }] };
+    }
     if (m.type === 'stream_event') {return { facts: this.partial(record(m.event)) };}
     if (m.type === 'assistant') {
       if (typeof m.uuid === 'string' && this.seenWrappers.has(m.uuid)) {return { facts: [] };}

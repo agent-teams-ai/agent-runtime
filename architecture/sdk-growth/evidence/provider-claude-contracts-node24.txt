@@ -1,0 +1,14 @@
+$ pnpm clean && pnpm build && pnpm typecheck && pnpm test
+$ node -e "const fs=require('node:fs'); for (const path of ['dist','.cache']) fs.rmSync(path, { recursive: true, force: true })"
+$ tsc --project tsconfig.json --pretty false
+$ tsc --project tsconfig.test.json --noEmit --pretty false
+$ node --test --test-concurrency=1 tests/package/*.test.ts
+✔ real packed contracts install and strict consumer build require no engine, SDK, custody or database (1201.62025ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 1278.279709

@@ -27,7 +27,7 @@ function fixture(t) {
     mkdirSync(dirname(join(directory, path)), { recursive: true });
     cpSync(join(root, path), join(directory, path));
   }
-  const extraction = JSON.parse(readFileSync(join(root, "architecture/sdk-growth/provider-session-contracts-extraction.json"), "utf8"));
+  const extraction = JSON.parse(readFileSync(join(root, "architecture/sdk-growth/provider-claude-capabilities.json"), "utf8"));
   for (const {path} of extraction.currentInputs) {
     mkdirSync(dirname(join(directory, path)), {recursive: true});
     cpSync(join(root, path), join(directory, path));
@@ -67,6 +67,14 @@ test("provider qualification rejects missing source coverage and changed qualifi
   const changed = fixture(t);
   writeFileSync(join(changed, `${providerRoot}/src/claude.ts`), "export {};\n");
   assert.throws(() => checkSdkGrowthProfile(changed), /SDK_PROVIDER_SOURCE_DRIFT/u);
+});
+test("provider capability successor rejects a changed predecessor and missing current source coverage", t => {
+  const predecessor = fixture(t);
+  mutate(predecessor, "architecture/sdk-growth/provider-session-contracts-extraction.json", value => { value.sourceBase = "changed"; });
+  assert.throws(() => checkSdkGrowthProfile(predecessor), /SDK_PROVIDER_SOURCE_DRIFT/u);
+  const current = fixture(t);
+  mutate(current, "architecture/sdk-growth/provider-claude-capabilities.json", value => { value.currentInputs.pop(); });
+  assert.throws(() => checkSdkGrowthProfile(current), /SDK_PROVIDER_SOURCE_DRIFT/u);
 });
 test("provider qualification rejects failed engine, SDK-process and retained evidence claims", t => {
   const engine = fixture(t);
