@@ -1,8 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-// globSync and posix are only used by the inventory freeze disabled below (AR-S).
-// import { globSync } from "node:fs";
-import { readFileSync } from "node:fs";
+import { globSync, readFileSync } from "node:fs";
 // import { posix } from "node:path";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -14,6 +12,53 @@ import { routedScripts } from '../ci/script-routing.ts';
 const directory = "architecture/sdk-growth";
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const command = "node scripts/architecture/check-sdk-growth-profile.mjs";
+const providerPackage = "@agent-teams/provider-implementations";
+const providerRoot = "packages/platform/provider-implementations";
+const providerExports = [".", "./composition", "./claude", "./codex", "./opencode", "./session-io"];
+
+function checkProviderQualification(repository, profile, json) {
+  const entry = profile.packages.filter(pkg => pkg.packageName === providerPackage);
+  assert.equal(entry.length, 1, "SDK_PROVIDER_SCOPE_DRIFT");
+  assert.equal(entry[0].packageRoot, providerRoot, "SDK_PROVIDER_SCOPE_DRIFT");
+  assert.equal(entry[0].manifestPath, `${providerRoot}/package.json`, "SDK_PROVIDER_SCOPE_DRIFT");
+  assert.deepEqual(entry[0].entrypoints.map(item => item.exportPath), providerExports, "SDK_PROVIDER_SCOPE_DRIFT");
+  const manifest = json(`${providerRoot}/package.json`);
+  assert.equal(manifest.name, providerPackage, "SDK_PROVIDER_SCOPE_DRIFT");
+  assert.equal(manifest.private, true, "SDK_PROVIDER_ADMISSION_OVERCLAIM");
+  assert.equal(manifest.version, "0.0.0", "SDK_PROVIDER_ADMISSION_OVERCLAIM");
+  assert.deepEqual(manifest.peerDependencies, { "@agent-teams/agent-execution": "workspace:*" }, "SDK_PROVIDER_SPI_DRIFT");
+  assert.deepEqual(Object.keys(manifest.exports), providerExports, "SDK_PROVIDER_PUBLIC_IMPORT_DRIFT");
+  for (const [index, exportPath] of providerExports.entries()) {
+    const stem = exportPath === "." ? "index" : exportPath.slice(2);
+    assert.deepEqual(manifest.exports[exportPath], { types: `./dist/${stem}.d.ts`, import: `./dist/${stem}.js` }, "SDK_PROVIDER_PUBLIC_IMPORT_DRIFT");
+    assert.equal(entry[0].entrypoints[index].declarationEntryPoint, `${providerRoot}/dist/${stem}.d.ts`, "SDK_PROVIDER_SCOPE_DRIFT");
+  }
+  const proof = json(`${directory}/provider-implementations-public-imports.json`);
+  assert.equal(proof.qualification, "workspace-provider-package-and-public-imports", "SDK_PROVIDER_QUALIFICATION_DRIFT");
+  assert.equal(proof.authority, "ADR-0092", "SDK_PROVIDER_QUALIFICATION_DRIFT");
+  assert.equal(proof.sourceRevision, "bc644a5045219bd635d6ea7b3467b9f297033cdf", "SDK_PROVIDER_QUALIFICATION_DRIFT");
+  assert.equal(proof.sdkAdmission, "unchanged-blocked-current-typed-observation", "SDK_PROVIDER_ADMISSION_OVERCLAIM");
+  assert.equal(proof.releaseEligible, false, "SDK_PROVIDER_ADMISSION_OVERCLAIM");
+  assert.deepEqual(proof.publicImports, providerExports.map(path => providerPackage + (path === "." ? "" : path.slice(1))), "SDK_PROVIDER_PUBLIC_IMPORT_DRIFT");
+  assert.deepEqual(proof.engines.map(engine => [engine.node, engine.passed]), [["v24.21.0", true], ["v26.11.1", true]], "SDK_PROVIDER_QUALIFICATION_DRIFT");
+  for (const engine of proof.engines) {
+    assert.equal(engine.tests, 137, "SDK_PROVIDER_QUALIFICATION_DRIFT");
+    assert.match(engine.archiveSha256, /^[a-f0-9]{64}$/u, "SDK_PROVIDER_QUALIFICATION_DRIFT");
+    assert.match(engine.archiveIntegrity, /^sha512-[A-Za-z0-9+/]{86}==$/u, "SDK_PROVIDER_QUALIFICATION_DRIFT");
+  }
+  assert.deepEqual(proof.sdkProcess, { node: "v24.21.0", tests: 24, passed: true,
+    authentication: "synthetic-localhost-only", publicImport: `${providerPackage}/claude` }, "SDK_PROVIDER_QUALIFICATION_DRIFT");
+  const sourcePaths = globSync([`${providerRoot}/src/**/*.ts`, `${providerRoot}/tests/**/*.ts`, `${providerRoot}/scripts/**/*.ts`], { cwd: repository });
+  sourcePaths.push(`${providerRoot}/package.json`, `${providerRoot}/tsconfig.json`, `${providerRoot}/tsconfig.test.json`);
+  assert.deepEqual(proof.sourceInputs.map(input => input.path).toSorted(), sourcePaths.toSorted(), "SDK_PROVIDER_SOURCE_DRIFT");
+  assert.ok(proof.sourceInputs.length > 0 && new Set(proof.sourceInputs.map(item => item.path)).size === proof.sourceInputs.length, "SDK_PROVIDER_SOURCE_DRIFT");
+  for (const input of [...proof.sourceInputs, { path: proof.evidencePath, sha256: proof.evidenceSha256 }]) {
+    assert.ok(input.path.startsWith(`${providerRoot}/`) || input.path === `${directory}/evidence/provider-implementations-public-imports.txt`, "SDK_PROVIDER_SOURCE_DRIFT");
+    assert.match(input.sha256, /^[a-f0-9]{64}$/u, "SDK_PROVIDER_SOURCE_DRIFT");
+    assert.equal(createHash("sha256").update(readFileSync(resolve(repository, input.path))).digest("hex"), input.sha256, "SDK_PROVIDER_SOURCE_DRIFT");
+  }
+  return profile.packages.filter(pkg => pkg.packageName !== providerPackage);
+}
 
 export function normalizeWorkspaceManifestPaths(paths) {
   return paths.map(path => path.replaceAll("\\", "/")).toSorted();
@@ -126,6 +171,8 @@ export function checkSdkGrowthProfile(repository = root) {
   const json = path => JSON.parse(readFileSync(resolve(repository, path), "utf8"));
   const profile = parse(readFileSync(resolve(repository, `${directory}/profile.yaml`), "utf8"));
   const activation = json(`${directory}/activation.json`);
+  // ADR-0092 adds one separately qualified package; the six EF receipts stay immutable.
+  const historicalPackages = checkProviderQualification(repository, profile, json);
   assert.equal(createHash("sha256").update(readFileSync(resolve(repository, "architecture/c0/ar-owned-lifetime/contract.json"))).digest("hex"), "4c88c378c6d54303fd4910f521480e6fe120743dfcdc618007efb1395a684c05", "SDK_C0_BASE_MUTATION");
   const frozen = json("architecture/c0/ar-owned-lifetime/contract.json");
   const manifest = json("package.json");
@@ -231,7 +278,7 @@ export function checkSdkGrowthProfile(repository = root) {
   assert.equal(qualification.qualification, "package-membership-and-public-imports", "SDK_PACKAGE_QUALIFICATION_DRIFT");
   assert.equal(qualification.releaseEligible, false, "SDK_ADMISSION_OVERCLAIM");
   assert.equal(qualification.efCandidateSha256, activation.qualificationInput.archiveSha256, "SDK_EF_CANDIDATE_DRIFT");
-  checkPackedQualification(repository, qualification, profile, json);
+  checkPackedQualification(repository, qualification, { ...profile, packages: historicalPackages }, json);
   const current = qualification.successorCandidateQualification;
   assert.deepEqual(current, {
     status: "pending-current-typed-observation", version: activation.qualificationInput.version,
@@ -249,7 +296,7 @@ export function checkSdkGrowthProfile(repository = root) {
   for (const value of [candidate.toolArtifactDigest, candidate.topologyDigest, candidate.lockDigest, candidate.toolchainDigest, candidate.surfaceDigest, ...candidate.artifactDigests]) {
     assert.match(value, /^sha256:[a-f0-9]{64}$/u, "SDK_EF_CANDIDATE_REPORT_DRIFT");
   }
-  assert.deepEqual(candidate.observedPackages.toSorted(), [...profile.packages.map(pkg => pkg.packageName), ...activation.metadataRoots.map(entry => entry.packageName)].toSorted(), "SDK_QUALIFICATION_SCOPE_DRIFT");
+  assert.deepEqual(candidate.observedPackages.toSorted(), [...historicalPackages.map(pkg => pkg.packageName), ...activation.metadataRoots.map(entry => entry.packageName)].toSorted(), "SDK_QUALIFICATION_SCOPE_DRIFT");
   assert.equal(candidate.verdict, "incomplete", "SDK_ADMISSION_OVERCLAIM");
   assert.equal(candidate.releaseEligible, false, "SDK_ADMISSION_OVERCLAIM");
   assert.equal(candidate.authorityStatus, "not-invoked-strict-extraction-blocked", "SDK_ADMISSION_OVERCLAIM");

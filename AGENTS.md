@@ -83,7 +83,7 @@ Verification workflow:
   must close before deferral. Deferrals claim zero test execution or passes.
   CI selftests may defer only with unchanged closed tooling inputs; current CI
   conformance always executes. Current-source validators, both CMS pin commands,
-  all six product packages, typed/native checks, Darwin and PostgreSQL remain required.
+  all seven product packages, typed/native checks, Darwin and PostgreSQL remain required.
   Common changes and uncertainty run FULL; main, nightly, merge queue and
   reusable full calls retain complete coverage. Local full and fast commands
   retain their existing meaning.

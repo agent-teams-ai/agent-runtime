@@ -228,4 +228,5 @@ Accepted interactive successor, separate from the frozen contained-turn path;
 implementation, Host adoption and qualification remain pending:
 
 - [ADR-0091: Interactive Agent Session synthetic vertical slice](decisions/0091-interactive-agent-session-synthetic-vertical-slice.md)
+- [ADR-0092: Provider implementation workspace library](decisions/0092-provider-implementation-workspace-library.md)
 - [Interactive session C first slice qualification](spikes/interactive-session-c-first-slice-qualification.md)

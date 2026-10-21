@@ -196,6 +196,18 @@ remain independently enforced history against retained predecessor bytes.
 - Complete document SHA-256: `c2fe582a14ff6e79620b232ca7ffc914afb0474ec21fd43f208251dd7252f4a3` (81,436 bytes).
 - Retained bytes are recorded by the consumer profile; they are evidence, not a second authority.
 
+ADR-0092 adds the ordinary provider implementation workspace library to the live
+source census and FMS digest. Its one technical feature is explicitly classified
+as `not-adopted` by the passive Host Assembly profile: fixed protocol/SDK
+implementations, volatile native session state and static IO helpers are not a
+new Host or independently selected resource owner. This classification grants
+no Foundation/FMS exception. The exact public facade and canonical type-only SPI
+relationships are retained; every prior boundary relationship is unchanged. Any
+later configurable Host/provider wiring must qualify its actual composition
+boundary. The upstream CMS revision was checked at `ddf1e0b` on 2026-10-21;
+it equals the pinned revision above, so this scope change has no standard-byte
+delta or pin migration.
+
 Document identity, package versions/archive integrity, Core compatibility token,
 and local adoption authority are distinct. The profile retains the approved published
 Core and Assembly 0.6.0 plus resources 0.2.0 archives, verifies their SHA-256 and lock integrity,

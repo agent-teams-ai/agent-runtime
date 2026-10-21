@@ -13,12 +13,19 @@ const root = fileURLToPath(new URL("../../", import.meta.url));
 const digest = bytes => createHash("sha256").update(bytes).digest("hex");
 const contractPath = "architecture/c0/ar-owned-lifetime/contract.json";
 const contract = JSON.parse(readFileSync(join(root, contractPath), "utf8"));
+const providerProofPath = "architecture/sdk-growth/provider-implementations-public-imports.json";
+const providerRoot = "packages/platform/provider-implementations";
 function fixture(t) {
   const directory = mkdtempSync(join(tmpdir(), "ar-sdk-profile-"));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   for (const path of ["packages/contexts/agent-execution/tests/package/interactive-contracts-packed-consumer.test.ts", contractPath, "architecture/c0/ar-owned-lifetime/identity.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "architecture/sdk-growth", "architecture/get-modular/consumer-profile.json", "architecture/get-modular/evidence/consumer-module-standard.md", "architecture/get-modular/evidence/a3-cms-pin-review.json", "architecture/get-modular/evidence/creation-cleanup-cms-pin-review.json", "architecture/get-modular/evidence/creation-cleanup-cms-pin-delta.diff", "architecture/get-modular/evidence/sdk-growth-standard-review.json", "architecture/get-modular/evidence/sdk-growth-current-standard.md", "architecture/consumer-module-standard/contained-turn-profile.json", ...contract.inventory.packages.map(pkg => pkg.manifest)]) {
     mkdirSync(dirname(join(directory, path)), { recursive: true });
     cpSync(join(root, path), join(directory, path), { recursive: true });
+  }
+  const providerProof = JSON.parse(readFileSync(join(root, providerProofPath), "utf8"));
+  for (const { path } of providerProof.sourceInputs) {
+    mkdirSync(dirname(join(directory, path)), { recursive: true });
+    cpSync(join(root, path), join(directory, path));
   }
   return directory;
 }
@@ -30,7 +37,42 @@ function mutate(directory, path, change) {
 }
 
 test("EF 1.7.2 tooling retains EF 1.6.0 qualification and historical EF 1.5.1 observation with admission blocked", t => {
-  assert.deepEqual(checkSdkGrowthProfile(fixture(t)), { status: "pending-authority-qualification", packages: 6, metadataRoots: 1, releaseEligible: false });
+  assert.deepEqual(checkSdkGrowthProfile(fixture(t)), { status: "pending-authority-qualification", packages: 7, metadataRoots: 1, releaseEligible: false });
+});
+test("provider qualification rejects an omitted package and an unqualified curated export", t => {
+  const missing = fixture(t);
+  mutate(missing, "architecture/sdk-growth/profile.yaml", value => { value.packages = value.packages.filter(pkg => pkg.packageName !== "@agent-teams/provider-implementations"); });
+  assert.throws(() => checkSdkGrowthProfile(missing), /SDK_PROVIDER_SCOPE_DRIFT/u);
+  const extra = fixture(t);
+  mutate(extra, `${providerRoot}/package.json`, value => { value.exports["./unqualified"] = value.exports["./claude"]; });
+  assert.throws(() => checkSdkGrowthProfile(extra), /SDK_PROVIDER_PUBLIC_IMPORT_DRIFT/u);
+});
+test("provider qualification rejects artifact SPI substitution and publication overclaims", t => {
+  const substituted = fixture(t);
+  mutate(substituted, `${providerRoot}/package.json`, value => { value.peerDependencies["@agent-teams/agent-execution"] = "file:/TEST/canonical.tgz"; });
+  assert.throws(() => checkSdkGrowthProfile(substituted), /SDK_PROVIDER_SPI_DRIFT/u);
+  const published = fixture(t);
+  mutate(published, providerProofPath, value => { value.releaseEligible = true; });
+  assert.throws(() => checkSdkGrowthProfile(published), /SDK_PROVIDER_ADMISSION_OVERCLAIM/u);
+});
+test("provider qualification rejects missing source coverage and changed qualified source bytes", t => {
+  const omitted = fixture(t);
+  mutate(omitted, providerProofPath, value => { value.sourceInputs.pop(); });
+  assert.throws(() => checkSdkGrowthProfile(omitted), /SDK_PROVIDER_SOURCE_DRIFT/u);
+  const changed = fixture(t);
+  writeFileSync(join(changed, `${providerRoot}/src/claude.ts`), "export {};\n");
+  assert.throws(() => checkSdkGrowthProfile(changed), /SDK_PROVIDER_SOURCE_DRIFT/u);
+});
+test("provider qualification rejects failed engine, SDK-process and retained evidence claims", t => {
+  const engine = fixture(t);
+  mutate(engine, providerProofPath, value => { value.engines[0].passed = false; });
+  assert.throws(() => checkSdkGrowthProfile(engine), /SDK_PROVIDER_QUALIFICATION_DRIFT/u);
+  const sdk = fixture(t);
+  mutate(sdk, providerProofPath, value => { value.sdkProcess.tests = 0; });
+  assert.throws(() => checkSdkGrowthProfile(sdk), /SDK_PROVIDER_QUALIFICATION_DRIFT/u);
+  const evidence = fixture(t);
+  mutate(evidence, providerProofPath, value => { value.evidenceSha256 = "0".repeat(64); });
+  assert.throws(() => checkSdkGrowthProfile(evidence), /SDK_PROVIDER_SOURCE_DRIFT/u);
 });
 for (const script of ["sdk-growth:profile", "test:sdk-growth:profile", "test:sdk-growth:packed"]) {
   for (const replacement of [undefined, "node -e 'process.exit(0)'"]) {
