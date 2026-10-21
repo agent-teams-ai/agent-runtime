@@ -21,6 +21,11 @@ for (const [name, path, before, after, pattern] of [
   ['method-shaped port', hostFeature + '/contracts/interactive-session-host.ts', 'readonly dispose: () => Promise<void>', 'dispose(): Promise<void>', /arrow function/],
   ['mandatory runner omitted', 'packages/apps/embedded-runtime/scripts/run-package-tests.mjs', 'tests/features/interactive-session-runtime/host.test.ts', 'tests/other.test.ts', /mandatory runner/],
   ['wiring qualification omitted', hostTests, 'checkWiring(', 'ignoreWiring(', /qualification missing/],
+  ['vendor contract registration site', hostTests, 'registerHostContractSuite((name, body) => test(name, body))', 'registerHostContractSuite(test)', /local native test callback/],
+  ['no-op contract registration', hostTests, 'registerHostContractSuite((name, body) => test(name, body))', 'registerHostContractSuite((name, body) => undefined)', /local native test callback/],
+  ['discarded contract body', hostTests, 'registerHostContractSuite((name, body) => test(name, body))', 'registerHostContractSuite((name, body) => test(name, () => undefined))', /preserve case name and body/],
+  ['duplicate contract registration', hostTests, 'registerHostContractSuite((name, body) => test(name, body))', 'registerHostContractSuite((name, body) => test(name, body)); registerHostContractSuite((name, body) => test(name, body))', /one local contract registration/],
+
 ]) {
   test('interactive Host rejects ' + name, () => {
     const changed = new Map(files); assert.ok(changed.get(path).includes(before), 'negative fixture must mutate real source');

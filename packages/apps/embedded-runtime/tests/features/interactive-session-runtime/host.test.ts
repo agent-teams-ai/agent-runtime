@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import {mkdtemp, rm} from "node:fs/promises";
+import {mkdtemp, realpath, rm} from "node:fs/promises";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
 import test, {after} from "node:test";
@@ -92,8 +92,11 @@ test("lost owner cannot replay; exact-generation custody retires logical/grant d
 });
 
 test("real existing descriptor custody refuses a second Host and releases only after disposal", async t => {
-  const directory = await mkdtemp(join(tmpdir(), "TEST-interactive-host-")); t.after(() => rm(directory, {recursive: true, force: true}));
-  const f = fixture(); const host = await createInteractiveSessionHost({...f.ports, privateRoot: directory});
+  const created = await mkdtemp(join(tmpdir(), "TEST-interactive-host-")); const directory = await realpath(created);
+  t.after(() => rm(directory, {recursive: true, force: true}));
+  const f = fixture();
+  if (created !== directory) {await assert.rejects(createInteractiveSessionHost({...f.ports, privateRoot: created}), /factory_failed/);}
+  const host = await createInteractiveSessionHost({...f.ports, privateRoot: directory});
   await assert.rejects(createInteractiveSessionHost({...f.ports, privateRoot: directory}), /factory_failed/);
   await host.dispose(); const next = await createInteractiveSessionHost({...f.ports, privateRoot: directory}); await next.dispose();
 });

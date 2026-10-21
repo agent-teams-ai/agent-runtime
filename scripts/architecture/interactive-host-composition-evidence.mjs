@@ -56,9 +56,21 @@ export function verifyInteractiveHostComposition(mapping, decisions, get, source
   }
   const layout = verifyHostLayout(programs);
   const tests = get(hostTests), suite = get('packages/apps/embedded-runtime/tests/features/interactive-session-runtime/host-contract-suite.ts');
-  for (const call of ['checkWiring(', 'checkNamespaces(', 'isolate(', 'smoke(', 'registerHostContractSuite(test)']) {
+  for (const call of ['checkWiring(', 'checkNamespaces(', 'isolate(', 'smoke(']) {
     assert.ok(tests.includes(call), `interactive Host qualification missing ${call}`);
   }
+  const testProgram = programs.get(hostTests);
+  assert.ok(testProgram.body.some(node => node.type === 'ImportDeclaration' && node.source.value === 'node:test' &&
+    node.specifiers.some(specifier => specifier.type === 'ImportDefaultSpecifier' && specifier.local.name === 'test')), 'interactive Host native test import missing');
+  const registrations = [];
+  walk(testProgram, node => {if (node.type === 'CallExpression' && callee(node) === 'registerHostContractSuite') {registrations.push(node);}});
+  assert.equal(registrations.length, 1, 'interactive Host requires one local contract registration');
+  const delegate = registrations[0].arguments[0];
+  assert.ok(registrations[0].arguments.length === 1 && delegate.type === 'ArrowFunctionExpression' && delegate.params.length === 2 &&
+    delegate.params.every(parameter => parameter.type === 'Identifier') && delegate.body.type === 'CallExpression' && callee(delegate.body) === 'test',
+  'interactive Host contract cases must register through a local native test callback');
+  assert.deepEqual(delegate.body.arguments.map(argument => argument.type === 'Identifier' ? argument.name : null), delegate.params.map(parameter => parameter.name),
+    'interactive Host contract registration must preserve case name and body');
   assert.ok(suite.includes('runContractSuite(hostContractSuite') && suite.includes('independent owner fake'), 'interactive Host reusable contract suite missing');
   assert.ok(get('packages/apps/embedded-runtime/scripts/run-package-tests.mjs').includes('tests/features/interactive-session-runtime/host.test.ts'), 'interactive Host mandatory runner omitted');
   return layout;
