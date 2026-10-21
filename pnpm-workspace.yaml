@@ -24,7 +24,7 @@ catalog:
   oxlint: "1.83.0"
   oxlint-tsgolint: "7.0.2001"
   pg: "8.23.0"
-  smol-toml: "1.8.0"
+  smol-toml: "1.9.0"
   typescript: "7.0.2"
   xstate: "5.32.5"
   yaml: "2.9.0"
