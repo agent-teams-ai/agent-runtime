@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {execFile} from "node:child_process";
+import {createHash} from "node:crypto";
 import {cp, mkdir, mkdtemp, readFile, rename, rm, writeFile} from "node:fs/promises";
 import {tmpdir} from "node:os";
 import {dirname, join, resolve} from "node:path";
@@ -11,6 +12,7 @@ import test from "node:test";
 const run = promisify(execFile);
 const require = createRequire(import.meta.url);
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
+const sha256 = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 
 test("packed canonical SPI compiles outside checkout with no SDK/workspace dependencies and exports no runtime values", async () => {
   const root = await mkdtemp(join(tmpdir(), "TEST-interactive-contracts-pack-"));
@@ -42,5 +44,10 @@ test("packed canonical SPI compiles outside checkout with no SDK/workspace depen
     await assert.rejects(run(process.execPath, [compiler, "--project", join(consumer, "tsconfig.json"), "--pretty", "false"], {cwd: consumer, timeout: 20000}), error => {
       assert.match(String((error as {stdout?: string}).stdout), /TS2305.*ClaudeConfig/u); return true;
     });
+    console.log("INTERACTIVE_PUBLIC_IMPORT_OBSERVATION " + JSON.stringify({
+      packageName: installed.name, exportPath: "./interactive-contracts", targets: installed.exports["./interactive-contracts"],
+      archiveSha256: sha256(await readFile(archive)), manifestSha256: sha256(await readFile(join(modules, "agent-execution", "package.json"))),
+      strictTypesWithoutSdkOrWorkspace: true, runtimeExports: [], providerSpecificTypeRejected: true,
+    }));
   } finally {await rm(root, {recursive: true, force: true});}
 });
