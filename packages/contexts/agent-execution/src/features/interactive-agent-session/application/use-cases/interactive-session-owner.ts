@@ -7,6 +7,8 @@ import {sameScope, sessionView, terminal, utf8Bytes, validateRecord, type JsonVa
   type SessionRef, type SessionReply, type SessionView} from "../../domain/session.js";
 
 const accepted = (): SessionReply => ({status: "accepted"});
+// Receipts cross runtime boundaries; truthy malformed values never prove closure.
+const confirmedTrue = (value: unknown): value is true => value === true;
 const staleTarget = (record: SessionRecord, observation: DriverObservation): boolean => {
   if (observation.operationId === undefined) {return false;}
   const input = record.inputs.find(item => item.operationId === observation.operationId);
@@ -122,7 +124,7 @@ export class InteractiveSessionOwner {
     if (!validId(operationId)) {throw new TypeError("interactive_operation_identity_invalid");}
     const fingerprint = JSON.stringify(["submit", input.inputId, input.content]);
     const result = await this.#admitEffect(ref, async () => {
-      if (this.#sealed.has(key(ref))) {return {reply: {status: "unavailable"} as SessionReply};}
+      if (this.#sealed.has(key(ref))) {return {reply: {status: "unavailable"} satisfies SessionReply};}
       return mutateSession(this.#deps, ref, current => {
       const prior = priorCommand(current, input.commandId, fingerprint); if (prior) {return prior;}
       if (current.status !== "ready") {return {status: "unavailable"};}
@@ -143,7 +145,7 @@ export class InteractiveSessionOwner {
     if (!await this.#deps.authorize("dispatch", ref)) {return {status: "denied"};}
     const admission = await this.#admitEffect(ref, async () => {
       const driver = this.#drivers.get(key(ref));
-      if (this.#sealed.has(key(ref)) || !driver) {return {reply: {status: "unavailable"} as SessionReply};}
+      if (this.#sealed.has(key(ref)) || !driver) {return {reply: {status: "unavailable"} satisfies SessionReply};}
       let operationId: string | undefined;
       const claimed = await mutateSession(this.#deps, ref, current => {
         if (current.status !== "ready" || current.controlPending || active(current)) {return {status: "unavailable"};}
@@ -152,7 +154,7 @@ export class InteractiveSessionOwner {
         return {record: {...current, inputs: current.inputs.map(item => item.operationId === operationId
           ? {...item, status: "dispatching", delivery: "dispatching"} : item)}, reply: accepted()};
       });
-      if (claimed.reply.status !== "accepted" || !claimed.record || !operationId) {return {reply: claimed.reply};}
+      if (claimed.reply.status !== "accepted" || !claimed.record || operationId === undefined || operationId.length === 0) {return {reply: claimed.reply};}
       const input = claimed.record.inputs.find(item => item.operationId === operationId)!;
       const pending = this.#runEffect("handoff", () => driver.submit({inputId: input.inputId, operationRef: input.operationId, content: input.content}));
       return {reply: claimed.reply, operationId, inputId: input.inputId, pending};
@@ -162,8 +164,9 @@ export class InteractiveSessionOwner {
     let disposition: "client_consumed" | "known_not_sent" | "unknown" = "unknown";
     try {
       const handoff = await admission.pending;
+      const evidence: {readonly delivery: unknown; readonly providerAcceptance: unknown} | undefined = handoff.ok ? handoff.value : undefined;
       disposition = handoff.ok ? handoff.value.operationRef === operationId && handoff.value.inputId === admission.inputId &&
-        handoff.value.delivery === "client-consumed" && handoff.value.providerAcceptance === "unknown" ? "client_consumed" : "unknown"
+        evidence?.delivery === "client-consumed" && evidence.providerAcceptance === "unknown" ? "client_consumed" : "unknown"
         : handoff.delivery === "known-not-sent" ? "known_not_sent" : "unknown";
     } catch { /* Acceptance is unknown. */ }
     return (await mutateSession(this.#deps, ref, current => {
@@ -187,7 +190,7 @@ export class InteractiveSessionOwner {
       let iterator = this.#iterators.get(key(ref));
       if (!iterator) {iterator = driver.observe()[Symbol.asyncIterator](); this.#iterators.set(key(ref), iterator);}
       const observation = await this.#runEffect("observe", () => iterator.next());
-      if (observation.done) {
+      if (observation.done === true) {
         await this.record(ref, {kind: "diagnostic", data: {code: "iterator-ended"}});
         return this.recover(ref);
       }
@@ -214,7 +217,7 @@ export class InteractiveSessionOwner {
           interactions: next.interactions.map(interaction => interaction.operationId === observation.operationId && ["pending", "replying"].includes(interaction.state) ? {...interaction, state: "cancelled"} : interaction)};
       }
       if (observation.kind === "interaction") {
-        if (target?.cancellationRequested) {return {status: "stale"};}
+        if (target?.cancellationRequested === true) {return {status: "stale"};}
         if (next.interactions.some(item => item.generation === ref.generation && item.interactionId === observation.interactionId) || observation.expiresAt <= this.#deps.clock.now()) {return {status: "stale"};}
         if (next.interactions.filter(item => ["pending", "replying"].includes(item.state)).length >= next.limits.interactions) {return {status: "backpressure"};}
         next = {...next, interactions: [...next.interactions, {interactionId: observation.interactionId, generation: ref.generation,
@@ -235,7 +238,7 @@ export class InteractiveSessionOwner {
     const fingerprint = answerFingerprint(interactionId, validated);
     if (utf8Bytes(fingerprint) > this.#deps.limits.inputBytes) {return {status: "backpressure"};}
     const admitted = await this.#admitEffect(ref, async () => {
-      const driver = this.#drivers.get(key(ref)); if (this.#sealed.has(key(ref)) || !driver) {return {reply: {status: "unavailable"} as SessionReply};}
+      const driver = this.#drivers.get(key(ref)); if (this.#sealed.has(key(ref)) || !driver) {return {reply: {status: "unavailable"} satisfies SessionReply};}
       const claimed = await mutateSession(this.#deps, ref, current => {
         const prior = priorCommand(current, commandId, fingerprint); if (prior) {return prior;}
         const request = current.interactions.find(item => item.generation === ref.generation && item.interactionId === interactionId);
@@ -263,7 +266,7 @@ export class InteractiveSessionOwner {
     if (!await this.#deps.authorize("interrupt", ref)) {return {status: "denied"};}
     const fingerprint = JSON.stringify(["interrupt", operationId]);
     const admitted = await this.#admitEffect(ref, async () => {
-      if (this.#sealed.has(key(ref))) {return {reply: {status: "unavailable"} as SessionReply};}
+      if (this.#sealed.has(key(ref))) {return {reply: {status: "unavailable"} satisfies SessionReply};}
       const claimed = await mutateSession(this.#deps, ref, current => {
         const prior = priorCommand(current, commandId, fingerprint); if (prior) {return prior;}
         const input = current.inputs.find(item => item.operationId === operationId);
@@ -273,7 +276,7 @@ export class InteractiveSessionOwner {
           inputs: current.inputs.map(item => item === input ? {...item, cancellationRequested: true, status: queued ? "cancelled" : item.status} : item),
           interactions: current.interactions.map(item => item.operationId === operationId && ["pending", "replying"].includes(item.state) ? {...item, state: "cancelled"} : item)}, reply: accepted()};
       });
-      if (claimed.reply.status !== "accepted" || !claimed.record?.controlPending) {return {reply: claimed.reply};}
+      if (claimed.reply.status !== "accepted" || claimed.record?.controlPending !== true) {return {reply: claimed.reply};}
       const driver = this.#drivers.get(key(ref));
       return {reply: claimed.reply, pending: driver ? this.#runEffect("control", () => driver.interrupt(operationId)) : Promise.resolve({ok: false as const, code: "unknown" as const})};
     });
@@ -328,19 +331,20 @@ export class InteractiveSessionOwner {
     if (admission.reply.status !== "accepted") {
       if (admission.late) {
         try {
-          if ((await admission.late).logicallyClosed !== true) {return {status: "unknown"};}
+          if (!confirmedTrue((await admission.late).logicallyClosed)) {return {status: "unknown"};}
           this.#drivers.delete(key(ref)); this.#iterators.delete(key(ref));
         } catch {return {status: "unknown"};}
       }
       return admission.reply;
     }
     let logicalClosed = this.#logicallyClosed.has(key(ref)); let outputDrained = false; let resourcesStopped = false;
-    try {if (admission.pending) {const receipt = await admission.pending; logicalClosed = receipt.logicallyClosed === true;
+    try {if (admission.pending) {const receipt = await admission.pending; logicalClosed = confirmedTrue(receipt.logicallyClosed);
       if (logicalClosed) {this.#logicallyClosed.add(key(ref));}}} catch { /* Custody still executes. */ }
     try {
       const proof = await this.#deps.withinDeadline("close", () => this.#deps.custody.close(ref));
-      outputDrained = proof.outputDrained === true; resourcesStopped = proof.resourcesStopped === true;
-      if (proof.ownerClosure?.logicalClosed === true && proof.ownerClosure.grantsClosed === true && key(proof.ownerClosure.session) === key(ref)) {
+      outputDrained = confirmedTrue(proof.outputDrained); resourcesStopped = confirmedTrue(proof.resourcesStopped);
+      const ownerClosure = proof.ownerClosure;
+      if (ownerClosure !== undefined && confirmedTrue(ownerClosure.logicalClosed) && confirmedTrue(ownerClosure.grantsClosed) && key(ownerClosure.session) === key(ref)) {
         logicalClosed = true; this.#logicallyClosed.add(key(ref));
       }
     } catch { /* Honest cleanup debt. */ }
@@ -372,7 +376,7 @@ export class InteractiveSessionOwner {
     const fingerprint = JSON.stringify(["restore", configRevision]);
     const admitted = await mutateSession(this.#deps, ref, current => {
       const prior = priorCommand(current, commandId, fingerprint); if (prior) {return prior;}
-      if (current.status !== "closed" || active(current) || current.controlPending || !current.checkpointRef || current.configRevision !== configRevision) {return {status: "unsupported"};}
+      if (current.status !== "closed" || active(current) || current.controlPending || current.checkpointRef === undefined || current.checkpointRef.length === 0 || current.configRevision !== configRevision) {return {status: "unsupported"};}
       return {record: {...command(current, commandId, fingerprint), generation: current.generation + 1, status: "opening",
         interactions: current.interactions.map(item => item.state === "pending" || item.state === "replying" ? {...item, state: "cancelled"} : item)}, reply: accepted()};
     });

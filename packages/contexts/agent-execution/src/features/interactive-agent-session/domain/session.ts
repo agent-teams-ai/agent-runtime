@@ -90,7 +90,7 @@ function invalidContents(record: SessionRecord): boolean {
         interaction.operationId !== undefined && !record.inputs.some(input => input.operationId === interaction.operationId)) ||
       record.events.some((event, index) => event.sequence !== index + 1 || !Number.isSafeInteger(event.generation) || event.generation < 1 || event.generation > record.generation);
 }
-function invalidIdentity(record: SessionRecord): boolean {
+function invalidIdentity(record: Omit<SessionRecord, "schemaVersion"> & {readonly schemaVersion: unknown}): boolean {
   const validStatus = ["opening", "ready", "unavailable", "closing", "closed", "reconcile_required"].includes(record.status);
   return (record.schemaVersion !== 1 || ![record.tenantId, record.projectId, record.sessionId].every(id) ||
       !Number.isSafeInteger(record.generation) || record.generation < 1 || !Number.isSafeInteger(record.revision) || record.revision < 0 ||

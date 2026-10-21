@@ -3,12 +3,14 @@ import type {InteractionReply} from "../ports/outbound/interactive-provider-driv
 /** Snapshot plain own data once; never re-read caller getters or Proxy get traps. */
 function dataRecord(value: unknown): Record<string, unknown> | undefined {
   try {
-    if (value === null || typeof value !== "object" || ![Object.prototype, null].includes(Object.getPrototypeOf(value))) {return;}
+    if (value === null || typeof value !== "object") {return;}
+    const prototype: unknown = Object.getPrototypeOf(value);
+    if (prototype !== Object.prototype && prototype !== null) {return;}
     const properties = Object.getOwnPropertyDescriptors(value);
     if (Reflect.ownKeys(properties).some(key => typeof key !== "string")) {return;}
     const detached: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
     for (const [key, property] of Object.entries(properties)) {
-      if (!property.enumerable || !("value" in property)) {return;}
+      if (property.enumerable !== true || !("value" in property)) {return;}
       detached[key] = property.value;
     }
     return detached;

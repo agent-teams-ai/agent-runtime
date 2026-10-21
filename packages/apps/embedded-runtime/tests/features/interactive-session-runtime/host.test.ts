@@ -14,7 +14,8 @@ import {registerHostContractSuite} from "./host-contract-suite.ts";
 
 const handles = guardHandles();
 
-registerHostContractSuite(test);
+// Keep the observed registration site in this source file, as required by CI custody.
+registerHostContractSuite((name, body) => test(name, body));
 
 const oracle: WiringOracle = {providers: {
   "agent-runtime/interactive-host/host": "agent-runtime/interactive-host/host/default",
