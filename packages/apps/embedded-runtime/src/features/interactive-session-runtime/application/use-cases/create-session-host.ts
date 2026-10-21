@@ -72,10 +72,14 @@ export function createSessionHost(ports: InteractiveHostPolicyPorts, build: Buil
       return disposal ??= (async () => {
         closing = true;
         await Promise.allSettled(attempts);
+        let incomplete = false;
         for (const ref of owned.values()) {
-          const result = await feature.control.cleanup(ref);
-          if (result.status !== "accepted" && result.status !== "duplicate") {throw new Error("interactive_host_cleanup_incomplete");}
+          try {
+            const result = await feature.control.cleanup(ref);
+            if (result.status !== "accepted" && result.status !== "duplicate") {incomplete = true;}
+          } catch {incomplete = true;}
         }
+        if (incomplete) {throw new Error("interactive_host_cleanup_incomplete");}
         disposed = true;
       })().catch((error: unknown) => {disposal = undefined; throw error;});
     },

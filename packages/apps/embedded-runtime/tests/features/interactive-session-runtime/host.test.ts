@@ -65,6 +65,45 @@ test("uncertain cleanup keeps Host ownership, fences new effects and retries onl
   assert.deepEqual(f.counts(), {opens: 1, closes: 1, released: 1});
 });
 
+for (const failure of ["unknown", "throw"] as const) {
+  test(`disposal attempts every retained session when the first cleanup is ${failure}`, async t => {
+    const directory = await realpath(await mkdtemp(join(tmpdir(), "TEST-interactive-host-all-owned-")));
+    const f = fixture(); const second = {...ref, sessionId: "TEST-second-session"};
+    const physicallyClosed: string[] = []; let disposing = false; let confirmed = false;
+    const ports = {...f.ports,
+      store: {...f.store, read: async (...args: Parameters<typeof f.store.read>) => {
+        if (disposing && !confirmed && failure === "throw" && args[0].sessionId === ref.sessionId) {throw new Error("TEST-first-cleanup-store-failure");}
+        return f.store.read(...args);
+      }},
+      provider: {open: async (...args: Parameters<typeof f.ports.provider.open>) => {
+        const opened = await f.ports.provider.open(...args);
+        return {...opened, driver: {...opened.driver, close: async () => {
+          physicallyClosed.push(args[0].sessionId); return opened.driver.close();
+        }}};
+      }},
+      custody: {close: async (...args: Parameters<typeof f.ports.custody.close>) => {
+        if (!confirmed && args[0].sessionId === ref.sessionId) {return {outputDrained: false, resourcesStopped: false};}
+        return f.ports.custody.close(...args);
+      }},
+    };
+    const host = await createInteractiveSessionHost({...ports, privateRoot: directory});
+    t.after(async () => {confirmed = true; await host.dispose(); await rm(directory, {recursive: true, force: true});});
+    const api = host.bindAccess(ref);
+    assert.equal((await api.open(ref, "TEST-first-open", "TEST-config", [])).status, "accepted");
+    assert.equal((await api.open(second, "TEST-second-open", "TEST-config", [])).status, "accepted");
+    disposing = true;
+    await assert.rejects(host.dispose());
+    assert.equal(physicallyClosed.filter(id => id === second.sessionId).length, 1);
+    assert.equal((await api.read(second))!.status, "closed");
+    assert.equal((await api.close(second)).status, "unavailable");
+    await assert.rejects(createInteractiveSessionHost({...ports, privateRoot: directory}), /factory_failed/);
+    confirmed = true; await host.dispose(); await host.dispose();
+    assert.equal((await api.read(ref))!.status, "closed");
+    assert.equal(physicallyClosed.filter(id => id === second.sessionId).length, 1);
+    const next = await createInteractiveSessionHost({...ports, privateRoot: directory}); await next.dispose();
+  });
+}
+
 test("compatible closed checkpoint restores a new generation and old authority never reaches the driver", async () => {
   const f = fixture(); const first = await constructInteractiveSessionHost(f.ports, f.ownership); const api = first.bindAccess(ref);
   await api.open(ref, "TEST-open", "TEST-config", []); await first.control.checkpoint(ref); await api.close(ref); await first.dispose();
