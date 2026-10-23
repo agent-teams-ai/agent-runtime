@@ -35,17 +35,17 @@ test("retains exact CMS delta bytes under conflicting Git inter-hunk context", (
     const { loadCmsPinInputs, verifyCmsPin } = await import(${JSON.stringify(new URL("./check-cms-pin.mjs", import.meta.url).href)});
     const inputs = await loadCmsPinInputs();
     const sha256 = bytes => createHash("sha256").update(bytes).digest("hex");
-    const digest = "598b4a4b4592cd8e49786685cd846287b507458805c1c3886aa563055b4274a7";
+    const digest = "b822ab8cb47919b37bbff236f585058101ebfa9f82e9fcd42f9737a14498ca1e";
     console.log(JSON.stringify({ byteLength: inputs.exactDeltaBytes.length,
       hunks: inputs.exactDeltaBytes.toString("utf8").split("\\n").filter(line => line.startsWith("@@ ")).length,
       sha256: sha256(inputs.exactDeltaBytes) }));
-    assert.equal(inputs.deltaBytes.length, 61093);
+    assert.equal(inputs.deltaBytes.length, 7196);
     assert.equal(sha256(inputs.deltaBytes), digest, "independent retained delta digest");
     assert.equal(sha256(inputs.exactDeltaBytes), digest, "Git must preserve the retained delta digest");
     assert.deepEqual(inputs.exactDeltaBytes, inputs.deltaBytes);
     assert.deepEqual(verifyCmsPin(inputs), {
-      commit: "ddf1e0b0053f546f12ca70190b237b4f7e78d09d",
-      sha256: "c2fe582a14ff6e79620b232ca7ffc914afb0474ec21fd43f208251dd7252f4a3",
+      commit: "b70ba39304ac71964175c42a77309406a7c30ca2",
+      sha256: "11a389b223506dc303fa986a7a37350b847013d85beb2de9d74cb8c97363e824",
     });
   `], { env, encoding: "utf8", timeout: 30_000, maxBuffer: 1024 * 1024 });
   assert.equal(result.error, undefined);

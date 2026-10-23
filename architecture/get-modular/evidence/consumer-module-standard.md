@@ -16,6 +16,7 @@ related:
   - ADR-0035
   - ADR-0036
   - ADR-0037
+  - ADR-0041
   - ARCH-CURRENT-CONTRACT
   - ARCH-MVP-IMPLEMENTATION-ROADMAP
 ---
@@ -333,6 +334,13 @@ managers and process or worker control.
 
 ### Module communication
 
+Observation load cleanup keeps waiting for its own active loader after escalation.
+The owner receives `observation.load.still-running` with that run's revision;
+the report does not release its dependencies. A Host uses `abandon` to end a bounded
+wait and retains the original close promise, control and infrastructure until
+completion. Do not retry cleanup merely to observe that original flight.
+The successor decision is [ADR-0039](../decisions/0039-retain-observation-load-drain-until-its-run-settles.md).
+
 [ADR-0034](../decisions/0034-admit-the-module-change-observation-package.md) admits the optional
 `@get-modular/observation` package: state with one writer, read-only facets and subscriptions owned by the
 subscriber's scope. Core and Assembly do not import it; a module that does not follow changes needs nothing from
@@ -477,7 +485,8 @@ compiled examples and the recipes for growing a feature.
    sub-features, its ancestors and the siblings of itself and of its ancestors.
    Downward and lateral edges stay acyclic, type-only references included; an upward
    use of an ancestor's contracts never counts. No load-time import cycle may cross
-   features. A parent's map extends its sub-features' maps through `import type`.
+   features. A parent's complete map includes each private sub-feature's contracts
+   through a separate `CapabilitiesOf<ChildContracts>` base and an `import type`.
 3. `@get-modular/*` is imported only in `composition/` and in tests.
    `application/` and `domain/` never import `contracts/`, not even their own: a use
    case types its dependencies only with `application/ports/`, and the module file
@@ -644,15 +653,44 @@ Module packages:
   at the top level of the module file, and listed in its feature's group
   ([Feature groups](#feature-groups)). A factory that closes over Host-level values
   gets its entry from a function of the composition adapter whose module list
-  never depends on them. A module never imports the Host's map. A feature's map
-  is an interface that extends the maps of the features it uses, one member per
-  line, through `import type`.
+  never depends on them. A module never imports the Host's map. For concrete
+  descriptor-derived maps, a feature exports its complete `FeatureContracts`
+  descriptor union and a named `FeatureCapabilities` interface. The union includes
+  its own descriptors and the complete contract unions of each feature it uses,
+  including private sub-features. An upward reference imports only the ancestor's
+  descriptor, as before, rather than the ancestor aggregate that already includes
+  this child; include that descriptor in the child's union and own mapped base.
+  The interface extends one separate
+  `CapabilitiesOf<ImportedContracts>` base per imported contract union, plus its
+  own descriptor base, one member per line. Import those unions with `import type`.
+  Both lists MUST contain the same sources; retain every transitive and unused
+  contract. Generated authoring derives both lists from one dependency list,
+  and compiled parity checks verify exact keys, values and compatibility tokens.
+  Each source interface's own conflict checks remain part of the checked program.
+  [ADR-0041](../decisions/0041-preserve-complete-feature-maps-with-descriptor-unions.md)
+  succeeds the former direct feature-map inheritance recipe without narrowing
+  its aggregate surface or early conflict guarantee.
 - Name a map derived from many contracts as an interface:
   `interface HostCapabilities extends CapabilitiesOf<typeof A | typeof B> {}`.
   A type alias over hundreds of contracts multiplies check time and reaches
   TS2589 on TypeScript 5.8.3.
+- Keep imported contract unions in separate `CapabilitiesOf` bases. Combining
+  them into `CapabilitiesOf<AContracts | BContracts>` merges duplicate IDs into
+  union-valued entries and can hide an incompatible value or revision. Separate
+  bases reject the disagreement with TS2320 even when no module uses that key.
+  Identical overlaps remain valid. A parent retains its private child's complete
+  contract metadata; an independent team fragment retains the same checks before
+  a Host selects it. This recipe uses the existing Assembly type mechanism, with
+  no new API, runtime manager or consumer-local type framework.
+- The descriptor-union recipe applies to concrete descriptor-derived properties.
+  Do not erase additional hand-written map properties, index/call/construct
+  signatures or map-level polymorphic `this` to make a custom map fit it. Keep
+  such a map's existing complete interface until a separate compatibility proof
+  justifies migration. Descriptor value types and their function-typed port
+  members remain unchanged. Existing valid manual maps remain supported.
 - A Host prepares with a map that contains every capability any entry uses,
-  with the identical contract.
+  with the identical contract. It may still extend complete top-level feature
+  interfaces; the feature's exported contract union does not replace that check.
 - Module packages list Get Modular packages only in `peerDependencies`, with a
   range of one 0.x minor such as `^0.5.0`, and pin exact versions in
   `devDependencies` for their own tests. A Host installs one copy of each Get
@@ -696,7 +734,8 @@ import type { StorePort } from "../contracts/store.js";
 
 // The descriptor and the feature's map: composition code imports this file, nothing else does.
 export const Store = defineContract<StorePort>()({ id: "acme/store/store", revision: 1 });
-export interface StoreCapabilities extends CapabilitiesOf<typeof Store> {}
+export type StoreContracts = typeof Store;
+export interface StoreCapabilities extends CapabilitiesOf<StoreContracts> {}
 ```
 
 ```ts
@@ -725,12 +764,13 @@ export function incrementCounter(deps: IncrementCounterDeps, input: { readonly k
 // src/features/counter/composition/counter.contracts.ts
 import { defineContract, type CapabilitiesOf } from "@get-modular/assembly";
 import type { CounterPort } from "../contracts/counter.js";
-import type { StoreCapabilities } from "../../store/composition/store.contracts.js";
+import type { StoreContracts } from "../../store/composition/store.contracts.js";
 
 export const Counter = defineContract<CounterPort>()({ id: "acme/counter/counter", revision: 1 });
-// One member per line: the map extends the maps of the features it uses.
+// Keep both lists complete; compare imported contracts in their own base.
+export type CounterContracts = StoreContracts | typeof Counter;
 export interface CounterCapabilities extends
-  StoreCapabilities,
+  CapabilitiesOf<StoreContracts>,
   CapabilitiesOf<typeof Counter> {}
 ```
 

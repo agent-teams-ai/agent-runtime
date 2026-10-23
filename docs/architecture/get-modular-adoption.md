@@ -18,18 +18,40 @@ and the `scoped` adapter, with the same declarations, profiles, slots, independe
 binding oracle, ownership and cleanup behavior. This is API compatibility,
 not a redesign or qualification of the new interactive Host.
 
-The [current pin review](../../architecture/get-modular/evidence/interactive-session-cms-pin-review.json)
-retains the independently read exact upstream document and registry archive
-identities. Retrieval records a canonical Git object and observed main ref;
-it does not relabel them as historical Root-supplied packets. The checker
-authenticates the retained predecessor chain back to the separately verified
-historical head and rejects a detached digest or link.
+The [current capability-map review](../../architecture/get-modular/evidence/capability-map-cms-pin-review.json)
+retains independently retrieved merged-main document identities and the complete
+predecessor delta. The official main ref was checked at `b70ba393`; the exact
+CMS and module-authoring guide bytes match their reviewed hashes and Git blobs.
+The checker keeps its main-only guard and authenticates the retained predecessor
+chain back to the separately verified historical head. Pin verification does not
+establish production qualification or change package archive identities.
 
 The new interactive core and Host retain their own pending implementation and
 scoped FMS/CMS adoption obligations. Existing passive/ordinary scope is preserved;
 full successor layout/group conversion of legacy modules is not certified here.
 Contained-turn remains frozen and its Assembly profile stays pending. Optional
 observation, lifecycle-kernel and dynamic graph capabilities are not selected.
+
+### Complete capability-map guidance
+
+The reviewed ADR-0041 recipe exports a feature's complete descriptor union and
+keeps each imported union in a separate `CapabilitiesOf` base. Both source lists
+retain every transitive, private-child and unused contract. Combining imported
+unions into one mapped base can hide an incompatible overlap; separate bases and
+the original source interfaces preserve early conflict rejection.
+
+This guidance does not change Assembly's public API. The existing
+`RuntimeSetupCapabilities` map retains all eight setup and ten ordinary
+capabilities through its current complete interfaces. Existing valid manual
+maps remain supported, so this small aggregate needs no production rewrite.
+Factories still receive only their declared slots, and the preparing Host
+checks the complete contracts used by its entries.
+
+The full delta also includes ADR-0039's seven load-cleanup guidance lines.
+Agent Runtime does not select Observation in these production compositions;
+this review adds no Observation adoption or cleanup mechanism. Existing
+passive/ordinary acceptance, pending contained-turn adoption, uncertified
+dynamic scope and pending SDK external authority retain their current states.
 
 ## Ordinary session scoped adoption
 
@@ -181,19 +203,21 @@ bounded contract. ADR-0008 and its historical evidence remain immutable;
 ADR-0013 continues to govern exactly its three active FMS features.
 
 The central authority is Get Modular's accepted ADR-0026 and the exact pinned
-[consumer module standard](https://github.com/agent-teams-ai/get-modular/blob/ddf1e0b0053f546f12ca70190b237b4f7e78d09d/docs/architecture/common-assembly.md#consumer-module-standard).
-The [current successor review](../../architecture/get-modular/evidence/interactive-session-cms-pin-review.json)
-bridges the prior `81063add` pin to this reviewed document. Its authenticated
-predecessor is the [Smart CI review](../../architecture/get-modular/evidence/smart-ci-cms-pin-review.json),
-which bridges the historical `9c722` head. Both the
+[consumer module standard](https://github.com/agent-teams-ai/get-modular/blob/b70ba39304ac71964175c42a77309406a7c30ca2/docs/architecture/common-assembly.md#consumer-module-standard).
+The [current successor review](../../architecture/get-modular/evidence/capability-map-cms-pin-review.json)
+bridges the retained `ddf1e0b` document to this merged revision. Its authenticated
+predecessor is the [interactive-session review](../../architecture/get-modular/evidence/interactive-session-cms-pin-review.json),
+which bridges `81063add`; the earlier
+[Smart CI review](../../architecture/get-modular/evidence/smart-ci-cms-pin-review.json)
+bridges the historical `9c722` head. Both the
 [zero-delta review](../../architecture/get-modular/evidence/runtime-profile-cms-pin-review.json)
 and parallel [creation-cleanup review](../../architecture/get-modular/evidence/creation-cleanup-cms-pin-review.json)
 remain independently enforced history against retained predecessor bytes.
 
 - Repository: `agent-teams-ai/get-modular`.
-- Commit: `ddf1e0b0053f546f12ca70190b237b4f7e78d09d`.
+- Commit: `b70ba39304ac71964175c42a77309406a7c30ca2`.
 - Path: `docs/architecture/common-assembly.md`; anchor: `consumer-module-standard`.
-- Complete document SHA-256: `c2fe582a14ff6e79620b232ca7ffc914afb0474ec21fd43f208251dd7252f4a3` (81,436 bytes).
+- Complete document SHA-256: `11a389b223506dc303fa986a7a37350b847013d85beb2de9d74cb8c97363e824` (84,490 bytes).
 - Retained bytes are recorded by the consumer profile; they are evidence, not a second authority.
 
 Document identity, package versions/archive integrity, Core compatibility token,

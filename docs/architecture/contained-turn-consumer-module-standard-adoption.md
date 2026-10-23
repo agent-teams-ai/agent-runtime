@@ -21,11 +21,20 @@ code_anchors:
 
 Agent Runtime's passive setup adopts the Get Modular Consumer Module Standard
 under ADR-0015 and the active `architecture/get-modular/consumer-profile.json`.
-This separate contained-turn profile pins the same reviewed standard at commit
-`81063add7de50ffe2b91cc74bf7271b298624c21` and complete-document SHA-256
-`49d08b6d1762e94308157fb59b3aa82ac1630c91f529f6efcd4915dfffee7ba7`.
+Both profiles pin the independently retrieved merged main commit
+`b70ba39304ac71964175c42a77309406a7c30ca2`, complete-document SHA-256
+`11a389b223506dc303fa986a7a37350b847013d85beb2de9d74cb8c97363e824`.
+The [current review](../../architecture/get-modular/evidence/capability-map-cms-pin-review.json)
+retains the full delta, exact document bytes and official main retrieval identity.
+Pin verification does not establish new adoption or production qualification.
 ADR-0016 proposes only the contained-turn seven-port classification as pending.
 It does not weaken or duplicate the active passive setup Assembly claim.
+
+The descriptor-union recipe preserves complete feature maps and their early
+conflict checks; existing valid manual maps remain supported. This migration
+changes no production map, declaration, slot or lifecycle owner. Observation
+remains unselected, so the included load-cleanup guidance adds no contained-turn
+capability. The seven-port seam remains pending under its existing authority.
 
 The merged chronology retains two authentic review branches from the A3 pin
 `ac49bb3374946330ec820591f8195a22d2c90900`, document SHA-256

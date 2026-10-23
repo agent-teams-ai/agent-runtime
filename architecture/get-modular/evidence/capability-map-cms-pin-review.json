@@ -1,0 +1,98 @@
+{
+  "schemaVersion": 1,
+  "reviewedOn": "2026-10-23",
+  "repository": "agent-teams-ai/get-modular",
+  "path": "docs/architecture/common-assembly.md",
+  "anchor": "consumer-module-standard",
+  "before": {
+    "commit": "ddf1e0b0053f546f12ca70190b237b4f7e78d09d",
+    "sha256": "c2fe582a14ff6e79620b232ca7ffc914afb0474ec21fd43f208251dd7252f4a3",
+    "byteLength": 81436,
+    "evidencePath": "architecture/get-modular/evidence/consumer-module-standard-ddf1e0b.md"
+  },
+  "after": {
+    "commit": "b70ba39304ac71964175c42a77309406a7c30ca2",
+    "sha256": "11a389b223506dc303fa986a7a37350b847013d85beb2de9d74cb8c97363e824",
+    "byteLength": 84490,
+    "evidencePath": "architecture/get-modular/evidence/consumer-module-standard.md"
+  },
+  "predecessorReview": {
+    "path": "architecture/get-modular/evidence/interactive-session-cms-pin-review.json",
+    "sha256": "2c317d5fb4dc2457a31f4ea61ac9cb8c1a3a3b1160c17c50f6237faaecf3e620"
+  },
+  "provenance": {
+    "supplier": "agent-runtime-capability-map-migration",
+    "retrieval": "exact-git-object-and-live-upstream-ref",
+    "independentRetrieval": true,
+    "beforeCommit": "ddf1e0b0053f546f12ca70190b237b4f7e78d09d",
+    "afterCommit": "b70ba39304ac71964175c42a77309406a7c30ca2",
+    "runtime": {
+      "repository": "agent-teams-ai/agent-runtime",
+      "baseCommit": "6aa7152bd16282b18dfea23b8f5287041bb6adb8",
+      "baseTree": "d735fed99f24c9ed92d04a13d0b0343a77d8479a"
+    },
+    "review": "Exact merged canonical Git objects retrieved independently through GitHub contents at the observed main commit. CMS and module-authoring guide SHA-256, lengths and Git blob identities verified. The complete retained ddf1e0b-to-successor delta was reviewed. This guidance migration changes no selected production capability or runtime behavior.",
+    "gitObservation": {
+      "repository": "agent-teams-ai/get-modular",
+      "ref": "refs/heads/main",
+      "commit": "b70ba39304ac71964175c42a77309406a7c30ca2",
+      "documentBlob": "bf6c64f5057c18cb3439c6b0e1a97b60428b0c53"
+    }
+  },
+  "delta": {
+    "path": "architecture/get-modular/evidence/capability-map-cms-pin-delta.diff",
+    "sha256": "b822ab8cb47919b37bbff236f585058101ebfa9f82e9fcd42f9737a14498ca1e",
+    "byteLength": 7196,
+    "hunks": 6,
+    "addedLines": 49,
+    "removedLines": 9,
+    "format": "Git no-index, text, full index, myers, indent heuristic, three context lines, a/ and b/ prefixes, suppressBlankEmpty=true; exact retained before/after bytes."
+  },
+  "documentNormativeChange": true,
+  "consumerBehaviorChanged": false,
+  "successorProductionConformance": "not-established",
+  "applicability": {
+    "status": "APPLICABLE_MIGRATION_REQUIRED",
+    "passiveCiHelpers": {
+      "descriptors": false,
+      "resources": false,
+      "runInputs": false,
+      "lifecycle": false
+    }
+  },
+  "adoption": {
+    "passiveAndOrdinary": "active",
+    "containedTurn": "pending",
+    "dynamicAgentRuntime": "not-certified",
+    "sdkExternalAuthority": "pending-authority-qualification"
+  },
+  "scope": "Review the complete retained ddf1e0b-to-merged-successor CMS delta for existing passive/ordinary and pending contained-turn profiles only. Preserve production descriptors, aggregate maps, declarations, bindings, runtime behavior and all adoption states.",
+  "outstandingWork": [
+    "Current module layout and group adoption obligations for the interactive Host remain with the interactive delivery; this pin migration does not establish successor-wide production conformance.",
+    "Contained-turn Assembly migration, dynamic lifecycle, and SDK external authority remain pending under their existing owners."
+  ],
+  "checksPlanned": [
+    "pnpm product:build",
+    "pnpm test:consumer-modules",
+    "pnpm architecture:consumer-modules",
+    "pnpm test:get-modular-adoption",
+    "pnpm architecture:get-modular-adoption",
+    "pnpm typecheck:ci",
+    "pnpm typecheck",
+    "pnpm docs:protocol:check"
+  ],
+  "checkDisposition": "Planned focused checks run after official merged main retrieval; their actual results are recorded separately. This review does not turn planned commands into passing evidence.",
+  "compositionApiMigrated": false,
+  "authority": "ADR-0091",
+  "moduleAuthoringGuide": {
+    "path": "docs/guides/module-authoring.md",
+    "commit": "b70ba39304ac71964175c42a77309406a7c30ca2",
+    "sha256": "9bdbc6a6eac511691cf429c7e7e12b4cf4fd86ec16a348fb3af7a46c989af144",
+    "byteLength": 96915
+  },
+  "reviewedChanges": [
+    "ADR-0039 adds patient Observation load cleanup guidance: escalation reports unresolved work while the original close retains dependencies through physical settlement. This optional production capability is not selected by Agent Runtime.",
+    "ADR-0041 represents complete concrete feature maps through exported descriptor unions and separate CapabilitiesOf bases, retaining transitive, private-child and unused keys, revision/value parity and early unused-conflict detection.",
+    "Existing manual maps remain supported. RuntimeSetupCapabilities retains its existing complete eighteen-key SetupCapabilities/OrdinaryRuntimeCapabilities aggregate; no production map migration is needed for this guidance-only delivery."
+  ]
+}

@@ -8,8 +8,8 @@
     "path": "docs/architecture/common-assembly.md",
     "anchor": "consumer-module-standard",
     "decision": "ADR-0026",
-    "commit": "ddf1e0b0053f546f12ca70190b237b4f7e78d09d",
-    "sha256": "c2fe582a14ff6e79620b232ca7ffc914afb0474ec21fd43f208251dd7252f4a3",
+    "commit": "b70ba39304ac71964175c42a77309406a7c30ca2",
+    "sha256": "11a389b223506dc303fa986a7a37350b847013d85beb2de9d74cb8c97363e824",
     "evidencePath": "architecture/get-modular/evidence/consumer-module-standard.md"
   },
   "authority": {

@@ -17,7 +17,7 @@ import { verifyCmsPinReview } from "../ci/cms-pin-review.ts";
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 
-export const cmsPinReviewPath = "architecture/get-modular/evidence/interactive-session-cms-pin-review.json";
+export const cmsPinReviewPath = "architecture/get-modular/evidence/capability-map-cms-pin-review.json";
 export const passiveProfilePath = "architecture/get-modular/consumer-profile.json";
 export const containedProfilePath = "architecture/consumer-module-standard/contained-turn-profile.json";
 
