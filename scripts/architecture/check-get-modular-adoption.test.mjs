@@ -155,6 +155,7 @@ architecture/get-modular/consumer-profile.json
     'creation-cleanup-cms-pin-delta.diff',
     'consumer-module-standard-9c722ce.md', 'smart-ci-cms-pin-review.json', 'smart-ci-cms-pin-delta.diff',
     'consumer-module-standard-81063add.md', 'interactive-session-cms-pin-review.json', 'interactive-session-cms-pin-delta.diff',
+    'consumer-module-standard-ddf1e0b.md', 'capability-map-cms-pin-review.json', 'capability-map-cms-pin-delta.diff',
   ]) {
     const path = 'architecture/get-modular/evidence/' + name;
     await write(path, await readFile(new URL('../../' + path, import.meta.url), 'utf8'));
@@ -521,7 +522,8 @@ test('ordinary loader rejects losing either reviewed CMS branch', async t => {
 
 test('ordinary loader rejects missing successor evidence, stale coupled pins and false review claims', async t => {
   const f = await diskFixture(t);
-  for (const name of ['smart-ci-cms-pin-review.json', 'smart-ci-cms-pin-delta.diff', 'consumer-module-standard-9c722ce.md', 'consumer-module-standard-81063add.md', 'interactive-session-cms-pin-review.json', 'interactive-session-cms-pin-delta.diff']) {
+  for (const name of ['smart-ci-cms-pin-review.json', 'smart-ci-cms-pin-delta.diff', 'consumer-module-standard-9c722ce.md', 'consumer-module-standard-81063add.md', 'interactive-session-cms-pin-review.json', 'interactive-session-cms-pin-delta.diff',
+    'consumer-module-standard-ddf1e0b.md', 'capability-map-cms-pin-review.json', 'capability-map-cms-pin-delta.diff']) {
     const path = 'architecture/get-modular/evidence/' + name, bytes = await readFile(join(f.root, path));
     await rm(join(f.root, path));
     try { await assert.rejects(checkAdoption(f.root), /ENOENT/u); }
