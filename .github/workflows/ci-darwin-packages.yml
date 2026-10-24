@@ -18,7 +18,7 @@ jobs:
       fail-fast: false
       max-parallel: 8
       matrix:
-        shard: [agent-execution-1, agent-execution-2, agent-execution-3, provider-access, runtime-configuration, runtime-security, embedded-runtime, filesystem-custody]
+        shard: [agent-execution-1, agent-execution-2, agent-execution-3, provider-access, runtime-configuration, runtime-security, embedded-runtime, filesystem-custody, provider-implementations]
     env:
       GIT_AUTHOR_NAME: iliya
       GIT_AUTHOR_EMAIL: iliyazelenkog@gmail.com

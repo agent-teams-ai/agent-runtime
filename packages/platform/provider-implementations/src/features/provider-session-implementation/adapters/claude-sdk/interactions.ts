@@ -1,11 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import type { CanUseTool, PermissionResult } from '@anthropic-ai/claude-agent-sdk';
-import type { EventPayload, InteractionReply, Reply } from '../draft-contracts/index.ts';
+import type { EventPayload, InteractionReply, Reply } from '@agent-teams/agent-execution/interactive-contracts';
 import { fail } from './primitives.ts';
 type Pending = { kind: 'question' | 'permission'; input: Record<string, unknown>; finish: (result: PermissionResult) => void };
 function plainData(value: unknown): Record<string, unknown> | undefined {
-  if (!value || typeof value !== 'object') { return undefined; }
-  const prototype = Object.getPrototypeOf(value);
+  if (value === null || typeof value !== 'object') { return undefined; }
+  const prototype: unknown = Object.getPrototypeOf(value);
   if (prototype !== Object.prototype && prototype !== null) { return undefined; }
   const entries = Object.getOwnPropertyDescriptors(value);
   if (Reflect.ownKeys(entries).some((key) => typeof key !== 'string' || !('value' in entries[key]!))) { return undefined; }
@@ -23,7 +23,7 @@ function validatedReply(value: unknown): InteractionReply | undefined {
   return undefined;
 }
 export class Interactions {
-  private pending = new Map<string, Pending>();
+  private readonly pending = new Map<string, Pending>();
   private sealed = false;
   private readonly max: number;
   private readonly timeoutMs: number;
@@ -38,7 +38,7 @@ export class Interactions {
     input = structuredClone(input);
     const ref = randomUUID(); const kind = tool === 'AskUserQuestion' ? 'question' : 'permission';
     return new Promise<PermissionResult>((resolve) => {
-      const abort = () => finish({ behavior: 'deny', message: 'Interaction expired' });
+      const abort = () => { finish({ behavior: 'deny', message: 'Interaction expired' }); };
       const timer = setTimeout(abort, this.timeoutMs);
       const finish = (result: PermissionResult) => {
         if (!this.pending.delete(ref)) {return;}

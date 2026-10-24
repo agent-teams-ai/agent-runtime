@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=24.21.0 <25 || >=26.10.0 <27"
+    "node": ">=24.21.0 <25 || >=26.11.1 <27"
   },
-  "description": "TEST-only draft runtime session SPI and Claude SDK proof, not production admission",
+  "description": "TEST compatibility consumer of the canonical runtime SPI and workspace Claude implementation",
   "exports": {
     "./draft-contracts": {
       "types": "./dist/draft-contracts/index.d.ts",
@@ -30,11 +30,13 @@
     "harness": "node harness/live.ts"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "catalog:interactive-proof",
-    "zod": "catalog:interactive-proof"
+    "@agent-teams/provider-implementations": "workspace:*",
+    "@agent-teams/agent-execution": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "@anthropic-ai/claude-agent-sdk": "catalog:provider-implementations",
+    "zod": "catalog:provider-implementations"
   }
 }

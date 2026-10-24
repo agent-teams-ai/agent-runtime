@@ -82,6 +82,7 @@ async function analyze(files, config = policy) {
       "packages/contexts/runtime-configuration",
       "packages/contexts/runtime-security",
       "packages/platform/filesystem-custody",
+      "packages/platform/provider-implementations",
       "experiments/interactive-provider-contract",
     ]) {
       await write(`${packageRoot}/package.json`, await readFile(join(root, packageRoot, "package.json"), "utf8"));

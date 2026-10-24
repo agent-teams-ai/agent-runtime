@@ -77,6 +77,26 @@ packages:
     tsconfigPath: packages/platform/filesystem-custody/tsconfig.json
     releasedBaselinePath: architecture/public-api/filesystem-custody.json
     approvedBreakingChanges: []
+  - packageName: "@agent-teams/provider-implementations"
+    packageRoot: packages/platform/provider-implementations
+    manifestPath: packages/platform/provider-implementations/package.json
+    entrypoints:
+      - exportPath: .
+        declarationEntryPoint: packages/platform/provider-implementations/dist/index.d.ts
+      - exportPath: ./composition
+        declarationEntryPoint: packages/platform/provider-implementations/dist/composition.d.ts
+      - exportPath: ./claude
+        declarationEntryPoint: packages/platform/provider-implementations/dist/claude.d.ts
+      - exportPath: ./codex
+        declarationEntryPoint: packages/platform/provider-implementations/dist/codex.d.ts
+      - exportPath: ./opencode
+        declarationEntryPoint: packages/platform/provider-implementations/dist/opencode.d.ts
+      - exportPath: ./session-io
+        declarationEntryPoint: packages/platform/provider-implementations/dist/session-io.d.ts
+    nonTypeExports: []
+    tsconfigPath: packages/platform/provider-implementations/tsconfig.json
+    releasedBaselinePath: architecture/public-api/provider-implementations.json
+    approvedBreakingChanges: []
 sdkGrowth:
   contractRevision: foundation:sdk-growth:c0:5
   policyVersion: foundation:sdk-growth:policy:1
@@ -101,5 +121,8 @@ sdkGrowth:
       - packageName: "@agent-teams/filesystem-custody"
         kind: initial-unreleased
         trustedHistoryPath: architecture/sdk-growth/evidence/filesystem-custody-history.json
+      - packageName: "@agent-teams/provider-implementations"
+        kind: initial-unreleased
+        trustedHistoryPath: architecture/sdk-growth/evidence/provider-implementations-history.json
   decisionsPath: architecture/sdk-growth/decisions.json
   reportPath: sdk-growth-report.json
