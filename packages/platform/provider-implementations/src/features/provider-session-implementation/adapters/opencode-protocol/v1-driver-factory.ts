@@ -11,7 +11,7 @@ export type OpenCodeV1DriverHost = {
 const supported = new Set(['text', 'tools', 'permission', 'interrupt', 'checkpoint', 'attachments'])
 /** Private native identity only. The factory still verifies full config compatibility before probe/effects. */
 export function readOpenCodeV1CheckpointSessionId(value: unknown): string {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) { throw new Error('opencode.v1.checkpoint-incompatible') }
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) { throw new Error('opencode.v1.checkpoint-incompatible') }
   const cp = value as Record<string, unknown>
   if (cp.version !== 1 || cp.engine !== 'opencode-v1' || typeof cp.nativeSessionId !== 'string'
     || !/^ses_[A-Za-z0-9]{1,256}$/.test(cp.nativeSessionId) || typeof cp.compatibility !== 'string'

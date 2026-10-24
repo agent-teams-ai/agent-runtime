@@ -1,14 +1,14 @@
 {
   "rootBuildAndPack": {
-    "archive": "/Volumes/Transcend/dev/TEST-D-ci-successor-20261024/artifacts/agent-teams-provider-implementations-0.0.0.tgz",
-    "sha256": "17f3294ef85b56503d049e00f794bd9fc2c2a00540048a291387da3cb79a7e2a",
+    "archive": "/Volumes/Transcend/dev/TEST-D-typed-quality-successor-final-20261024/artifacts/agent-teams-provider-implementations-0.0.0.tgz",
+    "sha256": "dad39edf2f02a23ae68768722b5bba2e7beddf2125ae79d0bacb4e8b303d1dce",
     "regularMembers": 209,
     "distMembers": 206,
     "sourceDistMismatch": [],
-    "predecessor": "/Users/belief/.codex/worktrees/provider-migration-two-stage-plan/old-agent-teams-frontend/vendor/provider-migration/claude-idle-notification-v1/agent-teams-provider-implementations-0.0.0.tgz",
-    "predecessorSha256": "c3a303cf9172219565fecc3d78cada36af41d3a878d0518ebd1c61898b44db00",
+    "predecessor": "/Volumes/Transcend/dev/TEST-D-typed-quality-successor-20261024/artifacts/agent-teams-provider-implementations-0.0.0.tgz",
+    "predecessorSha256": "3272076745c91d1c3067c3f9f45d3c40e1b4e17a51ef62738e44446ab81b75f0",
     "changedMembers": [
-      "package/dist/features/provider-session-implementation/adapters/opencode-protocol/input-window-capture.js"
+      "package/dist/features/provider-session-implementation/adapters/claude-sdk/capture.js"
     ],
     "removed": [],
     "nonDistMembers": [
@@ -28,24 +28,24 @@
         "predecessorIdentical": true
       }
     ],
-    "scope": "206 provider dist members exactly match owning D; packed metadata only compared against predecessor, not source-equivalence."
+    "scope": "206 provider dist members exactly match owning D; metadata compared only with327 predecessor. Other seven static packages have inert built-dist observations, not current-source correspondence."
   },
   "comparisons": [
     {
-      "archive": "/Volumes/Transcend/dev/TEST-D-ci-successor-20261024/artifacts/agent-teams-provider-implementations-0.0.0.tgz",
-      "sha256": "17f3294ef85b56503d049e00f794bd9fc2c2a00540048a291387da3cb79a7e2a",
+      "archive": "/Volumes/Transcend/dev/TEST-D-typed-quality-successor-final-20261024/artifacts/agent-teams-provider-implementations-0.0.0.tgz",
+      "sha256": "dad39edf2f02a23ae68768722b5bba2e7beddf2125ae79d0bacb4e8b303d1dce",
       "distMembersCompared": 206,
       "mismatches": []
     },
     {
-      "archive": "/Volumes/Transcend/dev/TEST-D-gate-prep-ab2k6vsi/tmp/ar-sdk-packed-r27GIU/archives/provider-implementations/agent-teams-provider-implementations-0.0.0.tgz",
-      "sha256": "1b73e170e31931b3b5bed81aba182d00dda99302c8467b2d415526072abecd34",
+      "archive": "/Volumes/Transcend/dev/TEST-D-gate-prep-ab2k6vsi/tmp/ar-sdk-packed-0jz27o/archives/provider-implementations/agent-teams-provider-implementations-0.0.0.tgz",
+      "sha256": "4d3bcb5ec20270de0d5eecddaf002386c80146094a565e6973b27b02a8bd0aff",
       "distMembersCompared": 206,
       "mismatches": []
     },
     {
-      "archive": "/Volumes/Transcend/dev/TEST-D-gate-prep-ab2k6vsi/tmp/ar-sdk-packed-754cUY/archives/provider-implementations/agent-teams-provider-implementations-0.0.0.tgz",
-      "sha256": "1b73e170e31931b3b5bed81aba182d00dda99302c8467b2d415526072abecd34",
+      "archive": "/Volumes/Transcend/dev/TEST-D-gate-prep-ab2k6vsi/tmp/ar-sdk-packed-M4jAWt/archives/provider-implementations/agent-teams-provider-implementations-0.0.0.tgz",
+      "sha256": "4d3bcb5ec20270de0d5eecddaf002386c80146094a565e6973b27b02a8bd0aff",
       "distMembersCompared": 206,
       "mismatches": []
     }

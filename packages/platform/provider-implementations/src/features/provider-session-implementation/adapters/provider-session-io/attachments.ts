@@ -18,13 +18,18 @@ export class AttachmentFailure extends Error {
   readonly code: FailureCode;
   constructor(code: FailureCode) { super('attachment-' + code); this.code = code; }
 }
+function attachmentRecord(value: unknown): Record<string, unknown> | undefined {
+  return value !== null && (typeof value === 'object' || typeof value === 'function') ? value as Record<string, unknown> : undefined;
+}
 export function snapshotAttachmentPort(port: AttachmentPort | undefined): AttachmentPort | undefined {
   if (port === undefined) { return undefined; }
-  if (!port || typeof port.model !== 'string' || !port.model || typeof port.revision !== 'string' || !port.revision ||
-    !Array.isArray(port.mimeTypes) || port.mimeTypes.some(mime => typeof mime !== 'string' || !mime || mime.length > 128) || typeof port.resolve !== 'function') {
+  const raw = attachmentRecord(port);
+  const mimeTypes: unknown = raw?.mimeTypes;
+  if (raw === undefined || typeof raw.model !== 'string' || raw.model.length === 0 || typeof raw.revision !== 'string' || raw.revision.length === 0 ||
+    !Array.isArray(mimeTypes) || !mimeTypes.every((mime: unknown): mime is string => typeof mime === 'string' && mime.length > 0 && mime.length <= 128) || typeof raw.resolve !== 'function') {
     throw new AttachmentFailure('invalid-config');
   }
-  return { model: port.model, revision: port.revision, mimeTypes: [...port.mimeTypes], resolve: port.resolve.bind(port) };
+  return { model: raw.model, revision: raw.revision, mimeTypes: [...mimeTypes], resolve: port.resolve.bind(port) };
 }
 export function attachmentCompatibility(port: AttachmentPort | undefined): unknown {
   return port && { model: port.model, revision: port.revision, mimeTypes: port.mimeTypes };
@@ -32,10 +37,12 @@ export function attachmentCompatibility(port: AttachmentPort | undefined): unkno
 export function snapshotInput(input: Input): Input {
   if (input.attachments === undefined) { return { ...input }; }
   if (!Array.isArray(input.attachments) || input.attachments.length > 11) { throw new AttachmentFailure('invalid-config'); }
-  const attachments = input.attachments.map(ref => {
-    if (!ref || typeof ref.artifactId !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,120}$/.test(ref.artifactId) ||
+  const references: readonly unknown[] = input.attachments;
+  const attachments = references.map(raw => {
+    const ref = attachmentRecord(raw);
+    if (ref === undefined || typeof ref.artifactId !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9_-]{0,120}$/.test(ref.artifactId) ||
       typeof ref.mimeType !== 'string' || !/^[a-z0-9.+-]+\/[a-z0-9.+-]+$/.test(ref.mimeType) || ref.mimeType.length > 128 ||
-      !Number.isSafeInteger(ref.byteLength) || ref.byteLength <= 0 || typeof ref.digest !== 'string' || !/^[a-f0-9]{64}$/.test(ref.digest)) {
+      typeof ref.byteLength !== 'number' || !Number.isSafeInteger(ref.byteLength) || ref.byteLength <= 0 || typeof ref.digest !== 'string' || !/^[a-f0-9]{64}$/.test(ref.digest)) {
       throw new AttachmentFailure('invalid-config');
     }
     return Object.freeze({ artifactId: ref.artifactId, mimeType: ref.mimeType, byteLength: ref.byteLength, digest: ref.digest });
@@ -52,8 +59,10 @@ export function validCanonicalInput(input: Input, maxBytes: number): boolean {
     typeof input.content === 'string' && !!input.content.trim() && Buffer.byteLength(input.content) <= maxBytes;
 }
 function sameBinding(actual: Binding | undefined, expected: Binding): boolean {
-  return !!actual && ['trustedBinding', 'sessionRef', 'inputId', 'operationRef', 'fingerprint'].every(key => actual[key as 'sessionRef'] === expected[key as 'sessionRef']) &&
-    !!actual.reference && ['artifactId', 'mimeType', 'byteLength', 'digest'].every(key => actual.reference[key as 'artifactId'] === expected.reference[key as 'artifactId']);
+  const binding = attachmentRecord(actual), reference = attachmentRecord(binding?.reference);
+  return binding !== undefined && reference !== undefined &&
+    (['trustedBinding', 'sessionRef', 'inputId', 'operationRef', 'fingerprint'] as const).every(key => binding[key] === expected[key]) &&
+    (['artifactId', 'mimeType', 'byteLength', 'digest'] as const).every(key => reference[key] === expected.reference[key]);
 }
 type Provider = 'claude' | 'codex' | 'opencode-v1' | 'opencode-v2';
 function nativeKind(mime: string, provider: Provider): 'image' | 'file' | 'video' | undefined {

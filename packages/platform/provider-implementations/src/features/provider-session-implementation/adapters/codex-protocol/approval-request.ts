@@ -50,10 +50,14 @@ export function isCodexAppServerApprovalMethod(
   )
 }
 
+function toolApprovalMethod(method: string): method is Exclude<CodexAppServerApprovalMethod, 'item/tool/requestUserInput' | 'mcpServer/elicitation/request'> {
+  return isCodexAppServerApprovalMethod(method) && method !== 'item/tool/requestUserInput' && method !== 'mcpServer/elicitation/request'
+}
+
 function normalizeToolApprovalRequest(
   request: CodexAppServerRequest,
 ): CodexAppServerToolApprovalRequest | null {
-  if (!isCodexAppServerApprovalMethod(request.method)) {
+  if (!toolApprovalMethod(request.method)) {
     return null
   }
 
@@ -174,7 +178,6 @@ function normalizeToolApprovalRequest(
       }
     }
   }
-  return null
 }
 
 export function normalizeCodexAppServerApprovalRequest(request: CodexAppServerRequest): CodexAppServerToolApprovalRequest | null {

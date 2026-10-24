@@ -2,6 +2,7 @@ import { captureClaudeExtraArgs } from '../provider-session-io/extra-argv.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import type { McpServerConfig, Options } from '@anthropic-ai/claude-agent-sdk';
 import type { Limits } from '@agent-teams/provider-session-contracts';
+import { record } from './normalize.ts';
 import { subagentOptions, validSubagents } from './subagents.ts';
 import type { ClaudeSubagentPort } from './subagents.ts';
 import type { ClaudeToolBinding } from './tool-binding.ts';
@@ -63,7 +64,7 @@ export function compatibility(config: ClaudeConfig): string {
   return createHash('sha256').update(JSON.stringify({ cwd, accountBinding, configRevision, model, trustedBinding, nativeTools, autoAllowedTools, requiredTools,
     toolBindingTools: config.toolBinding?.matchedToolNames,
     ...(config.subagents ? { subagents: { mode: config.subagents.mode, tools: config.subagents.tools } } : {}),
-    ...(config.extraArgs?.length ? { extraArgs: config.extraArgs } : {}),
+    ...((config.extraArgs?.length ?? 0) > 0 ? { extraArgs: config.extraArgs } : {}),
     ...(config.attachments ? { attachments: attachmentCompatibility(config.attachments) } : {}),
     ...(config.nativeOptions ? { nativeOptions: selectedOptions(config) } : {}),
     ...(config.configNamespace ? { configNamespace: config.configNamespace, home: config.environment.HOME,
@@ -117,10 +118,12 @@ function validCapture(capture: ClaudeCapturePort | undefined, observeClose: Clau
   return (observeClose === undefined || typeof observeClose === 'function') && (!capture || (typeof capture.observe === 'function' && (capture.observeBatch === undefined || typeof capture.observeBatch === 'function') &&
     (capture.observeBackground === undefined || typeof capture.observeBackground === 'function')));
 }
+function listed(value: unknown, allowed: readonly unknown[]): boolean { return allowed.includes(value); }
 function nonempty(value: unknown): value is string { return typeof value === 'string' && value.length > 0; }
 function validNamespace(c: ClaudeConfig): boolean {
-  return c.configNamespace === 'native-default' ? !Object.hasOwn(c.environment, 'CLAUDE_CONFIG_DIR') :
-    (c.configNamespace === undefined || c.configNamespace === 'custom-directory') && nonempty(c.environment.CLAUDE_CONFIG_DIR);
+  const namespace: unknown = c.configNamespace;
+  return namespace === 'native-default' ? !Object.hasOwn(c.environment, 'CLAUDE_CONFIG_DIR') :
+    (namespace === undefined || namespace === 'custom-directory') && nonempty(c.environment.CLAUDE_CONFIG_DIR);
 }
 
 function selectedOptions(c: ClaudeConfig): Pick<Options, 'permissionMode' | 'allowDangerouslySkipPermissions' | 'settingSources' | 'systemPrompt' | 'effort' | 'settings' | 'betas'> {
@@ -134,25 +137,29 @@ function selectedOptions(c: ClaudeConfig): Pick<Options, 'permissionMode' | 'all
   };
 }
 
-function validNativeOptions(n: ClaudeConfig['nativeOptions']): boolean {
-  if (n === undefined) { return true; }
-  if (!n || typeof n !== 'object' || Array.isArray(n) || Object.keys(n).some(key => !['permissionMode', 'allowDangerouslySkipPermissions', 'settingSources', 'projectInstructions', 'effort', 'fastMode', 'context'].includes(key))) { return false; }
+function validNativeOptions(value: unknown): boolean {
+  if (value === undefined) { return true; }
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) { return false; }
+  const n = record(value);
+  if (Object.keys(n).some(key => !['permissionMode', 'allowDangerouslySkipPermissions', 'settingSources', 'projectInstructions', 'effort', 'fastMode', 'context'].includes(key))) { return false; }
   return validPermissionOptions(n) &&
-    (n.settingSources === undefined || (Array.isArray(n.settingSources) && n.settingSources.every(source => ['user', 'project', 'local'].includes(source)))) &&
+    (n.settingSources === undefined || (Array.isArray(n.settingSources) && n.settingSources.every((source: unknown) => listed(source, ['user', 'project', 'local'])))) &&
     validInstructions(n.projectInstructions) &&
-    (n.effort === undefined || ['low', 'medium', 'high', 'xhigh', 'max'].includes(n.effort)) &&
+    (n.effort === undefined || listed(n.effort, ['low', 'medium', 'high', 'xhigh', 'max'])) &&
     (n.fastMode === undefined || typeof n.fastMode === 'boolean') &&
-    (n.context === undefined || ['model-default', 'one-million'].includes(n.context));
+    (n.context === undefined || listed(n.context, ['model-default', 'one-million']));
 }
 
-function validPermissionOptions(n: NonNullable<ClaudeConfig['nativeOptions']>): boolean {
-  return (n.permissionMode === undefined || ['default', 'acceptEdits', 'bypassPermissions', 'plan', 'dontAsk', 'auto'].includes(n.permissionMode)) &&
+function validPermissionOptions(n: Record<string, unknown>): boolean {
+  return (n.permissionMode === undefined || listed(n.permissionMode, ['default', 'acceptEdits', 'bypassPermissions', 'plan', 'dontAsk', 'auto'])) &&
     (n.allowDangerouslySkipPermissions === undefined || typeof n.allowDangerouslySkipPermissions === 'boolean') &&
     (n.permissionMode !== 'bypassPermissions' || n.allowDangerouslySkipPermissions === true);
 }
-function validInstructions(value: NonNullable<ClaudeConfig['nativeOptions']>['projectInstructions']): boolean {
-  return value === undefined || (!!value && typeof value === 'object' && !Array.isArray(value) &&
-    Object.keys(value).every(key => key === 'append') && (value.append === undefined || typeof value.append === 'string'));
+function validInstructions(value: unknown): boolean {
+  if (value === undefined) { return true; }
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) { return false; }
+  const fields = record(value);
+  return Object.keys(fields).every(key => key === 'append') && (fields.append === undefined || typeof fields.append === 'string');
 }
 
 function validTools(c: ClaudeConfig): boolean {

@@ -42,7 +42,7 @@ export async function readClaudeMetadata(
   const parsed = configuration.safeParse(selected);
   if (!parsed.success) { throw new Error('claude.metadata.invalid-config'); }
   const captured = parsed.data;
-  if (signal?.aborted) { throw new Error('claude.metadata.cancelled'); }
+  if (signal?.aborted === true) { throw new Error('claude.metadata.cancelled'); }
   const environment = { ...captured.environment };
   const launch = captured.launch;
   const abortController = new AbortController();
@@ -59,11 +59,11 @@ export async function readClaudeMetadata(
   let failed: Error | undefined;
   try {
     const cancelled = new Promise<never>((_resolve, reject) => {
-      cancel = () => reject(new Error('claude.metadata.cancelled'));
+      cancel = () => { reject(new Error('claude.metadata.cancelled')); };
       signal?.addEventListener('abort', cancel, { once: true });
     });
     const timeout = new Promise<never>((_resolve, reject) => {
-      timer = setTimeout(() => reject(new Error('claude.metadata.timeout')), captured.timeoutMs);
+      timer = setTimeout(() => { reject(new Error('claude.metadata.timeout')); }, captured.timeoutMs);
     });
     native = sdk.query({ prompt, options: {
       cwd: captured.cwd, pathToClaudeCodeExecutable: captured.executablePath,
@@ -88,7 +88,8 @@ export async function readClaudeMetadata(
     if (cancel) { signal?.removeEventListener('abort', cancel); }
     // The caller must settle its owned group while the original root is still live.
     try {
-      if (await captured.confirmStopped() !== true) { failed = new Error('claude.metadata.cleanup-unconfirmed'); }
+      const confirmed: unknown = await captured.confirmStopped();
+      if (confirmed !== true) { failed = new Error('claude.metadata.cleanup-unconfirmed'); }
     } catch { failed = new Error('claude.metadata.cleanup-unconfirmed'); }
     release();
     abortController.abort();

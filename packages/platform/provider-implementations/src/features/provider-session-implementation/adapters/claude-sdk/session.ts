@@ -107,8 +107,8 @@ export class ClaudeSession implements Session {
     return this.state === 'open' ? this.interactions.reply(ref, reply) : fail('unavailable');
   }
   private readonly requestInteraction: CanUseTool = (...args) => {
-    if ((args[2].agentID === undefined && this.subagents?.ownsTool(args[2].toolUseID)) ||
-        (args[2].agentID !== undefined && !this.subagents?.canInteract(args[2].agentID, args[2].toolUseID, args[0]))) {
+    if ((args[2].agentID === undefined && this.subagents?.ownsTool(args[2].toolUseID) === true) ||
+        (args[2].agentID !== undefined && this.subagents?.canInteract(args[2].agentID, args[2].toolUseID, args[0]) !== true)) {
       return Promise.resolve({ behavior: 'deny', message: 'Child interaction provenance unavailable' });
     }
     if (this.state !== 'open' || !this.active || this.active.interactionsCancelled) {
@@ -118,7 +118,7 @@ export class ClaudeSession implements Session {
   };
   private async childInteraction(event: EventPayload, childRef: string, toolRef: string | undefined): Promise<void> {
     const active = this.active;
-    if (!active || !this.subagents || !toolRef || event.kind !== 'interaction') {throw new Error('Child interaction unavailable');}
+    if (!active || !this.subagents || (toolRef === undefined || toolRef.length === 0) || event.kind !== 'interaction') {throw new Error('Child interaction unavailable');}
     await this.subagents.interaction(childRef, toolRef, event);
     if (this.active !== active || active.interactionsCancelled || this.state !== 'open') {throw new Error('Child interaction stale');}
     this.emit(event, active.input);
@@ -231,11 +231,11 @@ export class ClaudeSession implements Session {
       if (!pending) {continue;}
       this.active = pending; this.foregroundBound = false; this.messageOwners.clear(); this.toolOwners.clear(); this.streamRef = undefined; this.turnBytes = 0; this.turnEvents = 0; this.normalizer.reset(); this.backgroundNormalizer.reset();
       let content: SDKUserMessage['message']['content'] = pending.input.content;
-      if (pending.input.attachments?.length) {
+      if ((pending.input.attachments?.length ?? 0) > 0) {
         try {
           const attachments = await prepareAttachments(pending.input, { trustedBinding: this.config.trustedBinding, sessionRef: this.sessionRef, port: this.config.attachments, signal: pending.toolRevocation.signal, timeoutMs: this.config.limits.timeoutMs });
           content = claudeContent(pending.input.content, attachments);
-          if (this.active !== pending || this.state !== 'open' || pending.interactionsCancelled || this.control) { throw new AttachmentFailure('stale'); }
+          if (!this.currentInput(pending)) { throw new AttachmentFailure('stale'); }
         } catch (error) {
           pending.toolRevocation.abort(); pending.receipt.resolve({ ok: false, code: error instanceof AttachmentFailure ? error.code : 'unavailable', delivery: 'known-not-sent' });
           if (this.active === pending) { this.active = undefined; } this.wake(); continue;
@@ -248,6 +248,9 @@ export class ClaudeSession implements Session {
     // Closed admission is synchronous; EOF must still wait for caller-owned physical cleanup.
     await this.inputClosed.promise;
   }
+  private currentInput(pending: PendingInput): boolean {
+    return this.active === pending && this.state === 'open' && !pending.interactionsCancelled && this.control === undefined;
+  }
   private handoffAvailable(): boolean {
     // This check follows an await; TypeScript's earlier narrowing is not a lifecycle fence.
     return this.state === 'open' && this.control === undefined && this.active === undefined;
@@ -258,8 +261,8 @@ export class ClaudeSession implements Session {
       const iterator = this.query[Symbol.asyncIterator]();
       for (;;) {
         const next = await iterator.next();
-        if (next.done || this.state === 'closed') {break;}
-        const accepted = this.accept(next.value); if (accepted) {await accepted;}
+        if (next.done === true || this.state === 'closed') {break;}
+        await this.accept(next.value);
       }
       if (this.state !== 'closed') { this.emit({ kind: 'diagnostic', code: 'iterator-ended' }); this.unavailable('unknown'); }
     } catch (error) { if (this.state !== 'closed') {
@@ -271,7 +274,7 @@ export class ClaudeSession implements Session {
   private async accept(message: unknown): Promise<void> {
     const m = record(message);
     if (Boolean(m.session_id) && m.session_id !== this.nativeSession) { this.unavailable('unknown'); return; }
-    if (await this.capture?.acceptTask(m)) {return;}
+    if (await this.capture?.acceptTask(m) === true) {return;}
     if (await this.acceptNested(m)) {return;}
     const input = this.correlate(m);
     if (m.type === 'system' && m.subtype === 'compact_boundary') {
@@ -290,7 +293,7 @@ export class ClaudeSession implements Session {
     return this.finishAcceptance(m, terminal, failure, input);
   }
   private mainCompaction(message: Record<string, unknown>): boolean {
-    return message.session_id === this.nativeSession && !message.parent_tool_use_id && !message.agent_id && !message.resume_reason;
+    return message.session_id === this.nativeSession && !present(message.parent_tool_use_id) && !present(message.agent_id) && !present(message.resume_reason);
   }
   private async acceptNested(message: Record<string, unknown>): Promise<boolean> {
     if (this.subagents && await this.subagents.accept(message)) {return true;}
@@ -313,7 +316,7 @@ export class ClaudeSession implements Session {
     };
     if (terminal && input && this.capture && (this.capture.completesBatches || this.capture.retainsBackground)) {
       // Cancellation/unavailability can retire the owner during the awaited observer.
-      return this.capture.finishInput(input, terminal).then(() => settle(true));
+      return this.capture.finishInput(input, terminal).then(settle.bind(undefined, true));
     }
     settle();
   }
@@ -410,7 +413,7 @@ export class ClaudeSession implements Session {
     // A disappeared dependency during an accepted turn does not prove the turn stopped.
     this.failure = this.active && code === 'dependency-unavailable' ? 'unknown' : code;
     // Idle readiness may recover; retire old leases without disabling future original pairs.
-    if (this.capture?.retainsBackground) {
+    if (this.capture?.retainsBackground === true) {
       void (this.failure === 'dependency-unavailable' ? this.capture.revoke() : this.capture.close());
     }
     if (this.active) {
@@ -433,6 +436,7 @@ export class ClaudeSession implements Session {
   private wake(): void { this.wakeup.resolve(); this.wakeup = deferred<void>(); }
 }
 
+function present(value: unknown): boolean { return Boolean(value); }
 function claudeContent(text: string, attachments: readonly PreparedAttachment[]): SDKUserMessage['message']['content'] {
   const blocks: Exclude<SDKUserMessage['message']['content'], string> = [];
   for (const { reference, bytes } of attachments) {

@@ -37,7 +37,7 @@ export type CodexInitializeParams = {
 
 function modelSelection(reply: Record<string, unknown> | null) {
   const model = string(reply?.model), modelProvider = string(reply?.modelProvider), cwd = string(reply?.cwd)
-  return model && modelProvider && cwd ? { model, modelProvider, cwd,
+  return model !== null && model.length > 0 && modelProvider !== null && modelProvider.length > 0 && cwd !== null && cwd.length > 0 ? { model, modelProvider, cwd,
     ...(reply?.reasoningEffort === null || typeof reply?.reasoningEffort === 'string' ? { reasoningEffort: reply.reasoningEffort } : {}),
     ...(reply?.serviceTier === null || typeof reply?.serviceTier === 'string' ? { serviceTier: reply.serviceTier } : {}),
   } : undefined

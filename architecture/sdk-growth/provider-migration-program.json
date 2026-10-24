@@ -71,11 +71,11 @@
     },
     {
       "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/capture.ts",
-      "sha256": "16ff5a6e3d8eaee76ff00b317442ef47dfce7c374c3280911f86254046d8a625"
+      "sha256": "8e402fbd68a755bb05068631ca1cdb5f41dbf2afe4d071c3037cfafee8bd0f14"
     },
     {
       "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/config.ts",
-      "sha256": "c9e27eab5c63c46e46c15cb18ab667e2efa923c3c22cfd3d3d2568589607cf4a"
+      "sha256": "b730cd519752662d12ee9e21d0e5fea869f4af39a22acac1b30eb439db7666c9"
     },
     {
       "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/factory.ts",
@@ -83,19 +83,19 @@
     },
     {
       "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/interactions.ts",
-      "sha256": "e9f3126bd2e13f1b5416d24036ed354c8f01037a7b1e3165245684097504fe77"
+      "sha256": "14bbf7b73db73e1b3b6de7bc039c35ef8ed65c9e21b10c9f66cfcab25e8d587f"
     },
     {
       "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/metadata.ts",
-      "sha256": "702c01f25110b9f0327cfde37bc824ceb835690cccc4c02ab6b983677bcef18f"
+      "sha256": "7947d0940c8f59d5343ce57df8c2111b5481a72471bca7261e6704ee0aeb970c"
     },
     {
       "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/model-probe.ts",
-      "sha256": "d672fc0b976d4eb661f782428f9427c4d0b6b2f645a1738d5dbeb772b989e083"
+      "sha256": "f7fd3848b46ea66776dfeeec7307129ec86819c79a158cd8e52a61e36291a89d"
     },
     {
       "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/native-management-config.ts",
-      "sha256": "9e7eb272c097026ff56f58f5721fedaac7938b560d41d65c0d6be50afd4eb155"
+      "sha256": "dee977202e278e44be3cc88e39e26121c1856751efa820f7bbde4d6c465e237d"
     },
     {
       "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/normalize.ts",
@@ -111,11 +111,11 @@
     },
     {
       "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/session.ts",
-      "sha256": "d1ad6e3e368f3d89568fce8da0bdccc866a09f0e22bfd072c150f979cb1c32a5"
+      "sha256": "bd351bd1eae358b7b96137bc589dd586bb8b8eb21954dfe089bd96729719c5a6"
     },
     {
       "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/subagents.ts",
-      "sha256": "1b58393c702ec05a095d96c76b95d0413df45cfd744fce35570073581327b46c"
+      "sha256": "524e9fb7d120bd4d31e8a124c4c87c34c04a273afa39693db902b0c169cfca6d"
     },
     {
       "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/tool-binding.ts",
@@ -123,11 +123,11 @@
     },
     {
       "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/app-server.ts",
-      "sha256": "134769397e1ae6c4ff59181e21200ec67bda6cf7df2c372923579f703126cb40"
+      "sha256": "08b8169c6c4608f39d0887afc43bff5dd04d6d7bd62bebc7ad24dec6ed2a31ac"
     },
     {
       "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/approval-request.ts",
-      "sha256": "dcad6b2ac3e8da6fadfccda8749a137eb04ee22ad140678fce161bdb6ffd5137"
+      "sha256": "533a1bc13a58dc2b9991b7e80e76c826c64a2aacf6802f068d9b181cc7e79adf"
     },
     {
       "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/approval-response.ts",
@@ -159,11 +159,11 @@
     },
     {
       "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/input-window-capture.ts",
-      "sha256": "6e8ef78c02c38f5f2fbd61d2367c47fda6c1431fc3427a4e83bd29f6406b0683"
+      "sha256": "c6f809a7e1b78605d1dbbef1b02bce3aeb1311338cc8cd58fbc0f38f7c1e83f7"
     },
     {
       "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/mcp-catalog-probe.ts",
-      "sha256": "4cf10e00529e651950459aed97daa473752cae024db7b3600fd04e831c8fa021"
+      "sha256": "9e840bf23005ec944798944422c47473e21a204d2937bb8d0d926e2a0189c55b"
     },
     {
       "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/mcp-catalog.ts",
@@ -171,11 +171,11 @@
     },
     {
       "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/mcp-policy.ts",
-      "sha256": "d20690f72c05f6ae702c12a68ed762a5d99a64237d2dd1909dc647b05d76e3c9"
+      "sha256": "c80775f56a91bbc114065fcbe3ef9560ad08eba995e58bb560d063d326083e6f"
     },
     {
       "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/mcp-status.ts",
-      "sha256": "49aaee9dc9c8fee5101785439543b905dbdf466284a739d433c6b5e18302f443"
+      "sha256": "dd91485ea6ffd09e5f93bb5d3b92156dc7784c6184b7c1548a724affc4a15173"
     },
     {
       "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/metadata.ts",
@@ -187,11 +187,11 @@
     },
     {
       "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/model-probe-config.ts",
-      "sha256": "b16dbb7918429fa6f68964a1a05589b9fd0ebc69d2c4bf1637a95708507e179d"
+      "sha256": "5131948be322fb9aa4b21b4bbe8e8e5d1afe96b49a328a30337b3d7abe800118"
     },
     {
       "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/model-probe.ts",
-      "sha256": "d0f0a30214a5dc7960c1adc0ec9bc8479a995630cf2dd0cd839b487d129d751e"
+      "sha256": "16d18a82fcb6921712bfea103d61b72736400c3bb106eb99046370b2a014d2b3"
     },
     {
       "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/notification-items.ts",
@@ -223,7 +223,7 @@
     },
     {
       "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/user-questions.ts",
-      "sha256": "0cae2f9da50cca665d808a0ff30926d67b396222a7e5ebd79e152e5d48a5554e"
+      "sha256": "ae5fd5efa78fbd141c4efff05554b1bacdcff2600fad6de93a047f7a3f5eeb95"
     },
     {
       "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/wire-frames.ts",
@@ -271,7 +271,7 @@
     },
     {
       "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/driver-session.ts",
-      "sha256": "857e46d670c42588a0d5467ffaaadb4e6f94e8cf2029c580fc343eb1939069b3"
+      "sha256": "5a9d6047f4c41ccf6ebc8cbe3bdfc56c7afccd57c505f82bf8092e96e5fa52a6"
     },
     {
       "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/http-request.ts",
@@ -279,7 +279,7 @@
     },
     {
       "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/input-window-capture.ts",
-      "sha256": "e5c1a38c90df3575f2c38f6932196a591b4e4d7b5524ef82ac544d128616d2f7"
+      "sha256": "4de4d6f3f5e3b1126fc119c2e03cdb874d88ccc9155fb95bc844401753e12345"
     },
     {
       "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/query-path.ts",
@@ -315,7 +315,7 @@
     },
     {
       "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v1-driver-backend.ts",
-      "sha256": "a2523c246d30f045f0b2660e0cc1e300888571e2cdb88fa100e174a97bdcbf05"
+      "sha256": "de2da26e597391d4f06deb415b5f5092c0a229814e66a862e6650789943ab89d"
     },
     {
       "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v1-driver-config.ts",
@@ -327,7 +327,7 @@
     },
     {
       "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v1-driver-factory.ts",
-      "sha256": "2cebebef2d52687546a08a738d41adde1bfb423fde968ef22eca75c4ca20da8e"
+      "sha256": "800b442dc5409e1240e046fe628a83eebd0f1e9e06c3a1c64ec099618b12d2a4"
     },
     {
       "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v1-driver-output.ts",
@@ -431,7 +431,7 @@
     },
     {
       "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/provider-session-io/attachments.ts",
-      "sha256": "07de314fc011542a1ae23728bec67f0f19730a692ec2aa2d804f8c5896b6dcbf"
+      "sha256": "dfb47424f53259c5ccc87b17c761d0dba735b959dbcc2dc262f5217c4f9e26ac"
     },
     {
       "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/provider-session-io/extra-argv.ts",
@@ -737,15 +737,15 @@
   "evidence": [
     {
       "path": "architecture/sdk-growth/evidence/provider-migration-node24-provider-stdout.txt",
-      "sha256": "c56dcf8325cd0cfd84478f671517c614d2a303928718b07218f2dac7b8abcb07"
+      "sha256": "06221cb6f4ddd274df35257943ad4b7db49001d37308bf4e1c39451ad94c15ed"
     },
     {
       "path": "architecture/sdk-growth/evidence/provider-migration-node24-provider-meta.json",
-      "sha256": "9ee4b29d980f2945751be155f391d947b07ab09fbe84366a434b53964a094c73"
+      "sha256": "e45c26e739c5eb8cd8abde4e8d07b28f23ca91c37aa64838aa97270d911ee942"
     },
     {
       "path": "architecture/sdk-growth/evidence/provider-migration-node24-provider-state.json",
-      "sha256": "367f393a78b3224cf774d6918cec6fcf8dbbec65046e48a84968f15de84b478a"
+      "sha256": "78100ccd53df58cfa347e97ee552ecc7592ec9243d07dc06a166b089cee8a22a"
     },
     {
       "path": "architecture/sdk-growth/evidence/provider-migration-node24-owner-stdout.txt",
@@ -761,31 +761,31 @@
     },
     {
       "path": "architecture/sdk-growth/evidence/provider-migration-node24-packed-stdout.txt",
-      "sha256": "6ef70a541283911e9aa846418fe18349c018bb5d56cf0ea03a8ec3ab2effa3df"
+      "sha256": "2b08faea47538a00f6e5aff22231f46f68c7231102a45823f713829f599300d4"
     },
     {
       "path": "architecture/sdk-growth/evidence/provider-migration-node24-packed-meta.json",
-      "sha256": "f0d91a45f4d34a102e30f41e1f8e36ff09a090dcb9ec3286f7481ccbd496666e"
+      "sha256": "bf7d654ece433cc4c2fd81625b3ee26bdbd659597d474f83109dabc9d6095db7"
     },
     {
       "path": "architecture/sdk-growth/evidence/provider-migration-node24-packed-state.json",
-      "sha256": "a833b333ec3544f6be865a993bc96140574d128ff14333317d31b0c96c2ad3a9"
+      "sha256": "539e7bc62bcd6f7dcb49ea65e56b86504a0c1a15ebef66962e9d4ffe34f49ae8"
     },
     {
       "path": "architecture/sdk-growth/evidence/provider-migration-node24-packed-receipt.json",
-      "sha256": "6ef70a541283911e9aa846418fe18349c018bb5d56cf0ea03a8ec3ab2effa3df"
+      "sha256": "2b08faea47538a00f6e5aff22231f46f68c7231102a45823f713829f599300d4"
     },
     {
       "path": "architecture/sdk-growth/evidence/provider-migration-node26-provider-stdout.txt",
-      "sha256": "7e8035cbc84549532ac8cbd4919707f45fbfc58a00e5e1440d9bd1d35cb0285c"
+      "sha256": "e2222993be62b14432bf59710588af4b83195bcd12b7a6376365db464c97d4e4"
     },
     {
       "path": "architecture/sdk-growth/evidence/provider-migration-node26-provider-meta.json",
-      "sha256": "d5d8c7611bb312a717552538d5c3cd02b0621738fbc63ed8b6d8af7133ec4870"
+      "sha256": "77ae88967883e3e72729982a389978417c5768804b68cde53fe8ea355797ff74"
     },
     {
       "path": "architecture/sdk-growth/evidence/provider-migration-node26-provider-state.json",
-      "sha256": "5101fcbcd6ad054023d84c98aca3c04e39f0176fa253de600b2897e4cc551ca3"
+      "sha256": "ee81358daab5b2d04746d825089b38f8a2f04a8dcb6d36c4ac8497a4f01da6e8"
     },
     {
       "path": "architecture/sdk-growth/evidence/provider-migration-node26-owner-stdout.txt",
@@ -801,30 +801,30 @@
     },
     {
       "path": "architecture/sdk-growth/evidence/provider-migration-node26-packed-stdout.txt",
-      "sha256": "51afd5bd5cb7a21cd8ab2fb020a20d97c54d6cf19d3617155972c65d6e0ba2b8"
+      "sha256": "3891e9e9be442a81693ff29665b9db4d688f8af2690e44870f8c66e3632d74c0"
     },
     {
       "path": "architecture/sdk-growth/evidence/provider-migration-node26-packed-meta.json",
-      "sha256": "8b42dd5fdbbb9d0eccf513369aeb7725c5b3a9137be827027f44f21e9bc935e8"
+      "sha256": "7a029452ca35d4d38f37e57d2b025e04bec3a034342609e21f1c8eea55660df4"
     },
     {
       "path": "architecture/sdk-growth/evidence/provider-migration-node26-packed-state.json",
-      "sha256": "b6bead87197b173f73dfd1703aba5f3ce1c4018edb9b8b39da732abbe489381d"
+      "sha256": "da6ca3605779bf4b97a329fc97973a223fbb376b80da6741562ed8fc35da0e77"
     },
     {
       "path": "architecture/sdk-growth/evidence/provider-migration-node26-packed-receipt.json",
-      "sha256": "51afd5bd5cb7a21cd8ab2fb020a20d97c54d6cf19d3617155972c65d6e0ba2b8"
+      "sha256": "3891e9e9be442a81693ff29665b9db4d688f8af2690e44870f8c66e3632d74c0"
     },
     {
       "path": "architecture/sdk-growth/evidence/provider-migration-selected-provider-dist.json",
-      "sha256": "f8daa12f72ed195f4a3e58c60143ef9159185fb3248420bdd5bfb14b3d0cc5eb"
+      "sha256": "4595ee663150c4bbeb5677a2fd59bc2ef50e0b1b8a049641679a34541273f01d"
     }
   ],
   "engines": [
     {
       "node": "v24.21.0",
       "provider": {
-        "jobId": "a34231f46559b8a2247f595ce3d21a1a",
+        "jobId": "d900e582e968771ed20340cd1bbca908",
         "log": "architecture/sdk-growth/evidence/provider-migration-node24-provider-stdout.txt",
         "invocation": "architecture/sdk-growth/evidence/provider-migration-node24-provider-meta.json",
         "completion": "architecture/sdk-growth/evidence/provider-migration-node24-provider-state.json",
@@ -838,7 +838,7 @@
         "tests": 26
       },
       "packed": {
-        "jobId": "c33cf9ad0012219bb1f73bb71cd0dfb2",
+        "jobId": "239b9356e8d65faa10f6557ab0b03598",
         "log": "architecture/sdk-growth/evidence/provider-migration-node24-packed-stdout.txt",
         "invocation": "architecture/sdk-growth/evidence/provider-migration-node24-packed-meta.json",
         "completion": "architecture/sdk-growth/evidence/provider-migration-node24-packed-state.json",
@@ -850,7 +850,7 @@
     {
       "node": "v26.11.1",
       "provider": {
-        "jobId": "26e999724b237a6de9f1aed71c73c7fc",
+        "jobId": "c93b2a822d5df095482b01bda012ce03",
         "log": "architecture/sdk-growth/evidence/provider-migration-node26-provider-stdout.txt",
         "invocation": "architecture/sdk-growth/evidence/provider-migration-node26-provider-meta.json",
         "completion": "architecture/sdk-growth/evidence/provider-migration-node26-provider-state.json",
@@ -864,7 +864,7 @@
         "tests": 26
       },
       "packed": {
-        "jobId": "e450c0d615060e214945bac4804445c6",
+        "jobId": "5146f0eb2df52aac62fa2b27f8135e03",
         "log": "architecture/sdk-growth/evidence/provider-migration-node26-packed-stdout.txt",
         "invocation": "architecture/sdk-growth/evidence/provider-migration-node26-packed-meta.json",
         "completion": "architecture/sdk-growth/evidence/provider-migration-node26-packed-state.json",

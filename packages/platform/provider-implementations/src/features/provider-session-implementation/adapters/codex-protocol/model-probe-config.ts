@@ -15,7 +15,7 @@ const name = z.string().min(1).max(256).refine(value => !/[\0\r\n]/u.test(value)
 const schema = z.object({ cwd: path, executablePath: path, model: name, modelProvider: name.optional(), reasoningEffort: name.optional(), fastMode: z.boolean().optional(), timeoutMs: z.number().int().min(1).max(180000),
   environment: z.record(z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/u), z.string().max(65536)).refine(value => Object.keys(value).length <= 256),
   launch: z.custom<CodexModelProbeConfig['launch']>(value => typeof value === 'function'), canSubmit: z.custom<() => boolean>(value => typeof value === 'function'),
-}).strict().refine(value => path.safeParse(value.environment.HOME).success && !!value.environment.PATH &&
+}).strict().refine(value => path.safeParse(value.environment.HOME).success && value.environment.PATH !== undefined && value.environment.PATH.length > 0 &&
   path.safeParse(value.environment.CODEX_HOME).success)
 export function captureCodexModelProbe(selected: CodexModelProbeConfig): CodexModelProbeConfig {
   try {

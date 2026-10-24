@@ -29,14 +29,14 @@ export function captureRequiredMcpTools(value: RequiredMcpTools): RequiredMcpToo
   if (prototype !== Object.prototype && prototype !== null) { return invalid() }
   return Object.freeze(Object.fromEntries(Object.entries(fields).map(([server, tools]) => {
     if (!boundedName(server) || !Array.isArray(tools) || !tools.length || tools.length > 256 ||
-      tools.some(tool => !boundedName(tool)) || new Set(tools).size !== tools.length) { return invalid() }
-    return [server, Object.freeze([...tools] as string[])]
+      !tools.every(boundedName) || new Set(tools).size !== tools.length) { return invalid() }
+    return [server, Object.freeze([...tools])]
   })))
 }
 function decodeStatus(value: unknown): CodexMcpServerStatus {
   const row = record(value), tools = record(row?.tools)
   const name = string(row?.name)
-  if (!name || !boundedName(name) || !tools || Object.keys(tools).length > 4096 || !Array.isArray(row?.resources) || !Array.isArray(row.resourceTemplates) ||
+  if (name === null || name.length === 0 || !boundedName(name) || !tools || Object.keys(tools).length > 4096 || !Array.isArray(row?.resources) || !Array.isArray(row.resourceTemplates) ||
     typeof row.authStatus !== 'string' || !['unknown', 'unsupported', 'notLoggedIn', 'bearerToken', 'oAuth'].includes(row.authStatus)) { return invalid() }
   const runtimeStatus = row.runtimeStatus ?? null, toolsError = row.toolsError ?? null
   if ((runtimeStatus !== null && (typeof runtimeStatus !== 'string' || !['notStarted', 'starting', 'connected', 'authenticationRequired', 'failed', 'cancelled', 'disabled'].includes(runtimeStatus))) ||

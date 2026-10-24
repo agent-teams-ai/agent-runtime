@@ -27,12 +27,16 @@ type Owner = ForegroundToolOwner;
 type Child = { parentToolRef: string; owner: Owner; normalizer: Normalizer; ended: boolean };
 const agentType = 'host-ordinary';
 const forbidden = /^(?:Team|Task|TodoWrite|Agent|Cron|Schedule|SendMessage$|ListAgents$|mcp__)/;
-export function validSubagents(port: ClaudeSubagentPort | undefined, tools: readonly string[]): boolean {
-  return port === undefined || (!!port && port.mode === 'do' && Array.isArray(port.tools) &&
+export function validSubagents(value: unknown, tools: readonly string[]): boolean {
+  const port = subagentFields(value) ? value : {};
+  return value === undefined || (Boolean(value) && port.mode === 'do' && Array.isArray(port.tools) &&
     port.tools.length > 0 && port.tools.length <= 256 && new Set(port.tools).size === port.tools.length &&
-    port.tools.every(name => typeof name === 'string' && name.length > 0 && name.length <= 256 && !forbidden.test(name) && tools.includes(name)) &&
+    port.tools.every((name: unknown) => typeof name === 'string' && name.length > 0 && name.length <= 256 && !forbidden.test(name) && tools.includes(name)) &&
     tools.includes('Agent') && typeof port.authorize === 'function' && typeof port.observe === 'function' &&
     Object.keys(port).every(key => ['mode', 'tools', 'authorize', 'observe'].includes(key)));
+}
+function subagentFields(value: unknown): value is Record<string, unknown> {
+  return value !== null && (typeof value === 'object' || typeof value === 'function');
 }
 export function subagentOptions(port: ClaudeSubagentPort): Pick<Options, 'agents' | 'forwardSubagentText'> {
   return { forwardSubagentText: true, agents: { [agentType]: {
@@ -111,12 +115,12 @@ export class ClaudeSubagents {
   }
   private async authorizeParent(id: string, owner: Owner, signal: AbortSignal): Promise<boolean> {
     const scope = AbortSignal.any([signal, owner.revoked, this.lifetime.signal, AbortSignal.timeout(this.config.timeoutMs)]);
-    let abort!: () => void;
+    let abort: (() => void) | undefined;
     try {
-      const allowed = await Promise.race([this.config.port.authorize(Object.freeze({ sessionRef: this.config.sessionRef, inputId: owner.inputId, operationRef: owner.operationRef, parentToolRef: id, signal: scope })),
-        new Promise<never>((_resolve, reject) => { abort = () => reject(new Error('Subagent authorization unavailable')); scope.addEventListener('abort', abort, { once: true }); if (scope.aborted) {abort();} })]);
+      const allowed: unknown = await Promise.race([this.config.port.authorize(Object.freeze({ sessionRef: this.config.sessionRef, inputId: owner.inputId, operationRef: owner.operationRef, parentToolRef: id, signal: scope })),
+        new Promise<never>((_resolve, reject) => { abort = () => { reject(new Error('Subagent authorization unavailable')); }; scope.addEventListener('abort', abort, { once: true }); if (scope.aborted) {abort();} })]);
       return allowed === true && !scope.aborted && sameOwner(this.config.currentOwner(id, 'Agent'), owner);
-    } catch { return false; } finally { if (abort) {scope.removeEventListener('abort', abort);} }
+    } catch { return false; } finally { if (abort !== undefined) {scope.removeEventListener('abort', abort);} }
   }
   /** True consumes a native child frame so it never enters the parent's common feed. */
   async accept(raw: Record<string, unknown>): Promise<boolean> {
@@ -222,13 +226,13 @@ export class ClaudeSubagents {
     this.count++; this.bytes += Buffer.byteLength(JSON.stringify(value));
     if (this.count > this.config.maxEvents || this.bytes > this.config.maxBytes) {throw new OutputLimitError('Subagent output limit');}
     const signal = AbortSignal.any([this.lifetime.signal, ...(revoked ? [revoked] : []), AbortSignal.timeout(this.config.timeoutMs)]);
-    let abort!: () => void;
+    let abort: (() => void) | undefined;
     try {
       await Promise.race([this.config.port.observe(Object.freeze({ ...structuredClone(value), signal }) as ClaudeSubagentObservation), new Promise<never>((_resolve, reject) => {
-        abort = () => reject(new Error('Subagent observation unavailable'));
+        abort = () => { reject(new Error('Subagent observation unavailable')); };
         signal.addEventListener('abort', abort, { once: true }); if (signal.aborted) {abort();}
       })]);
-    } finally { if (abort) {signal.removeEventListener('abort', abort);} }
+    } finally { if (abort !== undefined) {signal.removeEventListener('abort', abort);} }
   }
 }
 

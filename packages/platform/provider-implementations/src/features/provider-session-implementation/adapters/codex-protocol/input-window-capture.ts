@@ -13,10 +13,13 @@ export type CodexInputWindowRequest = Readonly<Identity & { signal: AbortSignal 
 export interface CodexInputWindowPort {
   observe(request: CodexInputWindowRequest): void | Promise<void>
 }
+function observer(value: unknown): value is CodexInputWindowPort['observe'] { return typeof value === 'function' }
+function serializeChanges(value: unknown): unknown { return JSON.stringify(value) }
 export function snapshotInputWindowPort(port: CodexInputWindowPort | undefined): CodexInputWindowPort | undefined {
   if (port === undefined) {return}
-  const observe = port?.observe
-  if (typeof observe !== 'function') {throw new Error('codex.driver.invalid-capture')}
+  const candidate: unknown = port
+  const observe: unknown = candidate !== null && (typeof candidate === 'object' || typeof candidate === 'function') ? Reflect.get(candidate, 'observe') : undefined
+  if (!observer(observe)) {throw new Error('codex.driver.invalid-capture')}
   return Object.freeze({ observe: observe.bind(port) })
 }
 type WithoutSignal = CodexInputWindowRequest extends infer R ? R extends CodexInputWindowRequest ? Omit<R, 'signal'> : never : never
@@ -50,21 +53,22 @@ export class CodexInputWindowCapture {
     this.timeoutMs = options.timeoutMs
     this.abort = options.abort; this.maxItems = options.maxItems; this.maxBytes = options.maxBytes
   }
+  private available(): boolean { return !this.ended && this.invalid === undefined }
   async before(): Promise<void> {
     if (this.prepared || this.ended || this.invalid) {return}
     const reason = await this.notify({ ...this.identity, phase: 'before' })
     if (reason) {this.gap(reason)}
-    else if (!this.ended && !this.invalid) {this.prepared = true}
+    else if (this.available()) {this.prepared = true}
   }
   record(event: CodexAppServerEvent): void {
-    if (!this.prepared || this.ended || this.invalid || this.abort.aborted || event.threadId !== this.identity.threadId || !event.turnId) {return}
+    if (!this.prepared || this.ended || this.invalid || this.abort.aborted || event.threadId !== this.identity.threadId || typeof event.turnId !== 'string' || event.turnId.length === 0) {return}
     const raw = event.event
     if ((raw.type !== 'tool_call_started' && raw.type !== 'tool_call_completed') || raw.rawItemType !== 'fileChange') {return}
     if (this.nativeTurn !== undefined && this.nativeTurn !== event.turnId) {this.gap('conflict'); return}
     this.nativeTurn = event.turnId
     try {
-      const serialized = JSON.stringify(raw.arguments.changes)
-      if (serialized === undefined || this.items.length >= this.maxItems || this.bytes + Buffer.byteLength(serialized) > this.maxBytes) {this.gap('limit'); return}
+      const serialized = serializeChanges(raw.arguments.changes)
+      if (typeof serialized !== 'string' || this.items.length >= this.maxItems || this.bytes + Buffer.byteLength(serialized) > this.maxBytes) {this.gap('limit'); return}
       const changes: unknown = JSON.parse(serialized)
       if (!Array.isArray(changes)) {this.gap('conflict'); return}
       const item = Object.freeze({ itemId: raw.itemId, phase: raw.type === 'tool_call_started' ? 'started' as const : 'completed' as const,
@@ -94,12 +98,12 @@ export class CodexInputWindowCapture {
   private async notify(request: WithoutSignal, gap = false, invalid = false): Promise<GapReason | undefined> {
     const timeout = new AbortController()
     const signal = AbortSignal.any([timeout.signal, ...(gap ? [] : [this.abort, ...(invalid ? [] : [this.lifetime.signal])])])
-    const timer = setTimeout(() => timeout.abort(), this.timeoutMs)
+    const timer = setTimeout(() => {timeout.abort()}, this.timeoutMs)
     let aborted!: () => void
     try {
       const observed = Promise.resolve(this.port.observe(Object.freeze({ ...request, signal }) as CodexInputWindowRequest))
       await Promise.race([observed, new Promise<never>((_resolve, reject) => {
-        aborted = () => reject(new Error('Capture aborted'))
+        aborted = () => {reject(new Error('Capture aborted'))}
         signal.addEventListener('abort', aborted, { once: true }); if (signal.aborted) {aborted()}
       })])
       if (!signal.aborted) {return}

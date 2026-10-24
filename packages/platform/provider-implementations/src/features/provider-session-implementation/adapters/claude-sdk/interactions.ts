@@ -15,8 +15,8 @@ function validatedReply(value: unknown): InteractionReply | undefined {
   try {
     const reply = plainData(value);
     if (!reply || Object.keys(reply).length !== 2) {return;}
-    if (reply?.kind === 'permission' && (reply.decision === 'allow' || reply.decision === 'deny')) { return { kind: 'permission', decision: reply.decision }; }
-    if (reply?.kind === 'question') {
+    if (reply.kind === 'permission' && (reply.decision === 'allow' || reply.decision === 'deny')) { return { kind: 'permission', decision: reply.decision }; }
+    if (reply.kind === 'question') {
       if (reply.decision === 'deny') {return { kind: 'question', decision: 'deny' };}
       const answers = plainData(reply.answers);
       if (answers && Object.values(answers).every((answer) => typeof answer === 'string')) { return { kind: 'question', answers: answers as Record<string, string> }; }
@@ -50,7 +50,7 @@ export class Interactions {
       const event: EventPayload = { kind: 'interaction', interactionRef: ref, request: kind === 'question' ? { kind, questions: input.questions } : { kind, tool, input } };
       try {
         const emission = this.emit(event, agentID, toolUseID);
-        void Promise.resolve(emission).catch(() => finish({ behavior: 'deny', message: 'Interaction provenance unavailable' }));
+        void Promise.resolve(emission).catch(() => { finish({ behavior: 'deny', message: 'Interaction provenance unavailable' }); });
       } catch { finish({ behavior: 'deny', message: 'Interaction provenance unavailable' }); }
     });
   };

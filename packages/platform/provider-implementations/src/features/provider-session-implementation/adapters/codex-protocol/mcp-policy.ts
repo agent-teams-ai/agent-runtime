@@ -10,7 +10,7 @@ const fields = { startup_timeout_sec: z.number().positive().max(180000).optional
   enabled_tools: z.array(name).max(256).optional(), tools: z.record(name, z.object({ approval_mode: z.literal('approve') }).strict()).optional() }
 const server = z.union([
   z.object({ command: text.min(1), args: z.array(text).max(256).optional(), env: z.record(name, text).optional(), ...fields }).strict(),
-  z.object({ url: z.string().url().max(8192), http_headers: z.record(name, text).optional(), bearer_token_env_var: name.optional(), ...fields }).strict(),
+  z.object({ url: z.url().max(8192), http_headers: z.record(name, text).optional(), bearer_token_env_var: name.optional(), ...fields }).strict(),
 ])
 const selection = z.record(name, server).refine(value => Object.keys(value).length <= 256 && Buffer.byteLength(JSON.stringify(value)) <= 262144)
 export type CodexSelectedMcpServers = z.infer<typeof selection>
@@ -31,7 +31,7 @@ function toml(value: unknown): string {
 }
 /** One top-level inline table avoids native CLI dotted-key splitting for arbitrary server names. */
 export function codexMcpPolicyArgs(supplied: CodexMcpPolicy): readonly string[] {
-  const policy = captureCodexMcpPolicy(supplied), rows: Record<string, unknown> = Object.create(null)
+  const policy = captureCodexMcpPolicy(supplied), rows: Record<string, unknown> = { __proto__: null }
   for (const row of policy.catalog.servers) {
     rows[row.name] = { ...(row.transport.type === 'stdio' ? { command: row.transport.command } : { url: row.transport.url }), enabled: false }
   }

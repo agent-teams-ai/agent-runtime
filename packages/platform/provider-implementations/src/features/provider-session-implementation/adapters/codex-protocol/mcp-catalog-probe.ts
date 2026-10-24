@@ -17,16 +17,19 @@ const schema = z.object({ executablePath: path, cwd: path,
   timeoutMs: z.number().int().min(1).max(180000),
   launch: z.custom<CodexMcpCatalogConfig['launch']>(value => typeof value === 'function'), canRead: z.custom<() => boolean>(value => typeof value === 'function'),
 }).strict().refine(value => path.safeParse(value.environment.HOME).success && path.safeParse(value.environment.CODEX_HOME).success)
+function terminalPromise(value: unknown): value is CodexMcpCatalogConnection['terminal'] {
+  return value !== null && (typeof value === 'object' || typeof value === 'function') && typeof Reflect.get(value, 'then') === 'function'
+}
 /** Exactly one native metadata command; HTTP rows may fetch OAuth metadata with GET.
  * No thread, turn, login, MCP initialize/tool call, header-helper execution or retry. */
 export async function readCodexConfiguredMcpCatalog(selected: CodexMcpCatalogConfig, signal?: AbortSignal): Promise<CodexConfiguredMcpCatalog> {
   let captured: CodexMcpCatalogConfig
   try { const parsed = schema.parse({ ...selected }); captured = { ...parsed, environment: Object.freeze({ ...parsed.environment }), launch: parsed.launch.bind(selected), canRead: parsed.canRead.bind(selected) } }
   catch { throw new Error('codex.mcp.invalid-config') }
-  const authorized = () => { try { return captured.canRead() === true } catch { return false } }
-  if (signal?.aborted || !authorized()) { throw new Error('codex.mcp.cancelled') }
+  const authorized = () => { try { const answer: unknown = captured.canRead(); return answer === true } catch { return false } }
+  if (signal?.aborted === true || !authorized()) { throw new Error('codex.mcp.cancelled') }
   const stop = new AbortController(), deadline = AbortSignal.timeout(captured.timeoutMs)
-  const current = () => !stop.signal.aborted && !deadline.aborted && !signal?.aborted && authorized()
+  const current = () => !stop.signal.aborted && !deadline.aborted && signal?.aborted !== true && authorized()
   const combined = AbortSignal.any([stop.signal, deadline, ...(signal ? [signal] : [])])
   let dispose: (() => Promise<boolean>) | undefined, result: CodexConfiguredMcpCatalog | undefined, reason: string | undefined
   try {
@@ -34,8 +37,9 @@ export async function readCodexConfiguredMcpCatalog(selected: CodexMcpCatalogCon
     const cleanup = owned.dispose
     if (typeof cleanup !== 'function') { throw new Error('invalid') }
     dispose = cleanup.bind(owned)
-    const read = owned.read, terminal = owned.terminal
-    if (typeof read !== 'function' || !terminal || typeof terminal.then !== 'function') { throw new Error('invalid') }
+    const read = owned.read
+    const terminal: unknown = owned.terminal
+    if (typeof read !== 'function' || !terminalPromise(terminal)) { throw new Error('invalid') }
     const observe = async () => {
       const chunks: Buffer[] = []; let bytes = 0
       for await (const chunk of read.call(owned)) {
@@ -55,6 +59,6 @@ export async function readCodexConfiguredMcpCatalog(selected: CodexMcpCatalogCon
     stop.abort()
     if (dispose) { try { if (!await bounded(dispose(), Math.min(captured.timeoutMs, 5000))) { reason = 'codex.mcp.cleanup-unconfirmed' } } catch { reason = 'codex.mcp.cleanup-unconfirmed' } }
   }
-  if (reason || !result) { throw new Error(reason ?? 'codex.mcp.unavailable') }
+  if ((reason !== undefined && reason.length > 0) || !result) { throw new Error(reason ?? 'codex.mcp.unavailable') }
   return result
 }

@@ -1,5 +1,6 @@
 import { codexModelOptionArgs } from './model-options.ts'
 import { CodexProtocolError } from './rpc-types.ts'
+import type { CodexAppServerTransport } from './rpc-types.ts'
 import { CodexAppServerClient } from './app-server.ts'
 import { bounded } from '../provider-session-io/io.ts'
 import { captureCodexModelProbe } from './model-probe-config.ts'
@@ -15,13 +16,15 @@ function observations() {
       bytes += Buffer.byteLength(JSON.stringify(event))
       if (!allowed.has(event.event.type)) {invalid = true}
       if (facts.length >= 256 || bytes > 512 * 1024) {invalid = true; return}
-      facts.push({ ...(event.threadId ? { threadId: event.threadId } : {}), ...(event.turnId ? { turnId: event.turnId } : {}),
+      facts.push({ ...(event.threadId !== undefined && event.threadId.length > 0 ? { threadId: event.threadId } : {}), ...(event.turnId !== undefined && event.turnId.length > 0 ? { turnId: event.turnId } : {}),
         type: event.event.type, ...(event.event.type === 'assistant_text' ? { text: event.event.text } : {}) })
     },
     reject(): void { invalid = true },
-    valid(ref: CodexTurnRef): boolean { return !invalid && facts.some(fact => fact.threadId === ref.threadId && fact.turnId === ref.turnId && fact.type === 'assistant_text' && !!fact.text?.trim()) },
+    valid(ref: CodexTurnRef): boolean { return !invalid && facts.some(fact => fact.threadId === ref.threadId && fact.turnId === ref.turnId && fact.type === 'assistant_text' && fact.text !== undefined && fact.text.trim().length > 0) },
   }
 }
+function readPort(value: unknown): value is CodexAppServerTransport['read'] { return typeof value === 'function' }
+function writePort(value: unknown): value is CodexAppServerTransport['write'] { return typeof value === 'function' }
 function connection(value: CodexModelProbeConnection, retain: (dispose: () => Promise<boolean>) => void): CodexModelProbeConnection {
   // Snapshot callable ports once, never resolve or adopt a later native process.
   const dispose = value.dispose
@@ -29,15 +32,15 @@ function connection(value: CodexModelProbeConnection, retain: (dispose: () => Pr
   const capturedDispose = dispose.bind(value)
   retain(capturedDispose)
   const transport = value.transport
-  const { read, write } = transport
-  if (typeof read !== 'function' || typeof write !== 'function') {throw new Error('codex.probe.invalid-connection')}
+  const read: unknown = Reflect.get(transport, 'read'), write: unknown = Reflect.get(transport, 'write')
+  if (!readPort(read) || !writePort(write)) {throw new Error('codex.probe.invalid-connection')}
   return { transport: { read: read.bind(transport), write: write.bind(transport) }, dispose: capturedDispose }
 }
 
 async function infer(client: CodexAppServerClient, captured: CodexModelProbeConfig, observed: ReturnType<typeof observations>, current: () => boolean, signal: AbortSignal): Promise<boolean> {
   await client.initialize({ clientInfo: { name: 'codex-model-probe', version: '1' } })
   if (client.getRuntimeIdentity().codexHome !== captured.environment.CODEX_HOME) {throw new Error('codex.probe.namespace-mismatch')}
-  const thread = await client.startThread({ cwd: captured.cwd, model: captured.model, ...(captured.modelProvider ? { modelProvider: captured.modelProvider } : {}), approvalPolicy: 'never', sandbox: 'read-only' })
+  const thread = await client.startThread({ cwd: captured.cwd, model: captured.model, ...(captured.modelProvider !== undefined && captured.modelProvider.length > 0 ? { modelProvider: captured.modelProvider } : {}), approvalPolicy: 'never', sandbox: 'read-only' })
   const proof = thread.modelSelection
   if (proof?.model === captured.model && proof.cwd === captured.cwd &&
     (captured.modelProvider === undefined || proof.modelProvider === captured.modelProvider) &&
@@ -53,6 +56,8 @@ async function infer(client: CodexAppServerClient, captured: CodexModelProbeConf
   return false
 }
 
+function signalAborted(signal: AbortSignal | undefined): boolean { return signal?.aborted === true }
+
 function failure(error: unknown, aborted: boolean): string {
   if (aborted) {return 'codex.probe.cancelled'}
   if (error instanceof Error && ['codex.probe.unknown', 'codex.probe.cancelled', 'codex.probe.namespace-mismatch'].includes(error.message)) {return error.message}
@@ -63,10 +68,10 @@ function failure(error: unknown, aborted: boolean): string {
 /** Exactly one selected, read-only no-tools-output inference. No retries, recovery, product state or agent loop. */
 export async function probeCodexModel(selected: CodexModelProbeConfig, signal?: AbortSignal): Promise<boolean> {
   const captured = captureCodexModelProbe(selected)
-  const authorized = () => { try { return captured.canSubmit() === true } catch { return false } }
-  if (signal?.aborted || !authorized()) {throw new Error('codex.probe.cancelled')}
+  const authorized = () => { try { const answer: unknown = captured.canSubmit(); return answer === true } catch { return false } }
+  if (signal?.aborted === true || !authorized()) {throw new Error('codex.probe.cancelled')}
   const stop = new AbortController()
-  const current = () => !stop.signal.aborted && !signal?.aborted && authorized()
+  const current = () => !stop.signal.aborted && signal?.aborted !== true && authorized()
   let client: CodexAppServerClient | undefined, dispose: (() => Promise<boolean>) | undefined
   let reason: string | undefined, result = false, timer: ReturnType<typeof setTimeout> | undefined
   const abort = () => { stop.abort(); client?.close() }
@@ -77,15 +82,15 @@ export async function probeCodexModel(selected: CodexModelProbeConfig, signal?: 
     if (!current()) {throw new Error('codex.probe.cancelled')}
     const observed = observations()
     const transport = owned.transport
-    client = new CodexAppServerClient({ transport: { read: transport.read, write(frame, requestSignal) {
+    client = new CodexAppServerClient({ transport: { read: readSignal => transport.read(readSignal), write(frame, requestSignal) {
       if (!current() || requestSignal.aborted) {throw new Error('codex.probe.cancelled')}
       return transport.write(frame, requestSignal)
-    } }, onEvent: observed.onEvent, onServerRequest: observed.reject, requestApproval: async request => ({ kind: 'decision', decision: request.method === 'execCommandApproval' || request.method === 'applyPatchApproval' ? 'denied' : 'decline' }),
+    } }, onEvent: event => {observed.onEvent(event)}, onServerRequest: () => {observed.reject()}, requestApproval: async request => ({ kind: 'decision', decision: request.method === 'execCommandApproval' || request.method === 'applyPatchApproval' ? 'denied' : 'decline' }),
       limits: { requestTimeoutMs: captured.timeoutMs, maxPendingRequests: 8, maxServerRequests: 8, maxQueuedWrites: 16 }, maxThreads: 1, maxQueuedTurns: 1,
       maxBufferedNotifications: 64, maxTextBytes: 512 * 1024 })
     result = await infer(client, captured, observed, current, stop.signal)
   } catch (error) {
-    reason ??= failure(error, stop.signal.aborted || !!signal?.aborted)
+    reason ??= failure(error, stop.signal.aborted || signalAborted(signal))
   } finally {
     clearTimeout(timer)
     signal?.removeEventListener('abort', abort); stop.abort(); client?.close()
@@ -94,6 +99,6 @@ export async function probeCodexModel(selected: CodexModelProbeConfig, signal?: 
       catch {reason = 'codex.probe.cleanup-unconfirmed'}
     }
   }
-  if (reason) {throw new Error(reason)}
+  if (reason !== undefined && reason.length > 0) {throw new Error(reason)}
   return result
 }

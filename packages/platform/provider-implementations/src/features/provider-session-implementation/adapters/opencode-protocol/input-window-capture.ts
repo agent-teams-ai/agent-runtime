@@ -12,9 +12,11 @@ export type OpenCodeInputWindowRequest = Readonly<Identity & { signal: AbortSign
 export interface OpenCodeInputWindowPort { observe(request: OpenCodeInputWindowRequest): void | Promise<void> }
 export function snapshotOpenCodeCapture(port: OpenCodeInputWindowPort | undefined): OpenCodeInputWindowPort | undefined {
   if (port === undefined) {return}
-  const observe = port?.observe
+  const receiver: unknown = port
+  if (receiver === null || typeof receiver !== 'object' && typeof receiver !== 'function') {throw new Error('opencode.v1.invalid-capture')}
+  const observe: unknown = Reflect.get(receiver, 'observe')
   if (typeof observe !== 'function') {throw new Error('opencode.v1.invalid-capture')}
-  return Object.freeze({ observe: observe.bind(port) })
+  return Object.freeze({ observe: observe.bind(receiver) as OpenCodeInputWindowPort['observe'] })
 }
 type Request = OpenCodeInputWindowRequest extends infer R ? R extends OpenCodeInputWindowRequest ? Omit<R, 'signal'> : never : never
 function freeze(value: unknown, depth = 0): OpenCodeCaptureValue {
@@ -77,12 +79,12 @@ export class OpenCodeInputWindowCapture {
   private async notify(request: Request, invalid = false): Promise<Gap | undefined> {
     const timeout = new AbortController()
     const signal = AbortSignal.any([timeout.signal, ...(request.phase === 'gap' ? [] : [this.options.abort, ...(invalid ? [] : [this.lifetime.signal])])])
-    const timer = setTimeout(() => timeout.abort(), this.options.timeoutMs)
+    const timer = setTimeout(() => {timeout.abort()}, this.options.timeoutMs)
     let aborted!: () => void
     try {
       const observed = Promise.resolve(this.options.port.observe(Object.freeze({ ...request, signal }) as OpenCodeInputWindowRequest))
       await Promise.race([observed, new Promise<never>((_resolve, reject) => {
-        aborted = () => reject(new Error('capture-aborted')); signal.addEventListener('abort', aborted, { once: true }); if (signal.aborted) {aborted()}
+        aborted = () => {reject(new Error('capture-aborted'))}; signal.addEventListener('abort', aborted, { once: true }); if (signal.aborted) {aborted()}
       })])
       if (!signal.aborted) {return}
     } catch {if (!signal.aborted) {return 'capture-failed'}}

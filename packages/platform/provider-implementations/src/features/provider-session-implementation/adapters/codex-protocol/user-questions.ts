@@ -42,8 +42,8 @@ function formOptions(schema: Record<string, unknown>): Choice[] | undefined {
     (schema.description !== undefined && !text(schema.description, 512))) { return undefined }
   if (schema.type === 'boolean' && schema.enum === undefined) { return [{ label: 'Yes', value: true }, { label: 'No', value: false }] }
   if (schema.type !== 'string' || !Array.isArray(schema.enum) || schema.enum.length === 0 || schema.enum.length > 32 ||
-    !schema.enum.every(value => text(value, 128)) || new Set(schema.enum).size !== schema.enum.length || schema.enum.some(value => persistent(String(value)))) { return undefined }
-  return schema.enum.map(value => ({ label: String(value), value: String(value) }))
+    !schema.enum.every(value => text(value, 128)) || new Set(schema.enum).size !== schema.enum.length || schema.enum.some(value => persistent(value))) { return undefined }
+  return schema.enum.map(value => ({ label: value, value }))
 }
 function formProperties(value: unknown): Record<string, unknown> | undefined {
   const schema = record(value), properties = record(schema?.properties)
@@ -58,8 +58,10 @@ function form(params: Record<string, unknown>): CodexQuestionPlan | undefined {
   const fields: Field[] = []
   for (const [id, value] of Object.entries(properties)) {
     const property = record(value); if (!text(id, 128) || !property) { return undefined }
-    const options = formOptions(property), question = `${params.message} — ${property.title ?? id}`
-    if (!options || !text(question)) { return undefined }
+    const options = formOptions(property), title = property.title ?? id
+    if (!options || typeof title !== 'string') { return undefined }
+    const question = `${params.message} — ${title}`
+    if (!text(question)) { return undefined }
     fields.push({ id, question, header: params.serverName, options })
   }
   if (!fields.length) { return { kind: 'elicitation', empty: true, fields: [{ id: '', question: params.message, header: params.serverName, options: [{ label: 'Allow this request', value: true }] }] } }
@@ -71,7 +73,7 @@ export function codexQuestionPlan(request: CodexAppServerToolApprovalRequest): C
 }
 export function codexQuestions(plan: CodexQuestionPlan): unknown {
   return plan.fields.map(field => ({ question: field.question, header: field.header, multiSelect: false,
-    options: field.options.map(({ label, description }) => ({ label, ...(description ? { description } : {}) })) }))
+    options: field.options.map(({ label, description }) => ({ label, ...(description !== undefined && description.length > 0 ? { description } : {}) })) }))
 }
 function data(value: unknown): Record<string, unknown> | undefined {
   try {

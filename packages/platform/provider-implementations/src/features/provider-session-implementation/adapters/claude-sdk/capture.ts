@@ -86,20 +86,20 @@ export class ClaudeCapture {
     const captured: Pair = { identity: { ...identity, inputId: owner.inputId, operationRef: owner.operationRef },
       owner: { ...owner }, input, fingerprint, bytes, abort: new AbortController(), phase: 'preparing' };
     this.pairs.set(raw.tool_use_id, captured); this.bytes += bytes;
-    if (this.observeBatch || this.observeBackground) {
+    if (this.observeBatch !== undefined || this.observeBackground !== undefined) {
       const revoked = () => {if (captured.phase !== 'completed' && captured.phase !== 'gap') {void this.gap(captured, 'stale');}};
       owner.revoked.addEventListener('abort', revoked, { once: true });
-      captured.detach = () => owner.revoked.removeEventListener('abort', revoked);
+      captured.detach = () => { owner.revoked.removeEventListener('abort', revoked); };
     }
     let releaseBefore!: () => void;
     captured.before = new Promise<void>(resolve => { releaseBefore = resolve; });
     try {
-      const overlapping = [...this.pairs.values()].filter(other => other !== captured && other.background?.registered && live(other));
+      const overlapping = [...this.pairs.values()].filter(other => other !== captured && other.background?.registered === true && live(other));
       if (overlapping.length) { await Promise.all([...overlapping, captured].map(value => this.gap(value, 'batch-unqualified'))); return; }
       const ok = await this.notify({ ...captured.identity, phase: 'before', toolInput: input }, [signal, owner.revoked, captured.abort.signal]);
-      if (captured.phase !== 'preparing') {return;}
+      if (!inPhase(captured, 'preparing')) {return;}
       if (!ok) {await this.gap(captured, 'capture-failed');}
-      else if (!this.current(captured) || signal.aborted) {await this.gap(captured, 'stale');}
+      else if (!this.current(captured) || aborted(signal)) {await this.gap(captured, 'stale');}
       else {captured.phase = 'prepared';}
     } finally { releaseBefore(); }
     return;
@@ -118,9 +118,9 @@ export class ClaudeCapture {
     if (pair.phase !== 'prepared' || !this.current(pair) || signal.aborted) { await this.gap(pair, 'stale'); return; }
     pair.phase = 'finishing'; pair.outcome = outcome;
     const ok = await this.notify({ ...pair.identity, phase: 'after', toolInput: pair.input!, outcome }, [signal, pair.owner.revoked, pair.abort.signal]);
-    if (pair.phase !== 'finishing') {return;}
+    if (!inPhase(pair, 'finishing')) {return;}
     if (!ok) {await this.gap(pair, 'capture-failed');}
-    else if (!this.current(pair) || signal.aborted) {await this.gap(pair, 'stale');}
+    else if (!this.current(pair) || aborted(signal)) {await this.gap(pair, 'stale');}
     else {
       pair.phase = 'finished';
       if (background(raw) && this.observeBackground) {await this.registerBackground(pair, raw);}
@@ -140,7 +140,7 @@ export class ClaudeCapture {
     if (!Array.isArray(calls) || !calls.length || calls.length > this.options.maxPairs) {return {};}
     const known = await this.batchPairs(calls); if (!known) {return {};}
     const reject = async (reason: GapReason) => {await Promise.all(known.map(pair => this.gap(pair, reason)));};
-    if (known.some(pair => pair.background?.registered)) {
+    if (known.some(pair => pair.background?.registered === true)) {
       if (known.length !== 1) {await reject('batch-unqualified');}
       return {}; // A background placeholder batch never proves eventual completion.
     }
@@ -149,9 +149,9 @@ export class ClaudeCapture {
         pair.identity.operationRef !== first.identity.operationRef || pair.owner.nativeRef !== first.owner.nativeRef ||
         pair.owner.revoked !== first.owner.revoked)) {await reject('batch-unqualified'); return {};}
     const batch = digest(JSON.stringify(calls.map(call => [call.tool_use_id, call.tool_name])));
-    if (known.some(pair => pair.batch && pair.batch !== batch)) {await reject('conflict'); return {};}
+    if (known.some(pair => pair.batch !== undefined && pair.batch.length > 0 && pair.batch !== batch)) {await reject('conflict'); return {};}
     if (known.every(pair => pair.phase === 'completed' || pair.phase === 'completing')) {
-      await Promise.all(known.map(pair => pair.settlement)); return {};
+      await Promise.all(known.map(pair => pair.settlement ?? Promise.resolve())); return {};
     }
     if (known.some(pair => pair.phase === 'gap')) {await reject('batch-unqualified'); return {};}
     if (known.some(pair => pair.phase !== 'finished' || !this.current(pair)) || signal.aborted) {await reject('stale'); return {};}
@@ -201,14 +201,14 @@ export class ClaudeCapture {
   async finishInput(input: Readonly<{ inputId: string; operationRef: string }>, terminal?: 'succeeded' | 'failed' | 'unknown'): Promise<void> {
     if (!this.observeBatch && !this.observeBackground) {return;}
     const retained = [...this.pairs.values()].filter(pair => pair.identity.inputId === input.inputId && pair.identity.operationRef === input.operationRef);
-    for (const pair of retained.filter(value => value.background?.registered && live(value))) {
+    for (const pair of retained.filter(value => value.background?.registered === true && live(value))) {
       if (terminal !== 'succeeded' && terminal !== 'failed') {await this.gap(pair, 'stale'); continue;}
       // Retain provenance for observation only. No callback/permission or next-input authority survives.
       pair.background!.retained = true; pair.detach?.(); delete pair.detach;
     }
-    const foreground = retained.filter(pair => !pair.background?.registered);
+    const foreground = retained.filter(pair => pair.background?.registered !== true);
     if (this.observeBatch) {
-      await Promise.all(foreground.map(pair => pair.settlement));
+      await Promise.all(foreground.map(pair => pair.settlement ?? Promise.resolve()));
       await Promise.all(foreground.filter(live).map(pair => this.gap(pair, 'missing-batch')));
     }
   }
@@ -248,7 +248,7 @@ export class ClaudeCapture {
   private async registerBackground(pair: Pair, raw: ToolHook): Promise<void> {
     const response = 'tool_response' in raw ? raw.tool_response : undefined;
     const taskRef = ownString(response, 'backgroundTaskId') ?? pair.background?.taskRef;
-    if (!taskRef || pair.identity.toolName !== 'Bash' || !await this.associateTask(pair, taskRef, pair.background?.runRef)) {await this.gap(pair, 'background'); return;}
+    if (taskRef === undefined || taskRef.length === 0 || pair.identity.toolName !== 'Bash' || !await this.associateTask(pair, taskRef, pair.background?.runRef)) {await this.gap(pair, 'background'); return;}
     const overlapping = [...this.pairs.values()].filter(other => other !== pair && live(other));
     if (overlapping.length) {await Promise.all([pair, ...overlapping].map(value => this.gap(value, 'batch-unqualified'))); return;}
     const selected = pair.background!; selected.registered = true; pair.phase = 'background';
@@ -266,7 +266,8 @@ export class ClaudeCapture {
     const selected = pair.background!;
     if (selected.completion) {await selected.completion; return;}
     await selected.registration;
-    if (selected.completion) {await selected.completion; return;}
+    const completing = completion(selected);
+    if (completing !== undefined) {await completing; return;}
     if (!live(pair) || !selected.terminal) {return;}
     if (!this.currentBackground(pair)) {await this.gap(pair, 'stale'); return;}
     pair.phase = 'background-completing';
@@ -299,7 +300,7 @@ export class ClaudeCapture {
     if (!this.closed) {
       this.closed = true; this.lifetime.abort();
       for (const pair of this.pairs.values()) {
-        if (pair.phase !== 'completed' && (this.observeBatch || pair.phase !== 'finished') && pair.phase !== 'gap') {void this.gap(pair, 'closed');}
+        if (pair.phase !== 'completed' && (this.observeBatch !== undefined || pair.phase !== 'finished') && pair.phase !== 'gap') {void this.gap(pair, 'closed');}
       }
       this.pairs.clear(); this.backgroundTasks.clear(); this.unknown.clear(); this.bytes = 0;
     }
@@ -328,8 +329,8 @@ export class ClaudeCapture {
     await this.gap(pair, 'conflict'); return false;
   }
   private async gap(pair: Pair, reason: GapReason): Promise<void> {
-    pair.phase = 'gap'; if (this.observeBatch || this.observeBackground) {pair.abort.abort();} this.release(pair);
-    if (pair.gapSent) {return;}
+    pair.phase = 'gap'; if (this.observeBatch !== undefined || this.observeBackground !== undefined) {pair.abort.abort();} this.release(pair);
+    if (pair.gapSent === true) {return;}
     pair.gapSent = true;
     await this.notify({ ...pair.identity, phase: 'gap', reason }, [], true);
   }
@@ -341,7 +342,7 @@ export class ClaudeCapture {
     await this.notify({ ...identity, phase: 'gap', reason }, [], true);
   }
   private notify(request: WithoutSignal, signals: AbortSignal[], gap = false): Promise<boolean> {
-    return this.deliver(signal => this.observe(Object.freeze({ ...request, signal }) as ClaudeCaptureRequest), signals, gap);
+    return this.deliver(signal => this.observe(Object.freeze({ ...request, signal })), signals, gap);
   }
   private notifyBatch(request: Omit<ClaudeCaptureBatchRequest, 'signal'>, signals: AbortSignal[]): Promise<boolean> {
     return this.deliver(signal => this.observeBatch!(Object.freeze({ ...request, signal })), signals);
@@ -349,24 +350,28 @@ export class ClaudeCapture {
   private deliver(observe: (signal: AbortSignal) => Promise<void>, signals: AbortSignal[], gap = false): Promise<boolean> {
     const controller = new AbortController();
     const signal = AbortSignal.any([controller.signal, ...signals, ...(gap ? [] : [this.lifetime.signal])]);
-    const timer = setTimeout(() => controller.abort(), this.options.timeoutMs);
+    const timer = setTimeout(() => { controller.abort(); }, this.options.timeoutMs);
     let onAbort!: () => void;
     const work = (async () => {
       try {
         const observed = Promise.resolve(observe(signal));
         await Promise.race([observed, new Promise<never>((_resolve, reject) => {
-          onAbort = () => reject(new Error('Capture unavailable'));
+          onAbort = () => { reject(new Error('Capture unavailable')); };
           signal.addEventListener('abort', onAbort, { once: true }); if (signal.aborted) {onAbort();}
         })]);
         return !signal.aborted;
       } catch { return false; }
       finally { clearTimeout(timer); signal.removeEventListener('abort', onAbort); }
     })();
-    this.pending.add(work); void work.finally(() => this.pending.delete(work));
+    this.pending.add(work); void work.finally(() => { this.pending.delete(work); });
     return work;
   }
 }
 type GapReason = Extract<ClaudeCaptureRequest, { phase: 'gap' }>['reason'];
+// Read lifecycle state again after awaited consumer callbacks; earlier narrowing is not a fence.
+function inPhase(pair: Pair, phase: Pair['phase']): boolean { return pair.phase === phase; }
+function aborted(signal: AbortSignal): boolean { return signal.aborted; }
+function completion(selected: NonNullable<Pair['background']>): Promise<void> | undefined { return selected.completion; }
 function live(pair: Pair): boolean { return pair.phase !== 'completed' && pair.phase !== 'gap'; }
 function nativeId(value: unknown): value is string { return typeof value === 'string' && value.length > 0 && value.length <= 1024 && !/[\0\r\n]/u.test(value); }
 function taskStatus(value: unknown): value is 'completed' | 'failed' | 'stopped' {
@@ -377,26 +382,27 @@ function nativeTask(raw: Record<string, unknown>, session: string): raw is Recor
     raw.session_id === session && nativeId(raw.task_id);
 }
 function taskConflict(raw: Record<string, unknown>, pair: Pair, byTool: Pair | undefined): boolean {
-  return !!((byTool && byTool !== pair) || (raw.tool_use_id !== undefined && raw.tool_use_id !== pair.identity.toolUseId) ||
+  return ((byTool !== undefined && byTool !== pair) || (raw.tool_use_id !== undefined && raw.tool_use_id !== pair.identity.toolUseId) ||
     (raw.run_id !== undefined && !nativeId(raw.run_id)) || raw.agent_id !== undefined || raw.parent_task_id !== undefined ||
     raw.owned_by_subagent === true || (raw.subtype === 'task_started' && raw.task_type !== 'local_bash'));
 }
 function ownString(value: unknown, key: string): string | undefined {
-  if (!value || typeof value !== 'object') {return;}
+  if (value === null || typeof value !== 'object') {return;}
   const property = Object.getOwnPropertyDescriptor(value, key);
-  return property && 'value' in property && nativeId(property.value) ? property.value : undefined;
+  const owned: unknown = property !== undefined && 'value' in property ? property.value : undefined;
+  return nativeId(owned) ? owned : undefined;
 }
 function background(raw: ToolHook): boolean {
-  const input = raw.tool_input, response = 'tool_response' in raw ? raw.tool_response : undefined;
-  return (!!input && typeof input === 'object' && 'run_in_background' in input && input.run_in_background === true) ||
-    (!!response && typeof response === 'object' && 'backgroundTaskId' in response && typeof response.backgroundTaskId === 'string');
+  const input: unknown = raw.tool_input, response: unknown = 'tool_response' in raw ? raw.tool_response : undefined;
+  return (input !== null && typeof input === 'object' && 'run_in_background' in input && input.run_in_background === true) ||
+    (response !== null && typeof response === 'object' && 'backgroundTaskId' in response && typeof response.backgroundTaskId === 'string');
 }
 type WithoutSignal = ClaudeCaptureRequest extends infer R ? R extends ClaudeCaptureRequest ? Omit<R, 'signal'> : never : never;
 function digest(value: string): string { return createHash('sha256').update(value).digest('hex'); }
 function inputDigest(value: ClaudeCaptureValue): string {
   // Native hook phases may reorder defaulted object keys; arrays and every value remain significant.
   return digest(JSON.stringify(value, (_key, item: ClaudeCaptureValue) => {
-    if (!item || typeof item !== 'object' || Array.isArray(item)) {return item;}
+    if (item === null || typeof item !== 'object' || Array.isArray(item)) {return item;}
     const fields = item as Readonly<Record<string, ClaudeCaptureValue>>;
     return Object.fromEntries(Object.keys(fields).toSorted().map(key => [key, fields[key]]));
   }));
@@ -409,7 +415,7 @@ function copyValue(value: unknown, maxBytes: number): ClaudeCaptureValue {
     if (item === null || typeof item === 'boolean') {return item;}
     if (typeof item === 'number' && Number.isFinite(item)) {return item;}
     if (typeof item === 'string') { bytes -= Buffer.byteLength(item); if (bytes < 0) {throw new Error('Capture input limit');} return item; }
-    if (!item || typeof item !== 'object' || seen.has(item)) {throw new Error('Capture input shape');}
+    if (typeof item !== 'object' || seen.has(item)) {throw new Error('Capture input shape');}
     seen.add(item);
     try {
       if (Array.isArray(item)) {return Object.freeze(Array.from(item, entry => copy(entry, depth + 1)));}

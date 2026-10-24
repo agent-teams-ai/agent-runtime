@@ -31,7 +31,7 @@ function expectedModel(rows: ModelInfo[], selected: string, effort?: ClaudeModel
   if (matches.length > 1) { throw new Error('claude.probe.invalid-response'); }
   const resolved = matches[0]?.resolvedModel ?? base;
   const capabilities = matches.length ? matches : rows.filter(row => record(row).resolvedModel === base);
-  if (effort !== undefined && (!capabilities.length || capabilities.some(row => !row.supportedEffortLevels?.includes(effort)))) {
+  if (effort !== undefined && (!capabilities.length || capabilities.some(row => row.supportedEffortLevels?.includes(effort) !== true))) {
     throw new Error('claude.probe.invalid-response');
   }
   if (typeof resolved !== 'string' || !resolved || resolved.length > 256 || /[\0\r\n]/u.test(resolved)) { throw new Error('claude.probe.invalid-response'); }
@@ -68,9 +68,9 @@ async function consume(native: AsyncIterable<unknown>, expected: string, session
   const iterator = native[Symbol.asyncIterator]();
   for (;;) {
     const next = await iterator.next();
-    if (next.done) { return false; }
+    if (next.done === true) { return false; }
     const raw = next.value;
-    bytes += Buffer.byteLength(JSON.stringify(raw) ?? ''); events++;
+    bytes += Buffer.byteLength(serialized(raw)); events++;
     if (bytes > 512 * 1024 || events > 256) { throw new Error('claude.probe.output-limit'); }
     const value = record(raw);
     if (value.type === 'system' && value.subtype === 'init') {
@@ -86,6 +86,11 @@ async function consume(native: AsyncIterable<unknown>, expected: string, session
   }
 }
 
+function signalAborted(signal: AbortSignal | undefined): boolean { return signal?.aborted === true; }
+function serialized(value: unknown): string {
+  const json: unknown = JSON.stringify(value);
+  return typeof json === 'string' ? json : '';
+}
 function probeFailure(error: unknown): Error {
   const code = error instanceof Error && ['claude.probe.timeout', 'claude.probe.cancelled', 'claude.probe.invalid-response', 'claude.probe.output-limit'].includes(error.message) ? error.message : 'claude.probe.unavailable';
   return new Error(code);
@@ -95,18 +100,20 @@ function probeFailure(error: unknown): Error {
 export async function probeClaudeModel(selected: ClaudeModelProbeConfig, signal?: AbortSignal, sdk: ClaudeModelProbeBoundary = { query }): Promise<boolean> {
   const parsed = configuration.safeParse(selected);
   if (!parsed.success) { throw new Error('claude.probe.invalid-config'); }
-  if (signal?.aborted) { throw new Error('claude.probe.cancelled'); }
+  if (signal?.aborted === true) { throw new Error('claude.probe.cancelled'); }
   const captured = parsed.data;
   const abortController = new AbortController();
   const session = randomUUID();
   let inputSealed = false;
+  // A timeout can seal input while native metadata or the generator is awaiting.
+  const sealed = (): boolean => inputSealed;
   let release!: () => void;
   const ready = new Promise<void>(resolve => { release = resolve; });
   let releaseInput!: () => void;
   const held = new Promise<void>(resolve => { releaseInput = resolve; });
   const prompt = (async function* (): AsyncGenerator<SDKUserMessage> {
     await ready;
-    if (!inputSealed && !abortController.signal.aborted && !signal?.aborted && captured.canSubmit()) {
+    if (!sealed() && !abortController.signal.aborted && signal?.aborted !== true && captured.canSubmit()) {
       yield { type: 'user', uuid: randomUUID(), session_id: session, parent_tool_use_id: null,
         message: { role: 'user', content: 'Reply only OK. Do not use tools, access files or run commands.' } };
     }
@@ -119,10 +126,10 @@ export async function probeClaudeModel(selected: ClaudeModelProbeConfig, signal?
   let failed: Error | undefined;
   try {
     const cancelled = new Promise<never>((_resolve, reject) => {
-      cancel = () => reject(new Error('claude.probe.cancelled'));
+      cancel = () => { reject(new Error('claude.probe.cancelled')); };
       signal?.addEventListener('abort', cancel, { once: true });
     });
-    const timeout = new Promise<never>((_resolve, reject) => { timer = setTimeout(() => reject(new Error('claude.probe.timeout')), captured.timeoutMs); });
+    const timeout = new Promise<never>((_resolve, reject) => { timer = setTimeout(() => { reject(new Error('claude.probe.timeout')); }, captured.timeoutMs); });
     native = sdk.query({ prompt, options: {
       cwd: captured.cwd, pathToClaudeCodeExecutable: captured.executablePath,
       env: { ...captured.environment }, settingSources: [...(captured.settingSources ?? [])],
@@ -136,12 +143,12 @@ export async function probeClaudeModel(selected: ClaudeModelProbeConfig, signal?
     } });
     const read = (async (active: NonNullable<typeof native>) => {
       const expected = expectedModel(await active.supportedModels(), captured.model, captured.effort);
-      if (inputSealed || signal?.aborted || abortController.signal.aborted || !captured.canSubmit()) { throw new Error('claude.probe.cancelled'); }
+      if (sealed() || signal?.aborted === true || abortController.signal.aborted || !captured.canSubmit()) { throw new Error('claude.probe.cancelled'); }
       release();
       return consume(active, expected, session, captured.context === 'one-million' || captured.model.endsWith('[1m]'));
     })(native);
     result = await Promise.race([read, timeout, cancelled]);
-    if (signal?.aborted || !captured.canSubmit()) { result = false; }
+    if (signalAborted(signal) || !captured.canSubmit()) { result = false; }
   } catch (error) {
     failed = probeFailure(error);
   } finally {
@@ -150,7 +157,8 @@ export async function probeClaudeModel(selected: ClaudeModelProbeConfig, signal?
     if (timer !== undefined) { clearTimeout(timer); }
     if (cancel) { signal?.removeEventListener('abort', cancel); }
     try {
-      if (await captured.confirmStopped() !== true) { failed = new Error('claude.probe.cleanup-unconfirmed'); }
+      const confirmed: unknown = await captured.confirmStopped();
+      if (confirmed !== true) { failed = new Error('claude.probe.cleanup-unconfirmed'); }
     } catch { failed = new Error('claude.probe.cleanup-unconfirmed'); }
     abortController.abort(); release(); releaseInput();
     try { native?.close(); } catch { failed = new Error('claude.probe.cleanup-unconfirmed'); }

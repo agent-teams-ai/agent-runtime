@@ -49,8 +49,8 @@ export class OpenCodeDriverSession implements Session {
       || this.queued.some(item => item.input.inputId === input.inputId || item.input.operationRef === input.operationRef)) {return Promise.resolve(failure('stale', true))}
     if (this.queued.length >= this.config.limits.queuedInputs) {return Promise.resolve(failure('backpressure', true))}
     const nativeId = 'msg_' + createHash('sha256').update(JSON.stringify([this.config.trustedBinding,
-      this.config.nativeSessionId, this.sessionRef, input.inputId, input.operationRef, ...(input.attachments?.length ? [inputFingerprint(input)] : [])])).digest('hex')
-    const pending: Pending = { input, nativeId, done: deferred(), handed: false, preparing: !!input.attachments?.length, interactionsRevoked: false, interactionAbort: new AbortController() }
+      this.config.nativeSessionId, this.sessionRef, input.inputId, input.operationRef, ...((input.attachments?.length ?? 0) > 0 ? [inputFingerprint(input)] : [])])).digest('hex')
+    const pending: Pending = { input, nativeId, done: deferred(), handed: false, preparing: (input.attachments?.length ?? 0) > 0, interactionsRevoked: false, interactionAbort: new AbortController() }
     this.queued.push(pending); this.wake(); return pending.done.promise
   }
   observe(): AsyncIterable<Event> { return this.feed }
