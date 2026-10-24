@@ -157,6 +157,7 @@ test('interactive TEST proof is additive, mandatory once, and executes the real 
     value => { workflowObject(value.scripts).check = 'pnpm build && pnpm test && pnpm typecheck'; },
     value => { workflowObject(value.scripts).check = 'pnpm build && pnpm typecheck && pnpm test && pnpm test'; },
     value => { workflowObject(value.scripts).build = 'true'; },
+    value => { workflowObject(value.scripts).build = 'tsc -p tsconfig.build.json'; },
     value => { workflowObject(value.scripts).typecheck = 'tsc -p tsconfig.build.json'; },
     value => { workflowObject(value.scripts).test = 'node --test test/session.test.ts'; },
     value => { delete workflowObject(value.scripts).test; },

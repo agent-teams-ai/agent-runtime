@@ -279,7 +279,7 @@
     },
     {
       "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/input-window-capture.ts",
-      "sha256": "1e7c5a1916bb3c3f2be692592601c72e0c9a3ba978bebd0d5b7a99c35eeed185"
+      "sha256": "e5c1a38c90df3575f2c38f6932196a591b4e4d7b5524ef82ac544d128616d2f7"
     },
     {
       "path": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/query-path.ts",
@@ -599,7 +599,7 @@
     },
     {
       "path": "packages/platform/provider-implementations/tests/features/provider-session-implementation/opencode-protocol/input-window-capture.test.ts",
-      "sha256": "69b170424fee6cbe655e7cb95cb020a520f66baf8518b5703dc24d60d470d392"
+      "sha256": "39dd99c74d3ecd979974f40c64c095f889b74dd8cbf5ec2a669bcdb2ea23763b"
     },
     {
       "path": "packages/platform/provider-implementations/tests/features/provider-session-implementation/opencode-protocol/protocol.test.ts",
@@ -737,15 +737,15 @@
   "evidence": [
     {
       "path": "architecture/sdk-growth/evidence/provider-migration-node24-provider-stdout.txt",
-      "sha256": "d79c5dfd3ff0c7fec0c42dfe53f5e6bb9e633f13900666c8df56d79456080b72"
+      "sha256": "c56dcf8325cd0cfd84478f671517c614d2a303928718b07218f2dac7b8abcb07"
     },
     {
       "path": "architecture/sdk-growth/evidence/provider-migration-node24-provider-meta.json",
-      "sha256": "a7aca676ecd47a76678a31816a12148d38da3a58f0655c7c3c46eab98faf2e63"
+      "sha256": "9ee4b29d980f2945751be155f391d947b07ab09fbe84366a434b53964a094c73"
     },
     {
       "path": "architecture/sdk-growth/evidence/provider-migration-node24-provider-state.json",
-      "sha256": "1dd125d19124ef285809dc11392e76a71bcce020409773783a3829f142bfd01e"
+      "sha256": "367f393a78b3224cf774d6918cec6fcf8dbbec65046e48a84968f15de84b478a"
     },
     {
       "path": "architecture/sdk-growth/evidence/provider-migration-node24-owner-stdout.txt",
@@ -761,31 +761,31 @@
     },
     {
       "path": "architecture/sdk-growth/evidence/provider-migration-node24-packed-stdout.txt",
-      "sha256": "e2f19cc771d7777ed1c5d2a07969f90fc24f3afe760c52d0afee3dfb05a9a083"
+      "sha256": "6ef70a541283911e9aa846418fe18349c018bb5d56cf0ea03a8ec3ab2effa3df"
     },
     {
       "path": "architecture/sdk-growth/evidence/provider-migration-node24-packed-meta.json",
-      "sha256": "f8a61235fb1a64d055243db8197bf2936337c423e98d02085f00330f72cbb14f"
+      "sha256": "f0d91a45f4d34a102e30f41e1f8e36ff09a090dcb9ec3286f7481ccbd496666e"
     },
     {
       "path": "architecture/sdk-growth/evidence/provider-migration-node24-packed-state.json",
-      "sha256": "2ee7dfb74893b2a1e8689a240644a77a62516916ac9c078d9178d1e18c30960e"
+      "sha256": "a833b333ec3544f6be865a993bc96140574d128ff14333317d31b0c96c2ad3a9"
     },
     {
       "path": "architecture/sdk-growth/evidence/provider-migration-node24-packed-receipt.json",
-      "sha256": "e2f19cc771d7777ed1c5d2a07969f90fc24f3afe760c52d0afee3dfb05a9a083"
+      "sha256": "6ef70a541283911e9aa846418fe18349c018bb5d56cf0ea03a8ec3ab2effa3df"
     },
     {
       "path": "architecture/sdk-growth/evidence/provider-migration-node26-provider-stdout.txt",
-      "sha256": "ad05e2e0687c17793eed609fa6cf1d19cb8a60abf85d93e1fed910dc1c3a7d08"
+      "sha256": "7e8035cbc84549532ac8cbd4919707f45fbfc58a00e5e1440d9bd1d35cb0285c"
     },
     {
       "path": "architecture/sdk-growth/evidence/provider-migration-node26-provider-meta.json",
-      "sha256": "03e31d8cf4cb97c55413215347cacde9e72ff8006dc48029c6cf17d8286a6a7d"
+      "sha256": "d5d8c7611bb312a717552538d5c3cd02b0621738fbc63ed8b6d8af7133ec4870"
     },
     {
       "path": "architecture/sdk-growth/evidence/provider-migration-node26-provider-state.json",
-      "sha256": "aaa55a78675c9e1f662c63a9ec72a264a3c9fbff2702c899c1d48416a7216e54"
+      "sha256": "5101fcbcd6ad054023d84c98aca3c04e39f0176fa253de600b2897e4cc551ca3"
     },
     {
       "path": "architecture/sdk-growth/evidence/provider-migration-node26-owner-stdout.txt",
@@ -801,30 +801,30 @@
     },
     {
       "path": "architecture/sdk-growth/evidence/provider-migration-node26-packed-stdout.txt",
-      "sha256": "e81ab211920dfe7e960ea9a7aeba4e58d3fd6937caf18e3b2f42c0525499ecc4"
+      "sha256": "51afd5bd5cb7a21cd8ab2fb020a20d97c54d6cf19d3617155972c65d6e0ba2b8"
     },
     {
       "path": "architecture/sdk-growth/evidence/provider-migration-node26-packed-meta.json",
-      "sha256": "7fd1530e3f69c52fd34ca6e393f08678dcbb7fca006f90ec56c5b8ddc96b5712"
+      "sha256": "8b42dd5fdbbb9d0eccf513369aeb7725c5b3a9137be827027f44f21e9bc935e8"
     },
     {
       "path": "architecture/sdk-growth/evidence/provider-migration-node26-packed-state.json",
-      "sha256": "0f0b712c208dc4136c5d63b51e84e850ebf010e7a0871b871b570a4807ac77a7"
+      "sha256": "b6bead87197b173f73dfd1703aba5f3ce1c4018edb9b8b39da732abbe489381d"
     },
     {
       "path": "architecture/sdk-growth/evidence/provider-migration-node26-packed-receipt.json",
-      "sha256": "e81ab211920dfe7e960ea9a7aeba4e58d3fd6937caf18e3b2f42c0525499ecc4"
+      "sha256": "51afd5bd5cb7a21cd8ab2fb020a20d97c54d6cf19d3617155972c65d6e0ba2b8"
     },
     {
       "path": "architecture/sdk-growth/evidence/provider-migration-selected-provider-dist.json",
-      "sha256": "b3a54a5c940b2f3aebce850f18275957aa8b141faeb3687cb318b39829456c28"
+      "sha256": "f8daa12f72ed195f4a3e58c60143ef9159185fb3248420bdd5bfb14b3d0cc5eb"
     }
   ],
   "engines": [
     {
       "node": "v24.21.0",
       "provider": {
-        "jobId": "4322a75912f15ff04e5a2f136d93ac1e",
+        "jobId": "a34231f46559b8a2247f595ce3d21a1a",
         "log": "architecture/sdk-growth/evidence/provider-migration-node24-provider-stdout.txt",
         "invocation": "architecture/sdk-growth/evidence/provider-migration-node24-provider-meta.json",
         "completion": "architecture/sdk-growth/evidence/provider-migration-node24-provider-state.json",
@@ -838,7 +838,7 @@
         "tests": 26
       },
       "packed": {
-        "jobId": "9fbc1222720f393e174a039898271ad1",
+        "jobId": "c33cf9ad0012219bb1f73bb71cd0dfb2",
         "log": "architecture/sdk-growth/evidence/provider-migration-node24-packed-stdout.txt",
         "invocation": "architecture/sdk-growth/evidence/provider-migration-node24-packed-meta.json",
         "completion": "architecture/sdk-growth/evidence/provider-migration-node24-packed-state.json",
@@ -850,7 +850,7 @@
     {
       "node": "v26.11.1",
       "provider": {
-        "jobId": "c088b42465d7da6928e7f12b11dce27a",
+        "jobId": "26e999724b237a6de9f1aed71c73c7fc",
         "log": "architecture/sdk-growth/evidence/provider-migration-node26-provider-stdout.txt",
         "invocation": "architecture/sdk-growth/evidence/provider-migration-node26-provider-meta.json",
         "completion": "architecture/sdk-growth/evidence/provider-migration-node26-provider-state.json",
@@ -864,7 +864,7 @@
         "tests": 26
       },
       "packed": {
-        "jobId": "2ee86dd453b2c0aee93636e2b7c9efed",
+        "jobId": "e450c0d615060e214945bac4804445c6",
         "log": "architecture/sdk-growth/evidence/provider-migration-node26-packed-stdout.txt",
         "invocation": "architecture/sdk-growth/evidence/provider-migration-node26-packed-meta.json",
         "completion": "architecture/sdk-growth/evidence/provider-migration-node26-packed-state.json",

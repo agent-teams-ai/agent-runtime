@@ -1,6 +1,6 @@
 {
   "job": {
-    "id": "2ee86dd453b2c0aee93636e2b7c9efed"
+    "id": "e450c0d615060e214945bac4804445c6"
   },
   "schema_version": "0.5",
   "command": [
@@ -20,7 +20,7 @@
     "/usr/local/bin/node",
     "scripts/architecture/qualify-sdk-packages.mjs"
   ],
-  "created_at": "2026-10-24T04:24:24Z",
+  "created_at": "2026-10-24T05:18:17Z",
   "root": "/Users/belief/.codex/plugins/data/agent-plugins/1c1e9d402d2702d970a503b8b40bb29f94f43144d4dd7f794c2ba39db32ac96b/jobs",
   "env_keys": [],
   "cwd": "/Users/belief/dev/projects/agent-teams-ai/_worktrees/runtime-provider-legacy-host",

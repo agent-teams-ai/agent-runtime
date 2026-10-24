@@ -21,7 +21,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json",
+    "build": "pnpm --filter '@agent-teams/interactive-provider-contract-experiment^...' -r run build && tsc -p tsconfig.build.json",
     "typecheck": "tsc -p tsconfig.json",
     "test": "node --test test/session.test.ts test/failures.test.ts test/fixture-host.test.ts test/live-preflight.test.ts",
     "check": "pnpm build && pnpm typecheck && pnpm test",

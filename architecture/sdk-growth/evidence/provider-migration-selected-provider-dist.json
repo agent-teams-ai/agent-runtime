@@ -1,35 +1,51 @@
 {
   "rootBuildAndPack": {
-    "archive": "/Users/belief/.codex/worktrees/provider-migration-two-stage-plan/old-agent-teams-frontend/vendor/provider-migration/claude-idle-notification-v1/agent-teams-provider-implementations-0.0.0.tgz",
-    "sha256": "c3a303cf9172219565fecc3d78cada36af41d3a878d0518ebd1c61898b44db00",
+    "archive": "/Volumes/Transcend/dev/TEST-D-ci-successor-20261024/artifacts/agent-teams-provider-implementations-0.0.0.tgz",
+    "sha256": "17f3294ef85b56503d049e00f794bd9fc2c2a00540048a291387da3cb79a7e2a",
     "regularMembers": 209,
     "distMembers": 206,
-    "delta": [
-      "package/dist/features/provider-session-implementation/adapters/claude-sdk/session.js"
+    "sourceDistMismatch": [],
+    "predecessor": "/Users/belief/.codex/worktrees/provider-migration-two-stage-plan/old-agent-teams-frontend/vendor/provider-migration/claude-idle-notification-v1/agent-teams-provider-implementations-0.0.0.tgz",
+    "predecessorSha256": "c3a303cf9172219565fecc3d78cada36af41d3a878d0518ebd1c61898b44db00",
+    "changedMembers": [
+      "package/dist/features/provider-session-implementation/adapters/opencode-protocol/input-window-capture.js"
     ],
     "removed": [],
-    "sourceDistMismatch": [],
-    "installJob": "f2acb19644ab6762b0b429a12a4b0198",
-    "hostDirectBuildJob": "b7dd386f095020cb0d56e3df647e53bb",
-    "hostCorepackBuildIncident": "22fc41ce510490df7e6793a907af94f3: exited0 but inherited PATH invoked Node26/pnpm automatic install+Electron rebuild; not claimed N24 qualification",
-    "lockSha256": "8e2f70ef02e760f78a6d9f74a50effd77f1744e29d4a1dcc3d4e17c62905d621"
+    "nonDistMembers": [
+      {
+        "path": "package/package.json",
+        "sha256": "f11ac05990403897a3882ca46848d78b39fcb71f42465c60be89919dd7904a35",
+        "predecessorIdentical": true
+      },
+      {
+        "path": "package/README.md",
+        "sha256": "c69d5fb3b2180866be0a62c83f39b1ac7dce8eff395c34613a262402bc787e2e",
+        "predecessorIdentical": true
+      },
+      {
+        "path": "package/LICENSE",
+        "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+        "predecessorIdentical": true
+      }
+    ],
+    "scope": "206 provider dist members exactly match owning D; packed metadata only compared against predecessor, not source-equivalence."
   },
   "comparisons": [
     {
-      "archive": "/Users/belief/.codex/worktrees/provider-migration-two-stage-plan/old-agent-teams-frontend/vendor/provider-migration/claude-idle-notification-v1/agent-teams-provider-implementations-0.0.0.tgz",
-      "sha256": "c3a303cf9172219565fecc3d78cada36af41d3a878d0518ebd1c61898b44db00",
+      "archive": "/Volumes/Transcend/dev/TEST-D-ci-successor-20261024/artifacts/agent-teams-provider-implementations-0.0.0.tgz",
+      "sha256": "17f3294ef85b56503d049e00f794bd9fc2c2a00540048a291387da3cb79a7e2a",
       "distMembersCompared": 206,
       "mismatches": []
     },
     {
-      "archive": "/Volumes/Transcend/dev/TEST-D-gate-prep-ab2k6vsi/tmp/ar-sdk-packed-TBXBKQ/archives/provider-implementations/agent-teams-provider-implementations-0.0.0.tgz",
-      "sha256": "59b2fd7b123bbf1614130c1c3b78dd05dc34772edc09a1613455140572f6793a",
+      "archive": "/Volumes/Transcend/dev/TEST-D-gate-prep-ab2k6vsi/tmp/ar-sdk-packed-r27GIU/archives/provider-implementations/agent-teams-provider-implementations-0.0.0.tgz",
+      "sha256": "1b73e170e31931b3b5bed81aba182d00dda99302c8467b2d415526072abecd34",
       "distMembersCompared": 206,
       "mismatches": []
     },
     {
-      "archive": "/Volumes/Transcend/dev/TEST-D-gate-prep-ab2k6vsi/tmp/ar-sdk-packed-9HJRty/archives/provider-implementations/agent-teams-provider-implementations-0.0.0.tgz",
-      "sha256": "59b2fd7b123bbf1614130c1c3b78dd05dc34772edc09a1613455140572f6793a",
+      "archive": "/Volumes/Transcend/dev/TEST-D-gate-prep-ab2k6vsi/tmp/ar-sdk-packed-754cUY/archives/provider-implementations/agent-teams-provider-implementations-0.0.0.tgz",
+      "sha256": "1b73e170e31931b3b5bed81aba182d00dda99302c8467b2d415526072abecd34",
       "distMembersCompared": 206,
       "mismatches": []
     }

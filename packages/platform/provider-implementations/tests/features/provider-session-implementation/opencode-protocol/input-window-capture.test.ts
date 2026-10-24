@@ -108,7 +108,7 @@ test('before/after/gap failures never deny native work; interrupted terminal kee
   assert(a.events.some(value => value.kind === 'result' && value.outcome === 'cancelled'))
 })
 
-test('bounded metadata refuses oversized observations without fabricating an image or blocking terminal observation', async () => {
+test('bounded metadata refuses oversized or malformed observations without fabricating an image or blocking terminal observation', async () => {
   const { OpenCodeInputWindowCapture } = await import('../../../../src/features/provider-session-implementation/adapters/opencode-protocol/input-window-capture.ts')
   const requests: OpenCodeInputWindowRequest[] = []
   const capture = new OpenCodeInputWindowCapture({ identity: { sessionRef: 'TEST', windowRef: 'TEST-window', inputId: 'TEST-input', operationRef: 'TEST-op', nativeSessionId: 'ses_TEST' },
@@ -119,6 +119,18 @@ test('bounded metadata refuses oversized observations without fabricating an ima
   const final = requests.find(value => value.phase === 'after'); assert(final?.phase === 'after')
   assert.equal(final.gapReason, 'limit'); assert.deepEqual(final.items, [])
   assert(requests.some(value => value.phase === 'gap' && value.reason === 'limit'))
+  for (const field of ['messageId', 'startedAt', 'metadata'] as const) {
+    const invalidRequests: OpenCodeInputWindowRequest[] = []
+    const invalid = new OpenCodeInputWindowCapture({ identity: { sessionRef: 'TEST', windowRef: `TEST-invalid-${field}`, inputId: 'TEST-input', operationRef: 'TEST-op', nativeSessionId: 'ses_TEST' },
+      port: { observe: value => {invalidRequests.push(value)} }, abort: new AbortController().signal, timeoutMs: 100, maxItems: 1, maxBytes: 1024 })
+    const item = { messageId: 'msg_TESTassistant', partId: 'prt_TEST', callId: 'TEST-call', tool: 'edit', status: 'completed', input: null, metadata: null, startedAt: 1, completedAt: 2 }
+    if (field === 'metadata') {Reflect.deleteProperty(item, field)} else {Reflect.set(item, field, false)}
+    await invalid.before()
+    await invalid.after('msg_TEST', 'succeeded', [item])
+    const invalidFinal = invalidRequests.find(value => value.phase === 'after'); assert(invalidFinal?.phase === 'after')
+    assert.equal(invalidFinal.gapReason, 'limit', field); assert.deepEqual(invalidFinal.items, [], field)
+    assert(invalidRequests.some(value => value.phase === 'gap' && value.reason === 'limit'), field)
+  }
 })
 
 test('optional capture getter is read once and an initially absent changing port never bypasses snapshot', async t => {

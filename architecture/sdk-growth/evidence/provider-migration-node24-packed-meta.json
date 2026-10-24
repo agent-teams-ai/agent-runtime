@@ -1,6 +1,6 @@
 {
   "job": {
-    "id": "9fbc1222720f393e174a039898271ad1"
+    "id": "c33cf9ad0012219bb1f73bb71cd0dfb2"
   },
   "schema_version": "0.5",
   "command": [
@@ -20,7 +20,7 @@
     "/Users/belief/.codex/worktrees/provider-migration-two-stage-plan/old-agent-teams-frontend/resources/legacy-agent-host/node/v24.21.0/darwin-arm64/node",
     "scripts/architecture/qualify-sdk-packages.mjs"
   ],
-  "created_at": "2026-10-24T04:25:03Z",
+  "created_at": "2026-10-24T05:18:40Z",
   "root": "/Users/belief/.codex/plugins/data/agent-plugins/1c1e9d402d2702d970a503b8b40bb29f94f43144d4dd7f794c2ba39db32ac96b/jobs",
   "env_keys": [],
   "cwd": "/Users/belief/dev/projects/agent-teams-ai/_worktrees/runtime-provider-legacy-host",

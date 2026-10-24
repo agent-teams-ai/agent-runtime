@@ -24,6 +24,20 @@ function freeze(value: unknown, depth = 0): OpenCodeCaptureValue {
   if (value && typeof value === 'object') {return Object.freeze(Object.fromEntries(Object.entries(value).map(([key, item]) => [key, freeze(item, depth + 1)])))}
   throw new Error('capture-value')
 }
+function inputWindowItem(value: unknown): value is OpenCodeInputWindowItem {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) {return false}
+  if (!['messageId', 'partId', 'callId', 'tool', 'status'].every(key => typeof Reflect.get(value, key) === 'string')) {return false}
+  if (!['input', 'metadata'].every(key => Object.hasOwn(value, key))) {return false}
+  return ['startedAt', 'completedAt'].every(key => {
+    const time: unknown = Reflect.get(value, key)
+    return time === null || typeof time === 'number' && Number.isFinite(time)
+  })
+}
+function snapshotItems(serialized: string): readonly OpenCodeInputWindowItem[] {
+  const items = freeze(JSON.parse(serialized))
+  if (!Array.isArray(items) || !items.every(inputWindowItem)) {throw new Error('capture-item')}
+  return items
+}
 type Options = { identity: Identity; port: OpenCodeInputWindowPort; abort: AbortSignal; timeoutMs: number; maxItems: number; maxBytes: number }
 export class OpenCodeInputWindowCapture {
   private readonly options: Options
@@ -47,7 +61,7 @@ export class OpenCodeInputWindowCapture {
       if (values.length > this.options.maxItems) {throw new Error('capture-count')}
       const serialized = JSON.stringify(values)
       if (Buffer.byteLength(serialized) > this.options.maxBytes) {throw new Error('capture-bytes')}
-      items = freeze(JSON.parse(serialized)) as unknown as readonly OpenCodeInputWindowItem[]
+      items = snapshotItems(serialized)
     } catch {this.gap('limit')}
     const reason = await this.notify({ ...this.identity, phase: 'after', nativeInputId, outcome, items,
       beforeObserved: this.observed, ...(this.invalid ? { gapReason: this.invalid } : {}) }, !!this.invalid)

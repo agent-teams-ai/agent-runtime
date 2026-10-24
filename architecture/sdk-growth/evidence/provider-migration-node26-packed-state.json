@@ -1,16 +1,16 @@
 {
   "job": {
-    "id": "2ee86dd453b2c0aee93636e2b7c9efed",
+    "id": "e450c0d615060e214945bac4804445c6",
     "status": "exited",
-    "started_at": "2026-10-24T04:24:24Z"
+    "started_at": "2026-10-24T05:18:17Z"
   },
   "result": {
     "exit_code": 0,
     "signal": null,
-    "duration_ms": 18257
+    "duration_ms": 16269
   },
-  "pid": 6132,
-  "finished_at": "2026-10-24T04:24:43Z",
-  "updated_at": "2026-10-24T04:24:43Z",
+  "pid": 24751,
+  "finished_at": "2026-10-24T05:18:34Z",
+  "updated_at": "2026-10-24T05:18:34Z",
   "logs_drained": true
 }

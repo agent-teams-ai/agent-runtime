@@ -15,6 +15,7 @@ const handles = guardHandles();
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../..");
 const packagePaths = [
+  "packages/platform/provider-session-contracts",
   "packages/platform/filesystem-custody",
   "packages/contexts/runtime-security",
   "packages/contexts/runtime-configuration",
