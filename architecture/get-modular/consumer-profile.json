@@ -6586,9 +6586,15 @@
         "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters"
       ],
       "entrypoints": [
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/capture.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/config.ts",
         "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/factory.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/interactions.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/metadata.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/model-probe.ts",
         "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/normalize.ts",
         "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/open-session.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/subagents.ts",
         "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/tool-binding.ts",
         "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/app-server.ts",
         "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/approval-request.ts",
@@ -6596,6 +6602,14 @@
         "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/driver-config.ts",
         "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/driver-factory.ts",
         "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/exec-jsonl.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/input-window-capture.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/mcp-catalog-probe.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/mcp-catalog.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/mcp-policy.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/mcp-status.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/model-options.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/model-probe-config.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/model-probe.ts",
         "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/rpc-client.ts",
         "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/rpc-types.ts",
         "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/session-types.ts",
@@ -6606,6 +6620,7 @@
         "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/OpenCodeSseEventStream.ts",
         "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/bound-session.ts",
         "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/canonical-message-types.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/input-window-capture.ts",
         "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/session-binding-types.ts",
         "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/session-bindings.ts",
         "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/terminal-proof.ts",
@@ -6624,6 +6639,8 @@
         "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-projection-types.ts",
         "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-session-control.ts",
         "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-turn-projection.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/provider-session-io/attachments.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/provider-session-io/extra-argv.ts",
         "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/provider-session-io/io.ts"
       ],
       "status": "not-adopted",
@@ -6662,6 +6679,11 @@
         },
         {
           "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/session.ts",
+          "to": "@agent-teams/provider-session-contracts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/subagents.ts",
           "to": "@agent-teams/provider-session-contracts",
           "mode": "type-only"
         },
@@ -6756,6 +6778,16 @@
           "mode": "type-only"
         },
         {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/user-questions.ts",
+          "to": "@agent-teams/provider-session-contracts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/user-questions.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/contracts/codex-approval.ts",
+          "mode": "type-only"
+        },
+        {
           "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/driver-protocol.ts",
           "to": "@agent-teams/provider-session-contracts",
           "mode": "type-only"
@@ -6797,6 +6829,11 @@
         },
         {
           "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-driver-output.ts",
+          "to": "@agent-teams/provider-session-contracts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/provider-session-io/attachments.ts",
           "to": "@agent-teams/provider-session-contracts",
           "mode": "type-only"
         }
@@ -6854,6 +6891,11 @@
         },
         {
           "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/capture.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
           "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/factory.ts",
           "mode": "runtime"
         },
@@ -6864,12 +6906,37 @@
         },
         {
           "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/metadata.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/metadata.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/model-probe.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/model-probe.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
           "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/open-session.ts",
           "mode": "runtime"
         },
         {
           "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
           "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/open-session.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/subagents.ts",
           "mode": "type-only"
         },
         {
@@ -6926,6 +6993,56 @@
           "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
           "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/exec-jsonl.ts",
           "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/mcp-catalog-probe.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/mcp-catalog-probe.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/mcp-catalog.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/mcp-catalog.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/mcp-policy.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/mcp-policy.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/model-options.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/model-options.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/model-probe-config.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/model-probe.ts",
+          "mode": "runtime"
         },
         {
           "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
@@ -7085,6 +7202,11 @@
         {
           "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
           "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-turn-projection.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/provider-session-io/extra-argv.ts",
           "mode": "runtime"
         },
         {

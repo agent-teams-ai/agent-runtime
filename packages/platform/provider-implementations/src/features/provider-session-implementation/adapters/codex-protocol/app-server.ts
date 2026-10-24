@@ -1,3 +1,7 @@
+import { codexMcpConfigurationMatches } from './mcp-policy.ts'
+import type { CodexMcpPolicy } from './mcp-policy.ts'
+import { decodeRateLimits } from './rate-limits.ts'
+import type { CodexRateLimitSnapshot } from './rate-limits.ts'
 import type { CodexAppServerRequest } from '../../contracts/codex-approval.ts'
 import { isCodexAppServerApprovalMethod, normalizeCodexAppServerApprovalRequest } from './approval-request.ts'
 import { CodexRpcClient } from './rpc-client.ts'
@@ -6,6 +10,8 @@ import type { CodexAppServerTransport, CodexRpcLimits, CodexServerReply } from '
 import type { CodexAppServerEvent, CodexApprovalHandler, CodexTurnRef } from './session-types.ts'
 import { CodexThreadSession } from './thread-session.ts'
 import { nativeThreadId, nativeTurnId } from './notification-mapper.ts'
+import { captureModelListRequest, captureConfigReadRequest, decodeRuntimeIdentity, decodeAccountMetadata, decodeModelPage, decodeModelConfiguration } from './metadata.ts'
+import type { CodexRuntimeIdentity, CodexAccountMetadata, CodexModelListRequest, CodexModelPage, CodexConfigReadRequest, CodexModelConfiguration } from './metadata.ts'
 import { record, string } from './wire-frames.ts'
 import { captureMcpStatusRequest, decodeMcpStatusPage } from './mcp-status.ts'
 import type { CodexMcpStatusRequest, CodexMcpServerStatusPage } from './mcp-status.ts'
@@ -14,6 +20,8 @@ export type CodexAppServerOptions = {
   readonly transport: CodexAppServerTransport
   readonly onEvent: (event: CodexAppServerEvent) => void
   readonly requestApproval: CodexApprovalHandler
+  /** Observation only; the existing finite request handler retains all control authority. */
+  readonly onServerRequest?: () => void
   /** Attributed native item fact, including delta-only items. No permission authority is transferred. */
   readonly onItem?: (ref: CodexTurnRef, itemId: string) => void
   readonly limits?: Partial<CodexRpcLimits>
@@ -25,6 +33,14 @@ export type CodexAppServerOptions = {
 export type CodexInitializeParams = {
   readonly clientInfo: { readonly name: string; readonly version: string; readonly title?: string }
   readonly capabilities?: Readonly<Record<string, unknown>>
+}
+
+function modelSelection(reply: Record<string, unknown> | null) {
+  const model = string(reply?.model), modelProvider = string(reply?.modelProvider), cwd = string(reply?.cwd)
+  return model && modelProvider && cwd ? { model, modelProvider, cwd,
+    ...(reply?.reasoningEffort === null || typeof reply?.reasoningEffort === 'string' ? { reasoningEffort: reply.reasoningEffort } : {}),
+    ...(reply?.serviceTier === null || typeof reply?.serviceTier === 'string' ? { serviceTier: reply.serviceTier } : {}),
+  } : undefined
 }
 
 function bound(value: number | undefined, fallback: number): number {
@@ -44,6 +60,8 @@ export class CodexAppServerClient {
   private readonly maxTextBytes: number
   private initialized: Promise<void> | undefined
   private opening = 0
+  private handshakeComplete = false
+  private initialization: unknown
 
   constructor(options: CodexAppServerOptions) {
     this.options = options
@@ -53,7 +71,7 @@ export class CodexAppServerClient {
     this.maxTextBytes = bound(options.maxTextBytes, 1_048_576)
     this.rpc = new CodexRpcClient(options.transport, {
       notification: (method, params) => { this.notification(method, params) },
-      request: (request, signal) => this.approval(request, signal),
+      request: (request, signal) => { this.options.onServerRequest?.(); return this.approval(request, signal) },
       closed: error => { for (const session of this.sessions.values()) {session.close(error)} },
     }, options.limits)
   }
@@ -95,10 +113,61 @@ export class CodexAppServerClient {
     return decodeMcpStatusPage(response)
   }
 
+  /** Selected native namespace identity, not process-custody or authentication proof. */
+  getRuntimeIdentity(): CodexRuntimeIdentity {
+    if (!this.handshakeComplete || !this.rpc.isOpen()) { throw new CodexProtocolError('codex.protocol.not-initialized', 'not-sent') }
+    return decodeRuntimeIdentity(this.initialization)
+  }
+
+  /** Read-only: never requests token refresh, login, a thread or a turn. */
+  async readAccount(signal?: AbortSignal): Promise<CodexAccountMetadata> {
+    return decodeAccountMetadata(await this.nativeAccountRequest('account/read', { refreshToken: false }, signal))
+  }
+
+  /** Explicit native credential mutation. The caller must own admission, replay and process custody. */
+  async refreshAccount(signal?: AbortSignal): Promise<CodexAccountMetadata> {
+    return decodeAccountMetadata(await this.nativeAccountRequest('account/read', { refreshToken: true }, signal))
+  }
+
+  /** Explicit native logout; never falls back to local file deletion or a different account. */
+  async logoutAccount(signal?: AbortSignal): Promise<void> {
+    const response = record(await this.nativeAccountRequest('account/logout', undefined, signal))
+    if (!response || Object.keys(response).length !== 0) { throw new CodexProtocolError('codex.protocol.invalid-metadata-response') }
+  }
+
+  /** Read-only account quota summary; no auth refresh or inference is requested. */
+  async readAccountRateLimits(signal?: AbortSignal): Promise<CodexRateLimitSnapshot> {
+    return decodeRateLimits(await this.nativeAccountRequest('account/rateLimits/read', undefined, signal))
+  }
+
+  async listModels(input: CodexModelListRequest = {}, signal?: AbortSignal): Promise<CodexModelPage> {
+    const captured = captureModelListRequest(input)
+    return decodeModelPage(await this.nativeAccountRequest('model/list', captured, signal), captured.limit)
+  }
+
+  /** Returns model-selection fields only; arbitrary provider config and secrets stay private. */
+  async readModelConfiguration(input: CodexConfigReadRequest = {}, signal?: AbortSignal): Promise<CodexModelConfiguration> {
+    const captured = captureConfigReadRequest(input)
+    return decodeModelConfiguration(await this.nativeAccountRequest('config/read', captured, signal))
+  }
+
+  /** Private exact merged-MCP projection only; no raw native config escapes this adapter. */
+  async matchesMcpConfiguration(policy: CodexMcpPolicy, signal?: AbortSignal): Promise<boolean> {
+    return codexMcpConfigurationMatches(await this.nativeAccountRequest('config/read', {}, signal), policy)
+  }
+
+  private async nativeAccountRequest(method: string, params: unknown, signal?: AbortSignal): Promise<unknown> {
+    if (!this.initialized) { throw new CodexProtocolError('codex.protocol.not-initialized', 'not-sent') }
+    await this.initialized
+    return this.rpc.request(method, params, signal ? { signal } : {})
+  }
+
   private async handshake(params: CodexInitializeParams): Promise<void> {
     try {
-      await this.rpc.request('initialize', params)
+      const reply = record(await this.rpc.request('initialize', params))
+      this.initialization = { codexHome: reply?.codexHome, platformFamily: reply?.platformFamily, platformOs: reply?.platformOs }
       await this.rpc.notify('initialized')
+      this.handshakeComplete = true
     } catch (error) {
       this.rpc.close(error instanceof CodexProtocolError ? error : new CodexProtocolError('codex.protocol.initialize-failed'))
       throw error
@@ -128,7 +197,7 @@ export class CodexAppServerClient {
         ...(this.options.onItem ? { item: this.options.onItem } : {}),
         maxQueuedTurns: this.maxQueuedTurns, maxBufferedNotifications: this.maxBufferedNotifications,
         maxTextBytes: this.maxTextBytes,
-      })
+      }, modelSelection(reply))
       this.sessions.set(threadId, session)
       return session
     } finally { this.opening-- }
@@ -161,3 +230,7 @@ export class CodexAppServerClient {
     return session ? session.approve(request, signal) : Promise.resolve({ error: { code: -32001, message: 'codex.protocol.unattributed-approval' } })
   }
 }
+
+export type { CodexRuntimeIdentity, CodexAccountMetadata, CodexModelListRequest, CodexModelMetadata, CodexModelPage, CodexConfigReadRequest, CodexModelConfiguration } from './metadata.ts'
+
+export type { CodexRateLimitWindow, CodexRateLimitSnapshot } from './rate-limits.ts'

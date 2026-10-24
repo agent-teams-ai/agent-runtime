@@ -1,10 +1,18 @@
+import { captureClaudeExtraArgs } from '../provider-session-io/extra-argv.ts';
 import { createHash, randomUUID } from 'node:crypto';
 import type { McpServerConfig, Options } from '@anthropic-ai/claude-agent-sdk';
 import type { Limits } from '@agent-teams/provider-session-contracts';
+import { subagentOptions, validSubagents } from './subagents.ts';
+import type { ClaudeSubagentPort } from './subagents.ts';
 import type { ClaudeToolBinding } from './tool-binding.ts';
+import type { ClaudeCapturePort } from './capture.ts';
 import { attachmentCompatibility, snapshotAttachmentPort } from '../provider-session-io/attachments.ts';
 import type { AttachmentPort } from '../provider-session-io/attachments.ts';
 export const SDK_REVISION = '0.3.305';
+type ClaudeCloseObservation = Readonly<
+  { stage: 'custody'; outcome: 'confirmed' | 'unconfirmed' | 'error' } |
+  { stage: 'sdk-close' | 'sdk-read' | 'capture-close'; outcome: 'completed' | 'error' }
+>;
 export type ClaudeConfig = {
   sessionRef: string;
   trustedBinding: string;
@@ -14,6 +22,8 @@ export type ClaudeConfig = {
   configRevision: string;
   environment: Record<string, string>;
   attachments?: AttachmentPort;
+  /** Host admits native flag/value arity; D independently refuses managed native overrides. */
+  extraArgs?: readonly string[];
   /** Omission preserves the existing explicit custom-directory requirement. */
   configNamespace?: 'native-default' | 'custom-directory';
   /** Trusted, selected native configuration. No arbitrary SDK options, settings or hooks. */
@@ -27,6 +37,7 @@ export type ClaudeConfig = {
     /** model-default preserves the Host-selected model, including its [1m] suffix. */
     context?: 'model-default' | 'one-million';
   };
+  subagents?: ClaudeSubagentPort;
   nativeTools: string[];
   autoAllowedTools: string[];
   mcpServers: Record<string, Exclude<McpServerConfig, { type: 'sdk' }>>;
@@ -35,6 +46,10 @@ export type ClaudeConfig = {
   probe: (signal: AbortSignal) => Promise<boolean>;
   limits: Limits;
   toolBinding?: ClaudeToolBinding;
+  /** Best-effort private native observations; never tool authorization or product policy. */
+  capture?: ClaudeCapturePort;
+  /** Private, bounded stage observations only; never raw provider errors or cleanup authority. */
+  observeClose?: (observation: ClaudeCloseObservation) => void | Promise<void>;
   sessionExists: (nativeSession: string) => Promise<boolean>;
   /** Runtime/test Host owns the actual child and must sanitize launch environment. */
   custody: {
@@ -47,6 +62,8 @@ export function compatibility(config: ClaudeConfig): string {
   const { cwd, accountBinding, configRevision, model, trustedBinding, nativeTools, autoAllowedTools, requiredTools } = config;
   return createHash('sha256').update(JSON.stringify({ cwd, accountBinding, configRevision, model, trustedBinding, nativeTools, autoAllowedTools, requiredTools,
     toolBindingTools: config.toolBinding?.matchedToolNames,
+    ...(config.subagents ? { subagents: { mode: config.subagents.mode, tools: config.subagents.tools } } : {}),
+    ...(config.extraArgs?.length ? { extraArgs: config.extraArgs } : {}),
     ...(config.attachments ? { attachments: attachmentCompatibility(config.attachments) } : {}),
     ...(config.nativeOptions ? { nativeOptions: selectedOptions(config) } : {}),
     ...(config.configNamespace ? { configNamespace: config.configNamespace, home: config.environment.HOME,
@@ -59,18 +76,21 @@ export function validConfig(c: ClaudeConfig): boolean {
     validNativeOptions(c.nativeOptions) &&
     Object.values(c.limits).every((v) => Number.isSafeInteger(v) && v > 0) &&
     !Object.keys(c.environment).some((key) => /^(CLAUDE_CODE_TEAM|CLAUDE_TEAM|CLAUDE_AGENT_TEAMS|CLAUDE_CODE_RESUME|CLAUDE_CODE_CONTINUE)/.test(key)) &&
-    !c.nativeTools.some((tool) => /^(Team|Task|TodoWrite|Agent|Cron|Schedule|SendMessage$|ListAgents$)/.test(tool)) &&
+    validTools(c) &&
     (!c.toolBinding || (c.toolBinding.matchedToolNames.length > 0 && c.toolBinding.matchedToolNames.every((name) => typeof name === 'string' && !!name) && typeof c.toolBinding.prepare === 'function')) &&
+    validCapture(c.capture, c.observeClose) &&
     Object.keys(c.requiredTools).every((name) => Object.hasOwn(c.mcpServers, name)));
 }
 export function options(c: ClaudeConfig, nativeSession: string, restore: boolean): Options {
+  const extraArgs = c.extraArgs ?? [];
   return {
     cwd: c.cwd, model: c.model, env: { ...c.environment }, ...selectedOptions(c),
+    ...(c.subagents ? subagentOptions(c.subagents) : {}),
     tools: [...c.nativeTools], allowedTools: [...c.autoAllowedTools],
     mcpServers: c.mcpServers, strictMcpConfig: true,
     persistSession: true, includePartialMessages: true,
     ...(restore ? { resume: nativeSession } : { sessionId: nativeSession }),
-    spawnClaudeCodeProcess: (spawnOptions) => c.custody.launch({ ...spawnOptions, env: { ...c.environment } }),
+    spawnClaudeCodeProcess: (spawnOptions) => c.custody.launch({ ...spawnOptions, ...(extraArgs.length ? { args: [...spawnOptions.args, ...extraArgs] } : {}), env: { ...c.environment } }),
   };
 }
 export function freshNativeSession(): string { return randomUUID(); }
@@ -83,13 +103,20 @@ export function readCheckpoint(value: unknown): Checkpoint | undefined {
 
 /** Pin the caller's private projection once; later caller mutation cannot change a session. */
 export function snapshotConfig(c: ClaudeConfig): ClaudeConfig {
-  return { ...c, environment: { ...c.environment }, nativeTools: [...c.nativeTools],
+  const { extraArgs: supplied, ...base } = c;
+  const extraArgs = captureClaudeExtraArgs(supplied);
+  return { ...base, ...(extraArgs.length ? { extraArgs } : {}), ...(c.subagents ? { subagents: Object.freeze({ mode: c.subagents.mode, tools: Object.freeze([...c.subagents.tools]), authorize: c.subagents.authorize, observe: c.subagents.observe }) } : {}), environment: { ...c.environment }, nativeTools: [...c.nativeTools],
+    ...(c.capture ? { capture: Object.freeze({ observe: c.capture.observe, ...(c.capture.observeBatch ? { observeBatch: c.capture.observeBatch } : {}), ...(c.capture.observeBackground ? { observeBackground: c.capture.observeBackground } : {}) }) } : {}),
     ...(c.attachments !== undefined ? { attachments: snapshotAttachmentPort(c.attachments)! } : {}),
     ...(c.nativeOptions ? { nativeOptions: structuredClone(c.nativeOptions) } : {}),
     autoAllowedTools: [...c.autoAllowedTools], requiredTools: structuredClone(c.requiredTools),
     mcpServers: structuredClone(c.mcpServers), ...(c.toolBinding ? { toolBinding: { ...c.toolBinding, matchedToolNames: [...c.toolBinding.matchedToolNames] } } : {}), limits: { ...c.limits }, custody: { ...c.custody } };
 }
 
+function validCapture(capture: ClaudeCapturePort | undefined, observeClose: ClaudeConfig['observeClose']): boolean {
+  return (observeClose === undefined || typeof observeClose === 'function') && (!capture || (typeof capture.observe === 'function' && (capture.observeBatch === undefined || typeof capture.observeBatch === 'function') &&
+    (capture.observeBackground === undefined || typeof capture.observeBackground === 'function')));
+}
 function nonempty(value: unknown): value is string { return typeof value === 'string' && value.length > 0; }
 function validNamespace(c: ClaudeConfig): boolean {
   return c.configNamespace === 'native-default' ? !Object.hasOwn(c.environment, 'CLAUDE_CONFIG_DIR') :
@@ -126,4 +153,10 @@ function validPermissionOptions(n: NonNullable<ClaudeConfig['nativeOptions']>): 
 function validInstructions(value: NonNullable<ClaudeConfig['nativeOptions']>['projectInstructions']): boolean {
   return value === undefined || (!!value && typeof value === 'object' && !Array.isArray(value) &&
     Object.keys(value).every(key => key === 'append') && (value.append === undefined || typeof value.append === 'string'));
+}
+
+function validTools(c: ClaudeConfig): boolean {
+  return !c.nativeTools.some(tool => /^(Team|Task|TodoWrite|Cron|Schedule|SendMessage$|ListAgents$)/.test(tool) ||
+    (tool.startsWith('Agent') && (tool !== 'Agent' || !c.subagents))) &&
+    validSubagents(c.subagents, c.nativeTools) && (!c.subagents || c.nativeOptions?.permissionMode !== 'plan');
 }

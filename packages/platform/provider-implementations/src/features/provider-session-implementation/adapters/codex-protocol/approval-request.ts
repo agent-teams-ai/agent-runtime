@@ -43,12 +43,14 @@ export function isCodexAppServerApprovalMethod(
     method === 'item/commandExecution/requestApproval' ||
     method === 'item/fileChange/requestApproval' ||
     method === 'item/permissions/requestApproval' ||
+    method === 'item/tool/requestUserInput' ||
+    method === 'mcpServer/elicitation/request' ||
     method === 'execCommandApproval' ||
     method === 'applyPatchApproval'
   )
 }
 
-export function normalizeCodexAppServerApprovalRequest(
+function normalizeToolApprovalRequest(
   request: CodexAppServerRequest,
 ): CodexAppServerToolApprovalRequest | null {
   if (!isCodexAppServerApprovalMethod(request.method)) {
@@ -172,4 +174,13 @@ export function normalizeCodexAppServerApprovalRequest(
       }
     }
   }
+  return null
+}
+
+export function normalizeCodexAppServerApprovalRequest(request: CodexAppServerRequest): CodexAppServerToolApprovalRequest | null {
+  if (request.method !== 'item/tool/requestUserInput' && request.method !== 'mcpServer/elicitation/request') { return normalizeToolApprovalRequest(request) }
+  const params = asRecord(request.params)
+  return { providerId: 'codex', requestId: requestIdToString(request.id), providerRequestId: buildProviderRequestId(request, params), method: request.method,
+    threadId: stringValue(params.threadId), turnId: stringValue(params.turnId), itemId: stringValue(params.itemId),
+    toolName: 'AskUserQuestion', toolInput: {}, reason: null, raw: params }
 }

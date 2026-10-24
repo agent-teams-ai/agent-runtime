@@ -12,7 +12,8 @@ export type Input = {readonly inputId: string; readonly operationRef: string; re
 /** Consumption of stdin/SDK input is not provider acceptance or terminal completion. */
 export type Handoff = {readonly inputId: string; readonly operationRef: string; readonly delivery: "client-consumed"; readonly providerAcceptance: "unknown"};
 export type InteractionReply = {readonly kind: "permission"; readonly decision: "allow" | "deny"} |
-  {readonly kind: "question"; readonly answers: Readonly<Record<string, string>>};
+  {readonly kind: "question"; readonly answers: Readonly<Record<string, string>>; readonly decision?: never} |
+  {readonly kind: "question"; readonly decision: "deny"; readonly answers?: never};
 export type EventPayload =
   /** One observed provider context boundary; sourceRef is opaque and stable within the native session. */
   {readonly kind: "compaction"; readonly sourceRef: string; readonly reason: "manual" | "automatic" | "unknown"} |

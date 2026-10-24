@@ -196,8 +196,14 @@ jobs:
             '$needs | keys == ["fixtures","remainder"] and all(.[]; .result == "success")'
           # This oracle reads the actual original-file registrations, never the helper table.
           expected=$(sed -n 's/^  test("\([^"]*\)",.*$/\1/p' scripts/architecture/source-dependency-adapter-boundaries.test.mjs | jq -Rsc 'split("\n")[:-1]')
-          mapfile -t shards < <(find "$RUNNER_TEMP/foundation-evidence" -type f -name 'shard-*.json' | sort)
-          mapfile -t remainder < <(find "$RUNNER_TEMP/foundation-evidence" -type f -name 'remainder-*.json' | sort)
+          shards=()
+          while IFS= read -r report; do
+            shards+=("$report")
+          done < <(find "$RUNNER_TEMP/foundation-evidence" -type f -name 'shard-*.json' | sort)
+          remainder=()
+          while IFS= read -r report; do
+            remainder+=("$report")
+          done < <(find "$RUNNER_TEMP/foundation-evidence" -type f -name 'remainder-*.json' | sort)
           test "${#shards[@]}" -eq 3
           test "${#remainder[@]}" -eq 6
           jq -se --arg revision "$EXPECTED_REVISION" --argjson expected "$expected" '

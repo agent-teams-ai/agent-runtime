@@ -1,0 +1,38 @@
+{
+  "rootBuildAndPack": {
+    "archive": "/Users/belief/.codex/worktrees/provider-migration-two-stage-plan/old-agent-teams-frontend/vendor/provider-migration/claude-idle-notification-v1/agent-teams-provider-implementations-0.0.0.tgz",
+    "sha256": "c3a303cf9172219565fecc3d78cada36af41d3a878d0518ebd1c61898b44db00",
+    "regularMembers": 209,
+    "distMembers": 206,
+    "delta": [
+      "package/dist/features/provider-session-implementation/adapters/claude-sdk/session.js"
+    ],
+    "removed": [],
+    "sourceDistMismatch": [],
+    "installJob": "f2acb19644ab6762b0b429a12a4b0198",
+    "hostDirectBuildJob": "b7dd386f095020cb0d56e3df647e53bb",
+    "hostCorepackBuildIncident": "22fc41ce510490df7e6793a907af94f3: exited0 but inherited PATH invoked Node26/pnpm automatic install+Electron rebuild; not claimed N24 qualification",
+    "lockSha256": "8e2f70ef02e760f78a6d9f74a50effd77f1744e29d4a1dcc3d4e17c62905d621"
+  },
+  "comparisons": [
+    {
+      "archive": "/Users/belief/.codex/worktrees/provider-migration-two-stage-plan/old-agent-teams-frontend/vendor/provider-migration/claude-idle-notification-v1/agent-teams-provider-implementations-0.0.0.tgz",
+      "sha256": "c3a303cf9172219565fecc3d78cada36af41d3a878d0518ebd1c61898b44db00",
+      "distMembersCompared": 206,
+      "mismatches": []
+    },
+    {
+      "archive": "/Volumes/Transcend/dev/TEST-D-gate-prep-ab2k6vsi/tmp/ar-sdk-packed-TBXBKQ/archives/provider-implementations/agent-teams-provider-implementations-0.0.0.tgz",
+      "sha256": "59b2fd7b123bbf1614130c1c3b78dd05dc34772edc09a1613455140572f6793a",
+      "distMembersCompared": 206,
+      "mismatches": []
+    },
+    {
+      "archive": "/Volumes/Transcend/dev/TEST-D-gate-prep-ab2k6vsi/tmp/ar-sdk-packed-9HJRty/archives/provider-implementations/agent-teams-provider-implementations-0.0.0.tgz",
+      "sha256": "59b2fd7b123bbf1614130c1c3b78dd05dc34772edc09a1613455140572f6793a",
+      "distMembersCompared": 206,
+      "mismatches": []
+    }
+  ],
+  "scope": "Exact 206 provider dist regular members only; different archive manifests/licenses are not source-equivalence evidence."
+}

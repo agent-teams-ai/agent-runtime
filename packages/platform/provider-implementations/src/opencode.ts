@@ -35,6 +35,8 @@ export { createOpenCodeV2DriverFactory } from './features/provider-session-imple
 export type { OpenCodeV2DriverHost } from './features/provider-session-implementation/internal.ts'
 export type { OpenCodeV2DriverConfig } from './features/provider-session-implementation/internal.ts'
 
-export { createOpenCodeV1DriverFactory } from './features/provider-session-implementation/internal.ts'
+export { createOpenCodeV1DriverFactory, readOpenCodeV1CheckpointSessionId } from './features/provider-session-implementation/internal.ts'
 export type { OpenCodeV1DriverHost } from './features/provider-session-implementation/internal.ts'
 export type { OpenCodeV1DriverConfig } from './features/provider-session-implementation/internal.ts'
+
+export { captureOpenCodeExtraArgs } from './features/provider-session-implementation/internal.ts';

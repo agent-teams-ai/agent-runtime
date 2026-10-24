@@ -319,3 +319,17 @@ test("a late factory handle is retired after independent custody closure without
   assert.equal(f.calls.closes, 1); assert.equal(readiness, 0);
   assert.equal((await owner.read(ref))!.status, "closed");
 });
+
+test("question denial is a distinct durable answer; ambiguous payloads cannot claim or call the provider", async () => {
+  const f = fixture(); await open(f); const input = await submit(f); await f.owner.dispatch(ref);
+  await f.owner.record(ref, {kind: "interaction", ...input, interactionId: "deny-question", requestKind: "question", expiresAt: 200});
+  const before = (await f.store.read(ref))!.commands.length;
+  for (const answer of [{kind: "question", decision: "deny", answers: {}}, {kind: "question", decision: "deny", extra: true}]) {
+    assert.equal((await f.owner.reply(ref, "deny-command", "deny-question", answer as never)).status, "unsupported");
+  }
+  assert.equal((await f.store.read(ref))!.commands.length, before); assert.deepEqual(f.calls.replies, []);
+  assert.equal((await f.owner.reply(ref, "deny-command", "deny-question", {kind: "question", decision: "deny"})).status, "accepted");
+  assert.equal((await f.owner.reply(ref, "deny-command", "deny-question", {decision: "deny", kind: "question"})).status, "duplicate");
+  assert.equal((await f.owner.reply(ref, "deny-command", "deny-question", {kind: "question", answers: {}})).status, "conflict");
+  assert.deepEqual(f.calls.replies, ["deny-question"]);
+});

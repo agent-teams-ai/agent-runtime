@@ -8,6 +8,7 @@ import { deferred, untilAbort } from './session-types.ts'
 import type { CodexSessionHooks, CodexTurnOutcome, CodexTurnParams, CodexTurnRef, CodexTurnSubmission } from './session-types.ts'
 import { record, string } from './wire-frames.ts'
 
+type ModelSelection = Readonly<{ model: string; modelProvider: string; cwd: string; reasoningEffort?: string | null; serviceTier?: string | null }>
 type QueuedNotification = { method: string; params: Record<string, unknown> }
 type Turn = {
   readonly params: Record<string, unknown>
@@ -30,13 +31,16 @@ function approvalTargetsTurn(approval: CodexAppServerToolApprovalRequest, ref: C
 /** Volatile sequencing for one native thread. Durable scheduling and recovery remain runtime-owned. */
 export class CodexThreadSession {
   readonly threadId: string
+  /** Captured native thread/start reply; missing metadata never becomes selected-model proof. */
+  readonly modelSelection: ModelSelection | undefined
   private readonly hooks: CodexSessionHooks
   private readonly queued: Turn[] = []
   private active: Turn | undefined
   private ended = false
 
-  constructor(threadId: string, hooks: CodexSessionHooks) {
+  constructor(threadId: string, hooks: CodexSessionHooks, modelSelection?: ModelSelection) {
     this.threadId = threadId
+    this.modelSelection = modelSelection ? Object.freeze({ ...modelSelection }) : undefined
     this.hooks = hooks
   }
 

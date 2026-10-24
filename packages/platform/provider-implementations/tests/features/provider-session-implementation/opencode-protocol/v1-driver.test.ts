@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 import { setTimeout as delay } from 'node:timers/promises'
 import type { DriverFactory, Event, OpenConfig, Session } from '@agent-teams/provider-session-contracts'
-import { createOpenCodeV1DriverFactory } from '../../../../src/opencode.ts'
+import { createOpenCodeV1DriverFactory, readOpenCodeV1CheckpointSessionId } from '../../../../src/opencode.ts'
 import type { OpenCodeV1DriverConfig } from '../../../../src/opencode.ts'
 import { v1Peer } from './v1-driver-peer.ts'
 import { artifact, attachedInput, attachmentPort } from '../provider-session-io/attachment-support.ts'
@@ -63,6 +63,40 @@ test('canonical V1 factory serializes actual HTTP turns with native ascending ID
     assert.ok(events.some(event => event.kind === 'tool-result' && event.inputId === 'TEST-a'))
     assert.equal(opened.driver.checkpoint().ok, true)
   } finally { await opened.driver.close(); await done }
+})
+
+test('V1 omitted idle status with a busy neighbor qualifies only exact settled turns and admits the next input', async t => {
+  const host = await v1Peer(); t.after(host.close)
+  const c = configuration(host); c.version = '1.18.35'; c.limits = { ...c.limits, timeoutMs: 500 }
+  const { driver } = await factory(c).open(request), { events, done } = observe(driver)
+  try {
+    for (const inputId of ['TEST-native-idle-a', 'TEST-native-idle-b']) {
+      assert.equal((await driver.submit({ inputId, operationRef: inputId, content: 'TEST native idle omission' })).ok, true)
+      await until(() => events.some(event => event.kind === 'result' && event.inputId === inputId))
+      const result = events.find(event => event.kind === 'result' && event.inputId === inputId)
+      assert.ok(result?.kind === 'result'); assert.equal(result.outcome, 'succeeded')
+    }
+    assert.equal(host.submittedIds.length, 2)
+  } finally { await driver.close(); await done }
+})
+
+test('V1 malformed, unknown or busy status cannot qualify a settled native transcript', async t => {
+  const host = await v1Peer(); host.hold(); t.after(host.close)
+  const c = configuration(host); c.limits = { ...c.limits, timeoutMs: 10_000 }
+  const { driver } = await factory(c).open(request), { events, done } = observe(driver)
+  try {
+    await driver.submit({ inputId: 'TEST-status', operationRef: 'TEST-status', content: 'TEST status guards' })
+    // Empty status cannot replace incomplete native assistant/tool evidence.
+    host.status({}); let reads = host.reads(); await until(() => host.reads() >= reads + 4)
+    assert.equal(events.some(event => event.kind === 'result'), false)
+    host.complete()
+    for (const status of [null, [], 'idle', { ses_TESTneighbor: null }, ...[null, {}, 'unknown',
+      { type: 'unknown' }, { type: 'idle', status: 'busy' }, { type: 'busy' }, { type: 'retry' }].map(value => ({ [host.nativeSessionId]: value }))]) {
+      host.status(status); reads = host.reads(); await until(() => host.reads() >= reads + 4)
+      assert.equal(events.some(event => event.kind === 'result'), false)
+    }
+    host.status({}); await until(() => events.some(event => event.kind === 'result' && event.outcome === 'succeeded'))
+  } finally { await driver.close(); await done }
 })
 
 test('V1 native ToolStateError preserves its error text without an output field', async t => {
@@ -239,4 +273,14 @@ test('V1 long retained history and legacy random IDs do not force a full-session
     assert.equal(host.submittedIds.length, 1)
     assert.equal(host.reads(), 3) // latest50 ordering, original anchor window, confirmation
   } finally { await driver.close(); await done }
+})
+
+
+test('V1 private checkpoint identity selection rejects foreign/credential-bearing values before Host allocation', () => {
+  const cp = { version: 1, engine: 'opencode-v1', nativeSessionId: 'ses_TESTsaved', compatibility: 'a'.repeat(64) }
+  assert.equal(readOpenCodeV1CheckpointSessionId(cp), 'ses_TESTsaved')
+  for (const value of [undefined, null, [], { ...cp, engine: 'other' }, { ...cp, nativeSessionId: '../foreign' },
+    { ...cp, compatibility: 'not-a-digest' }, { ...cp, apiKey: 'TEST-secret' }]) {
+    assert.throws(() => readOpenCodeV1CheckpointSessionId(value), /checkpoint-incompatible/u)
+  }
 })

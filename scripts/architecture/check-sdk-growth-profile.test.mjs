@@ -27,7 +27,7 @@ function fixture(t) {
     mkdirSync(dirname(join(directory, path)), { recursive: true });
     cpSync(join(root, path), join(directory, path));
   }
-  const extraction = JSON.parse(readFileSync(join(root, "architecture/sdk-growth/provider-codex-mcp-readiness.json"), "utf8"));
+  const extraction = JSON.parse(readFileSync(join(root, "architecture/sdk-growth/provider-migration-program.json"), "utf8"));
   for (const {path} of extraction.currentInputs) {
     mkdirSync(dirname(join(directory, path)), {recursive: true});
     cpSync(join(root, path), join(directory, path));
@@ -461,3 +461,23 @@ test("Session contracts reject omitted adoption, runtime dependencies, peers and
   mutate(extra, "packages/platform/provider-session-contracts/package.json", value => {value.exports["./private"] = value.exports["."];});
   assert.throws(() => checkSdkGrowthProfile(extra), /SDK_CONTRACT_SCOPE_DRIFT/u);
 });
+
+for (const mutation of ["predecessor", "coverage", "engine", "completion", "evidence", "admission"]) {
+  test(`provider program successor rejects ${mutation} drift`, t => {
+    const directory = fixture(t);
+    const path = "architecture/sdk-growth/provider-migration-program.json";
+    mutate(directory, path, value => {
+      if (mutation === "predecessor") { value.predecessorSha256 = "0".repeat(64); }
+      if (mutation === "coverage") { value.currentInputs.pop(); }
+      if (mutation === "engine") { value.engines[0].node = "v24.0.0"; }
+      if (mutation === "evidence") { value.evidence[0].sha256 = "0".repeat(64); }
+      if (mutation === "admission") { value.releaseEligible = true; }
+      if (mutation === "completion") {
+        const evidence = value.evidence.find(item => item.path === value.engines[0].provider.completion);
+        mutate(directory, evidence.path, receipt => { receipt.result.exit_code = 1; });
+        evidence.sha256 = digest(readFileSync(join(directory, evidence.path)));
+      }
+    });
+    assert.throws(() => checkSdkGrowthProfile(directory), /SDK_PROVIDER_(?:SOURCE_DRIFT|QUALIFICATION_DRIFT|ADMISSION_OVERCLAIM)/u);
+  });
+}

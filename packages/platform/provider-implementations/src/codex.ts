@@ -14,3 +14,21 @@ export type { CodexThreadSession } from './features/provider-session-implementat
 export { createCodexDriverFactory } from './features/provider-session-implementation/internal.ts'
 export type { CodexDriverHost } from './features/provider-session-implementation/internal.ts'
 export type { CodexDriverConfig } from './features/provider-session-implementation/internal.ts'
+export type { CodexRuntimeIdentity, CodexAccountMetadata, CodexModelListRequest, CodexModelMetadata, CodexModelPage, CodexConfigReadRequest, CodexModelConfiguration } from './features/provider-session-implementation/internal.ts'
+
+export type { CodexRateLimitWindow, CodexRateLimitSnapshot } from './features/provider-session-implementation/internal.ts'
+
+export { probeCodexModel } from './features/provider-session-implementation/internal.ts'
+export type { CodexModelProbeConfig, CodexModelProbeConnection, CodexModelProbeLaunch } from './features/provider-session-implementation/internal.ts'
+
+export { codexModelOptionArgs } from './features/provider-session-implementation/internal.ts'
+export type { CodexModelOptions } from './features/provider-session-implementation/internal.ts'
+
+export { captureCodexExtraArgs } from './features/provider-session-implementation/internal.ts';
+
+export { readCodexConfiguredMcpCatalog, codexMcpPolicyArgs } from './features/provider-session-implementation/internal.ts'
+export type { CodexMcpCatalogConfig, CodexMcpCatalogConnection, CodexMcpCatalogLaunch, CodexConfiguredMcpCatalog, CodexMcpPolicy, CodexSelectedMcpServers } from './features/provider-session-implementation/internal.ts'
+
+export { captureCodexConfiguredMcpCatalog } from './features/provider-session-implementation/internal.ts'
+
+export { captureCodexMcpPolicy } from './features/provider-session-implementation/internal.ts'

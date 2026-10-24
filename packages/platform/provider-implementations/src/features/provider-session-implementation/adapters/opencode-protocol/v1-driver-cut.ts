@@ -25,6 +25,13 @@ function nativeStatus(value: unknown): unknown {
   if (row === null) { return undefined }
   return row.type !== undefined && row.status !== undefined && row.type !== row.status ? undefined : row.type ?? row.status
 }
+function selectedNativeStatus(value: unknown, sessionId: string): unknown {
+  const statuses = record(value)
+  if (statuses === null || Object.values(statuses).some(row => !['idle', 'busy', 'retry'].includes(String(nativeStatus(row))))) { return undefined }
+  // Pinned V1 SessionStatus.set(idle) deletes this key; /session/status lists only retained entries.
+  // Absence is meaningful only in a valid status map, and never replaces bound terminal proof.
+  return Object.hasOwn(statuses, sessionId) ? nativeStatus(statuses[sessionId]) : 'idle'
+}
 function validOriginalWindow(raw: readonly OpenCodeMessage[], nativeInputID: string, originalText: string): number {
   const anchor = raw.findIndex(value => value.info.id === nativeInputID && value.info.role === 'user')
   if (anchor < 0 || raw[anchor]!.parts.filter(part => part.type === 'text').map(part => part.text).join('\n') !== originalText
@@ -83,7 +90,7 @@ export async function readV1DriverCut(client: OpenCodeClient, questions: () => P
     sessionId: config.nativeSessionId, messages: canonical, messageSessionIds: raw.map(value => String(value.info.sessionID)), complete: true, interactionsSettled: !unsettled, diagnostics: [] }
   const proof = qualifyOpenCodeV1BoundTerminalProof(evidence, { nativeSessionId: config.nativeSessionId, workspacePath: config.workspacePath,
     hostKey: config.trustedBinding, runId: config.runBinding, profileRootKey: config.profileBinding }, nativeInputID).proof
-  const state = nativeStatus(record(status)?.[config.nativeSessionId])
+  const state = selectedNativeStatus(status, config.nativeSessionId)
   const terminal = state === 'idle' && proof ? proof.outcome === 'success' ? 'succeeded' as const : 'cancelled' as const : undefined
   const mayAsk = !terminal && ['busy', 'retry'].includes(String(state)) && relevant.length > 0 && relevant.every(message => !message.hasError)
   return { raw: raw.slice(anchor + 1), messages: relevant, terminal, permissions: mayAsk ? qualifiedPermissions(permissions, relevant, config.nativeSessionId) : [] }

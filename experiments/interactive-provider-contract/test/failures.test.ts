@@ -52,7 +52,7 @@ test('oversized text normalizer preserves typed output-limit and releases callba
   assert(events.some((e) => e.kind === 'result' && e.code === 'output-limit')); await session.close();
 });
 
-test('parent and child interleaving and per-block repeated wrappers preserve block identity', async () => {
+test('parent interleaving preserves block identity while unqualified child frames remain diagnostic', async () => {
   const { session, fake } = await opened(); const events = observe(session); await session.submit(input()); await tick();
   const parent = { type: 'stream_event', parent_tool_use_id: null, user_message_uuid: fake.inputs[0]?.uuid, event: { type: 'message_start', message: { id: 'parent' } } };
   fake.emit(parent); fake.emit({ type: 'stream_event', parent_tool_use_id: null, event: { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: 'one' } } });
@@ -65,7 +65,9 @@ test('parent and child interleaving and per-block repeated wrappers preserve blo
   fake.result(); await tick();
   const parentText = events.filter((e) => e.kind === 'text').filter((e) => e.messageRef === 'parent');
   assert.deepEqual(parentText.map((e) => [e.block, e.text]), [[0, 'one'], [0, 'one two'], [0, 'one two'], [1, 'one two']]);
-  const child = events.find((e) => e.kind === 'text' && e.messageRef === 'child'); assert(child); assert.equal(child.operationRef, undefined); await session.close();
+  assert.equal(events.some((event) => event.kind === 'text' && event.messageRef === 'child'), false);
+  const childGaps = events.filter((event) => event.kind === 'diagnostic' && event.code === 'unknown-event');
+  assert.equal(childGaps.length, 2); assert(childGaps.every((event) => event.operationRef === undefined)); await session.close();
 });
 
 test('config isolation, stable input identity and SDK callback permission mode are enforced', async () => {
@@ -161,5 +163,8 @@ test('one foreground echo binds later tool rounds while explicit background and 
   const foreground = events.filter((event) => (event.kind === 'text' && ['round-2', 'round-3'].includes(event.messageRef)) || (event.kind === 'tool' && event.toolRef === 'tool-2') || (event.kind === 'tool-result' && event.toolRef === 'tool-2'));
   assert(foreground.length >= 5); assert(foreground.every((event) => event.operationRef === 'operation-1'));
   const background = events.filter((event) => event.kind === 'text' && ['child', 'conflict', 'unknown-origin', 'conflicting-stream'].includes(event.messageRef));
-  assert.equal(background.length, 4); assert(background.every((event) => event.operationRef === undefined)); await session.close();
+  assert.deepEqual(background.map((event) => event.kind === 'text' ? event.messageRef : undefined).toSorted(), ['conflict', 'conflicting-stream', 'unknown-origin']);
+  assert(background.every((event) => event.operationRef === undefined));
+  const childGaps = events.filter((event) => event.kind === 'diagnostic' && event.code === 'unknown-event');
+  assert.equal(childGaps.length, 1); assert(childGaps.every((event) => event.operationRef === undefined)); await session.close();
 });

@@ -1,4 +1,8 @@
+import { captureCodexMcpPolicy, managedCodexMcpParameters } from './mcp-policy.ts'
+import type { CodexMcpPolicy } from './mcp-policy.ts'
 import { createHash } from 'node:crypto'
+import { snapshotInputWindowPort } from './input-window-capture.ts'
+import type { CodexInputWindowPort } from './input-window-capture.ts'
 import type { Limits, OpenConfig } from '@agent-teams/provider-session-contracts'
 import type { CodexInitializeParams } from './app-server.ts'
 import type { CodexAppServerTransport, CodexRpcLimits } from './rpc-types.ts'
@@ -19,8 +23,13 @@ export type CodexDriverConfig = {
   readonly threadParams: Readonly<Record<string, unknown>>
   readonly turnParams?: Readonly<Record<string, unknown>>
   readonly attachments?: AttachmentPort
+  /** Optional bounded input-window observations; never tool authorization. */
+  readonly capture?: CodexInputWindowPort
   /** Required native raw server/tool names, checked against this client's selected thread before work. */
   readonly requiredMcpTools?: RequiredMcpTools
+  /** Private exact policy; verifier rechecks the original native source before status can initialize MCP. */
+  readonly mcpPolicy?: CodexMcpPolicy
+  readonly verifyMcpCatalog?: (signal: AbortSignal) => Promise<boolean>
   readonly rpcLimits?: Partial<CodexRpcLimits>
   readonly limits: Limits
   /** Read-only qualification of this exact configuration and custody, not ambient discovery. */
@@ -62,8 +71,14 @@ function validDriverConfiguration(value: unknown, request: OpenConfig): boolean 
 }
 export function captureDriverConfig(config: CodexDriverConfig, request: OpenConfig): CodexDriverConfig {
   if (!validDriverConfiguration(config, request)) {throw new Error('codex.driver.invalid-config')}
-  return { ...config, binding: { ...config.binding }, limits: { ...config.limits }, initialize: structuredClone(config.initialize),
+  if (config.mcpPolicy !== undefined && (typeof config.verifyMcpCatalog !== 'function' || !managedCodexMcpParameters(config.threadParams, config.turnParams ?? {}, config.initialize.capabilities))) { throw new Error('codex.driver.invalid-config') }
+  const mcpPolicy = config.mcpPolicy === undefined ? undefined : captureCodexMcpPolicy(config.mcpPolicy)
+  if (mcpPolicy && Object.keys(config.requiredMcpTools ?? {}).some(server => !Object.hasOwn(mcpPolicy.selected, server))) { throw new Error('codex.driver.invalid-config') }
+  const { capture: suppliedCapture, ...base } = config
+  const capture = snapshotInputWindowPort(suppliedCapture)
+  return { ...base, ...(capture ? { capture } : {}), binding: { ...config.binding }, limits: { ...config.limits }, initialize: structuredClone(config.initialize),
     ...(config.requiredMcpTools !== undefined ? { requiredMcpTools: captureRequiredMcpTools(config.requiredMcpTools) } : {}),
+    ...(mcpPolicy !== undefined ? { mcpPolicy, verifyMcpCatalog: config.verifyMcpCatalog!.bind(config) } : {}),
     ...(config.attachments !== undefined ? { attachments: snapshotAttachmentPort(config.attachments)! } : {}),
     threadParams: structuredClone(config.threadParams), turnParams: structuredClone(config.turnParams ?? {}), rpcLimits: { ...config.rpcLimits } }
 }
@@ -74,7 +89,8 @@ export function driverCompatibility(config: CodexDriverConfig): string {
     protocolRevision: config.protocolRevision, trustedBinding: config.trustedBinding, accountBinding: config.accountBinding,
     threadParams: config.threadParams, turnParams: config.turnParams,
     ...(config.attachments ? { attachments: attachmentCompatibility(config.attachments) } : {}),
-    ...(config.requiredMcpTools !== undefined ? { requiredMcpTools: config.requiredMcpTools } : {}) })).digest('hex')
+    ...(config.requiredMcpTools !== undefined ? { requiredMcpTools: config.requiredMcpTools } : {}),
+    ...(config.mcpPolicy !== undefined ? { mcpPolicy: config.mcpPolicy } : {}) })).digest('hex')
 }
 
 export type CodexDriverCheckpoint = {

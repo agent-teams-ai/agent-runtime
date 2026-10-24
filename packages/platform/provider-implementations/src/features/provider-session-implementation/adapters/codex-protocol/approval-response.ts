@@ -4,6 +4,8 @@ import type { CodexAppServerRequest, CodexAppServerRequestId } from '../../contr
 /** An already-authorized wire decision, selected by the consuming runtime. */
 export type CodexApprovalReply =
   | { readonly kind: 'decision'; readonly decision: 'accept' | 'acceptForSession' | 'decline' | 'cancel' | 'approved' | 'denied' }
+  | { readonly kind: 'elicitation'; readonly action: 'accept' | 'decline'; readonly content: Readonly<Record<string, string | boolean>> | null }
+  | { readonly kind: 'user-input'; readonly answers: Readonly<Record<string, { readonly answers: readonly string[] }>> }
   | { readonly kind: 'permissions'; readonly permissions: Readonly<Record<string, unknown>>; readonly scope: 'turn' }
 
 export type CodexApprovalResponse = {
@@ -23,6 +25,14 @@ export function encodeCodexApprovalResponse(
   reply: CodexApprovalReply,
 ): CodexApprovalResponse {
   if (!isCodexAppServerApprovalMethod(request.method)) {return reject()}
+  if (request.method === 'mcpServer/elicitation/request') {
+    if (reply.kind !== 'elicitation' || !['accept', 'decline'].includes(reply.action)) { return reject() }
+    return { jsonrpc: '2.0', id: request.id, result: { action: reply.action, content: reply.content, _meta: null } }
+  }
+  if (request.method === 'item/tool/requestUserInput') {
+    if (reply.kind !== 'user-input') { return reject() }
+    return { jsonrpc: '2.0', id: request.id, result: { answers: reply.answers } }
+  }
   if (request.method === 'item/permissions/requestApproval') {
     if (reply.kind !== 'permissions' || !turnScope(reply.scope)) {return reject()}
     if (Object.keys(reply.permissions).some(key => key !== 'network' && key !== 'fileSystem')) {return reject()}

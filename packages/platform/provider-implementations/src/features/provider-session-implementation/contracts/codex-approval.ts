@@ -2,6 +2,8 @@ export type CodexAppServerApprovalMethod =
   | 'item/commandExecution/requestApproval'
   | 'item/fileChange/requestApproval'
   | 'item/permissions/requestApproval'
+  | 'item/tool/requestUserInput'
+  | 'mcpServer/elicitation/request'
   | 'execCommandApproval'
   | 'applyPatchApproval'
 

@@ -20,12 +20,17 @@ function checkProviderQualification(repository, profile, json) {
   const extraction = json(`${directory}/provider-session-contracts-extraction.json`);
   const capabilities = json(`${directory}/provider-claude-capabilities.json`);
   const attachments = json(`${directory}/provider-attachments.json`);
-  const current = json(`${directory}/provider-codex-mcp-readiness.json`);
+  const predecessor = json(`${directory}/provider-codex-mcp-readiness.json`);
+  const current = json(`${directory}/provider-migration-program.json`);
+  assert.equal(createHash("sha256").update(readFileSync(resolve(repository, `${directory}/provider-codex-mcp-readiness.json`))).digest("hex"), current.predecessorSha256, "SDK_PROVIDER_SOURCE_DRIFT");
+  assert.equal(current.qualification, "provider-migration-controlled-source-and-static-public-imports", "SDK_PROVIDER_QUALIFICATION_DRIFT");
   assert.equal(current.authority, "ADR-0093", "SDK_CONTRACT_EXTRACTION_DRIFT");
+  assert.equal(predecessor.authority, "ADR-0093", "SDK_CONTRACT_EXTRACTION_DRIFT");
+  assert.equal(predecessor.releaseEligible, false, "SDK_PROVIDER_ADMISSION_OVERCLAIM");
   assert.equal(current.releaseEligible, false, "SDK_PROVIDER_ADMISSION_OVERCLAIM");
   assert.equal(createHash("sha256").update(readFileSync(resolve(repository, `${directory}/provider-claude-capabilities.json`))).digest("hex"), attachments.predecessorSha256, "SDK_PROVIDER_SOURCE_DRIFT");
   assert.equal(createHash("sha256").update(readFileSync(resolve(repository, `${directory}/provider-session-contracts-extraction.json`))).digest("hex"), capabilities.predecessorSha256, "SDK_PROVIDER_SOURCE_DRIFT");
-  assert.equal(createHash("sha256").update(readFileSync(resolve(repository, `${directory}/provider-attachments.json`))).digest("hex"), current.predecessorSha256, "SDK_PROVIDER_SOURCE_DRIFT");
+  assert.equal(createHash("sha256").update(readFileSync(resolve(repository, `${directory}/provider-attachments.json`))).digest("hex"), predecessor.predecessorSha256, "SDK_PROVIDER_SOURCE_DRIFT");
   const contractName = "@agent-teams/provider-session-contracts";
   const contractRoot = "packages/platform/provider-session-contracts";
   assert.equal(extraction.authority, "ADR-0093", "SDK_CONTRACT_EXTRACTION_DRIFT");
@@ -53,7 +58,7 @@ function checkProviderQualification(repository, profile, json) {
     "packages/apps/embedded-runtime/src/features/interactive-session-runtime/composition/interactive-session-runtime.contracts.ts",
     "packages/contexts/agent-execution/tests/features/interactive-agent-session/owner.test.ts"]);
   assert.deepEqual(current.currentInputs.map(input => input.path).toSorted(), currentPaths.toSorted(), "SDK_PROVIDER_SOURCE_DRIFT");
-  for (const input of [...current.currentInputs, ...current.evidence, ...attachments.evidence, ...capabilities.evidence, ...extraction.evidence]) {
+  for (const input of [...current.currentInputs, ...current.evidence, ...predecessor.evidence, ...attachments.evidence, ...capabilities.evidence, ...extraction.evidence]) {
     assert.match(input.sha256, /^[a-f0-9]{64}$/u, "SDK_PROVIDER_SOURCE_DRIFT");
     assert.equal(createHash("sha256").update(readFileSync(resolve(repository, input.path))).digest("hex"), input.sha256, "SDK_PROVIDER_SOURCE_DRIFT");
   }
@@ -61,7 +66,7 @@ function checkProviderQualification(repository, profile, json) {
   assert.deepEqual(capabilities.checks, {contractsPacked: true, providerPacked: true, legacyTypeCompatibility: true, claudeSyntheticCapabilities: true}, "SDK_CONTRACT_EXTRACTION_DRIFT");
   assert.deepEqual(attachments.checks, {contractsPacked: true, providerPacked: true, legacyTypeCompatibility: true, attachmentRequestSeams: true}, "SDK_CONTRACT_EXTRACTION_DRIFT");
 
-  assert.deepEqual(current.checks, {providerPacked: true, defaultCheckpointCompatibility: true, codexNativeMcpRequestSeams: true}, "SDK_CONTRACT_EXTRACTION_DRIFT");
+  assert.deepEqual(predecessor.checks, {providerPacked: true, defaultCheckpointCompatibility: true, codexNativeMcpRequestSeams: true}, "SDK_CONTRACT_EXTRACTION_DRIFT");
 
   const entry = profile.packages.filter(pkg => pkg.packageName === providerPackage);
   assert.equal(entry.length, 1, "SDK_PROVIDER_SCOPE_DRIFT");
@@ -80,6 +85,58 @@ function checkProviderQualification(repository, profile, json) {
     assert.deepEqual(manifest.exports[exportPath], { types: `./dist/${stem}.d.ts`, import: `./dist/${stem}.js` }, "SDK_PROVIDER_PUBLIC_IMPORT_DRIFT");
     assert.equal(entry[0].entrypoints[index].declarationEntryPoint, `${providerRoot}/dist/${stem}.d.ts`, "SDK_PROVIDER_SCOPE_DRIFT");
   }
+  // This successor records controlled source tests and inert packed imports only.
+  // Historical native qualification and blocked authority admission are unchanged.
+  assert.deepEqual(current.engines.map(engine => engine.node), ["v24.21.0", "v26.11.1"], "SDK_PROVIDER_QUALIFICATION_DRIFT");
+  const controlledTests = globSync(`${providerRoot}/tests/features/**/*.test.ts`, {cwd: repository}).toSorted();
+  const expectedImports = profile.packages.flatMap(pkg => Object.keys(json(pkg.manifestPath).exports)
+    .map(path => pkg.packageName + (path === "." ? "" : path.slice(1)))).toSorted();
+  const receipts = [];
+  for (const engine of current.engines) {
+    for (const [kind, tests] of [["provider", 318], ["owner", 26], ["packed", null]]) {
+      const proof = engine[kind];
+      for (const path of [proof.log, proof.invocation, proof.completion, ...(kind === "packed" ? [proof.receipt] : [])]) {
+        assert.ok(current.evidence.some(input => input.path === path), "SDK_PROVIDER_QUALIFICATION_DRIFT");
+      }
+      const completion = json(proof.completion);
+      assert.equal(completion.job.id, proof.jobId, "SDK_PROVIDER_QUALIFICATION_DRIFT");
+      assert.equal(completion.job.status, "exited", "SDK_PROVIDER_QUALIFICATION_DRIFT");
+      assert.equal(completion.result.exit_code, 0, "SDK_PROVIDER_QUALIFICATION_DRIFT");
+      assert.equal(completion.result.signal, null, "SDK_PROVIDER_QUALIFICATION_DRIFT");
+      assert.equal(completion.logs_drained, true, "SDK_PROVIDER_QUALIFICATION_DRIFT");
+      const invocation = json(proof.invocation);
+      assert.equal(invocation.job.id, proof.jobId, "SDK_PROVIDER_QUALIFICATION_DRIFT");
+      const args = invocation.command;
+      assert.ok(engine.execPath.startsWith("/") && args.includes(engine.execPath), "SDK_PROVIDER_QUALIFICATION_DRIFT");
+      assert.match(engine.executableSha256, /^[a-f0-9]{64}$/u, "SDK_PROVIDER_QUALIFICATION_DRIFT");
+      if (tests !== null) {
+        assert.equal(proof.tests, tests, "SDK_PROVIDER_QUALIFICATION_DRIFT");
+        const log = readFileSync(resolve(repository, proof.log), "utf8");
+        for (const [name, count] of [["tests", tests], ["pass", tests], ["fail", 0], ["cancelled", 0], ["skipped", 0], ["todo", 0]]) {
+          assert.match(log, new RegExp(`(?:^|\\n)ℹ ${name} ${count}(?:\\n|$)`, "u"), "SDK_PROVIDER_QUALIFICATION_DRIFT");
+        }
+        assert.ok(args.includes("--test-concurrency=1") && args.includes("--test-timeout=60000"), "SDK_PROVIDER_QUALIFICATION_DRIFT");
+        const paths = args.filter(arg => arg.endsWith(".test.ts"));
+        assert.deepEqual(paths.map(path => `${kind === "provider" ? providerRoot : "packages/contexts/agent-execution"}/${path}`).toSorted(),
+          kind === "provider" ? controlledTests : ["packages/contexts/agent-execution/tests/features/interactive-agent-session/owner.test.ts"], "SDK_PROVIDER_QUALIFICATION_DRIFT");
+      } else {
+        assert.equal(args.at(-1), "scripts/architecture/qualify-sdk-packages.mjs", "SDK_PROVIDER_QUALIFICATION_DRIFT");
+        const receipt = json(proof.receipt);
+        assert.equal(receipt.node, engine.node, "SDK_PROVIDER_QUALIFICATION_DRIFT");
+        assert.equal(receipt.qualification, "package-membership-and-public-imports", "SDK_PROVIDER_QUALIFICATION_DRIFT");
+        assert.equal(receipt.releaseEligible, false, "SDK_PROVIDER_ADMISSION_OVERCLAIM");
+        assert.deepEqual(receipt.packages.map(pkg => pkg.packageName).toSorted(), profile.packages.map(pkg => pkg.packageName).toSorted(), "SDK_PROVIDER_QUALIFICATION_DRIFT");
+        assert.deepEqual(receipt.publicImports.toSorted(), expectedImports, "SDK_PROVIDER_PUBLIC_IMPORT_DRIFT");
+        for (const pkg of receipt.packages) {
+          assert.match(pkg.archiveSha256, /^[a-f0-9]{64}$/u, "SDK_PROVIDER_QUALIFICATION_DRIFT");
+          assert.ok(Number.isSafeInteger(pkg.members) && pkg.members > 0, "SDK_PROVIDER_QUALIFICATION_DRIFT");
+        }
+        receipts.push(receipt.packages.map(({packageName, archiveSha256, members}) => ({packageName, archiveSha256, members})));
+      }
+    }
+  }
+  assert.deepEqual(receipts[0], receipts[1], "SDK_PROVIDER_QUALIFICATION_DRIFT");
+
   const proof = json(`${directory}/provider-implementations-public-imports.json`);
   assert.equal(proof.qualification, "workspace-provider-package-and-public-imports", "SDK_PROVIDER_QUALIFICATION_DRIFT");
   assert.equal(proof.authority, "ADR-0092", "SDK_PROVIDER_QUALIFICATION_DRIFT");
@@ -100,7 +157,7 @@ function checkProviderQualification(repository, profile, json) {
   assert.ok(proof.sourceInputs.every(input => sourcePaths.includes(input.path)), "SDK_PROVIDER_SOURCE_DRIFT");
   assert.ok(proof.sourceInputs.length > 0 && new Set(proof.sourceInputs.map(item => item.path)).size === proof.sourceInputs.length, "SDK_PROVIDER_SOURCE_DRIFT");
   assert.equal(createHash("sha256").update(readFileSync(resolve(repository, `${directory}/provider-implementations-public-imports.json`))).digest("hex"), extraction.predecessorSha256, "SDK_PROVIDER_SOURCE_DRIFT");
-  // Historical source digests remain frozen; ADR-0093 current inputs above qualify the extraction.
+  // Historical source digests remain frozen; the scoped ADR-0093 successor above binds current inputs.
   for (const input of [{ path: proof.evidencePath, sha256: proof.evidenceSha256 }]) {
     assert.ok(input.path.startsWith(`${providerRoot}/`) || input.path === `${directory}/evidence/provider-implementations-public-imports.txt`, "SDK_PROVIDER_SOURCE_DRIFT");
     assert.match(input.sha256, /^[a-f0-9]{64}$/u, "SDK_PROVIDER_SOURCE_DRIFT");

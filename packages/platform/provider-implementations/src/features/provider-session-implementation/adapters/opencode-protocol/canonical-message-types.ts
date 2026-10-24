@@ -25,6 +25,9 @@ export type OpenCodeCanonicalMessage = {
 export type OpenCodeCanonicalToolStatus = 'running' | 'completed' | 'errored' | 'unknown'
 
 export type OpenCodeCanonicalToolCall = {
+  /** Native V1 part identity and metadata observations, not authored file images. */
+  partId?: string | null
+  metadata?: Record<string, unknown> | null
   callId: string | null
   toolName: string | null
   title: string | null

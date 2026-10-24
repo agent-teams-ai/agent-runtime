@@ -10,6 +10,7 @@ export async function v1Peer() {
   let holding = false, permission = false, lostReceipt = false, foreign = false, parentWrong = false
   let heldPermission: (() => void) | undefined, holdPermission = false, heldAbort: (() => void) | undefined, holdAbort = false
   let abortAckOnly = false
+  let statusOverride: { value: unknown } | undefined
   let active: string | undefined, tick = 1, reads = 0, permissionReads = 0
   const append = (id: string, text: string) => {
     const assistant = 'msg_' + id.slice(4, 16) + 'T'.repeat(14), now = tick++
@@ -42,7 +43,7 @@ export async function v1Peer() {
         res.end(body); return
       }
       if (url.pathname === '/question') { res.end('[]'); return }
-      if (url.pathname === '/session/status') { res.end(JSON.stringify({ [nativeSessionId]: { type: active ? 'busy' : 'idle' }, [neighbor]: { type: 'busy' } })); return }
+      if (url.pathname === '/session/status') { res.end(JSON.stringify(statusOverride ? statusOverride.value : { ...(active ? { [nativeSessionId]: { type: 'busy' } } : {}), [neighbor]: { type: 'busy' } })); return }
       if (url.pathname.endsWith('/message')) {
         reads++
         const before = url.searchParams.get('before'), end = before ? messages.findIndex(row => row.info.id === before) : messages.length
@@ -83,6 +84,7 @@ export async function v1Peer() {
     abortAckOnly: () => { abortAckOnly = true },
     holdAbort: () => { holdAbort = true }, releaseAbort: () => { heldAbort?.(); heldAbort = undefined },
     reads: () => reads, permissionReads: () => permissionReads,
+    status: (value: unknown) => { statusOverride = { value } }, nativeStatus: () => { statusOverride = undefined },
     close: async () => { server.closeAllConnections(); await new Promise<void>((resolve, reject) => { server.close(error => error ? reject(error) : resolve()) }) },
   }
 }

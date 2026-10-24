@@ -1301,3 +1301,26 @@ for its whole `test` command. A leak a guard finds is fixed, not allowed.
 Agent Execution, Provider Access and Runtime Security run hundreds of contained-turn
 files in one command each, so they adopt guards together with LIB-PROCESS,
 LIB-CODEX-1 and STORE-2-core.
+
+
+## Provider adapter protocol census
+
+The provider migration extends private Claude capture/subagent observations and
+finite metadata/model reads, Codex MCP/model/question mappings, selected native
+argument handling and attachment request helpers inside the existing
+provider-session-implementation feature. The consumer profile enumerates their
+actual curated export relationships and Foundation source entrypoints. These
+fixed helpers remain under ADR-0092; they are not new Host or Assembly owners.
+
+This reconciliation changes no production root, feature identity, exception,
+standard pin or configurable graph relationship. Full-feature FMS checking and
+the fixed-library not-adopted CMS classification remain applicable. Curated
+source entrypoints do not admit arbitrary package deep imports. The source
+policy continues to reject undeclared imports and dependencies in inner layers;
+the provider adapter owns native DTO validation and technical Node mappings.
+
+Current-source census and its rejecting fixtures must pass for the integrated
+bytes. Census consistency does not certify the migration, qualify native
+effects or replace historical SDK-growth evidence. Current-input and static
+packed-consumer qualification require an evidenced successor; historical
+receipt hashes and the existing release-admission block remain unchanged.

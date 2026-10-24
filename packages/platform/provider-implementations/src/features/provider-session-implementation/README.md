@@ -31,3 +31,25 @@ materialization manifest distinguishes unchanged relocation from path and
 assembly adaptations. Synthetic subprocess/HTTP fixtures retain targeted
 interrupt, no replay after uncertainty, strict restore and late-permission
 fences. They do not prove real authentication or deployment qualification.
+
+The curated `./claude` facade also exposes `readClaudeMetadata`: one bounded SDK
+initialization read of native models and credential-source metadata, with no
+user input, tools, MCP or persisted conversation. Inherited hooks are explicitly
+disabled for this metadata operation. Its captured configuration and
+spawn callback remain Host-owned; SDK query closure does not prove physical
+process release. The consumer must confirm custody before publishing the result.
+The helper strips private account identity, bounds native metadata, closes on
+success/failure/cancellation/deadline and reports cleanup uncertainty. It never
+turns catalog/credential-source observations into authentication or execution
+proof. This is a fixed native adapter helper inside the existing feature, not
+another Session SPI, Assembly graph node or runtime lifecycle authority.
+
+`probeClaudeModel` is the corresponding finite explicit model test. It waits for
+native model metadata, rechecks the caller's `canSubmit` fence before releasing
+one input, and accepts only matching main-thread text and terminal model usage.
+Optional effort requires native model support and is passed to the SDK; explicit
+one-million context uses the same SDK beta as interactive sessions and requires
+matching context evidence. Tools, MCP, hooks and persistence are disabled. The
+caller owns durable intent, replay, cancellation and physical process custody;
+the helper returns no product or global authentication authority. This remains
+inside the existing native adapter feature and curated `./claude` facade.

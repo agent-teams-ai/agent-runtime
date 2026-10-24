@@ -4,15 +4,32 @@ import type { CloseReceipt, Event, EventPayload, FailureCode, Handoff, Input, In
 import { compatibility, options, SDK_REVISION } from './config.ts';
 import type { ClaudeConfig } from './config.ts';
 import { toolBindingHook } from './tool-binding.ts';
+import type { ForegroundToolOwner } from './tool-binding.ts';
+import { ClaudeSubagents } from './subagents.ts';
+import { ClaudeCapture } from './capture.ts';
 import { Interactions } from './interactions.ts';
 import { Normalizer, OutputLimitError, record } from './normalize.ts';
 import { bounded, deferred, EventFeed } from '../provider-session-io/io.ts';
 import { fail } from './primitives.ts';
 import { AttachmentFailure, assertSerializedAttachments, prepareAttachments, snapshotInput, validateAttachments } from '../provider-session-io/attachments.ts';
 import type { PreparedAttachment } from '../provider-session-io/attachments.ts';
-export type QueryHandle = Pick<Query, 'interrupt' | 'close' | 'mcpServerStatus'> & AsyncIterable<unknown>;
+export type QueryHandle = Pick<Query, 'interrupt' | 'close' | 'mcpServerStatus'> & Partial<Pick<Query, 'stopTask'>> & AsyncIterable<unknown>;
 export type QueryFactory = (args: { prompt: AsyncIterable<SDKUserMessage>; options: Options }) => QueryHandle;
 type PendingInput = { input: Input; handed: boolean; nativeRef: ReturnType<typeof randomUUID>; receipt: ReturnType<typeof deferred<Reply<Handoff>>>; interactionsCancelled: boolean; toolRevocation: AbortController };
+/** A complete successful main-thread result without foreground or restore provenance. */
+function idleNativeSuccess(m: Record<string, unknown>, nativeSession: string): boolean {
+  const numbers = [m.duration_ms, m.duration_api_ms, m.total_cost_usd];
+  const objects = [m.usage, m.modelUsage];
+  return m.type === 'result' && m.subtype === 'success' && m.is_error === false && m.session_id === nativeSession &&
+    (m.parent_tool_use_id === null || m.parent_tool_use_id === undefined) &&
+    [m.agent_id, m.resume_reason, m.user_message_uuid, m.user_message_uuids].every(value => value === undefined) &&
+    typeof m.uuid === 'string' && m.uuid.length > 0 && typeof m.result === 'string' &&
+    (m.stop_reason === null || typeof m.stop_reason === 'string') &&
+    typeof m.num_turns === 'number' && Number.isSafeInteger(m.num_turns) && m.num_turns >= 0 &&
+    numbers.every(value => typeof value === 'number' && Number.isFinite(value) && value >= 0) &&
+    objects.every(value => value !== null && typeof value === 'object' && !Array.isArray(value)) &&
+    Array.isArray(m.permission_denials);
+}
 export class ClaudeSession implements Session {
   readonly sessionRef: string;
   private state: 'open' | 'unavailable' | 'closed' = 'open';
@@ -26,6 +43,8 @@ export class ClaudeSession implements Session {
   private active: PendingInput | undefined;
   private readonly messageOwners = new Map<string, Input>();
   private readonly toolOwners = new Map<string, { input: Input; name: string }>();
+  private toolOwnershipChanged = deferred<void>();
+  private pendingToolOwners = 0;
   private readonly nativeToolIdentities = new Map<string, { nativeInput: string; name: string }>();
   private streamRef: string | undefined;
   private foregroundBound = false;
@@ -33,29 +52,43 @@ export class ClaudeSession implements Session {
   private turnEvents = 0;
   private knownTerminal: Extract<Event, { kind: 'result' }> | undefined;
   private wakeup = deferred<void>();
+  private readonly inputClosed = deferred<void>();
   private control: Promise<Reply<{ requested: true; terminal: 'unconfirmed' }>> | undefined;
   private closing?: Promise<CloseReceipt>;
   private readiness: Promise<Reply<void>> | undefined;
   private failure: FailureCode | undefined;
   private readonly config: ClaudeConfig;
   private readonly nativeSession: string;
+  private readonly subagents: ClaudeSubagents | undefined;
+  private readonly capture: ClaudeCapture | undefined;
   constructor(config: ClaudeConfig, nativeSession: string, restore: boolean, factory: QueryFactory) {
     this.config = config; this.nativeSession = nativeSession;
     this.sessionRef = config.sessionRef;
     this.feed = new EventFeed(config.limits.outputEvents, config.limits.outputBytes);
     this.normalizer = new Normalizer(config.limits.outputBytes);
     this.backgroundNormalizer = new Normalizer(config.limits.outputBytes);
-    this.interactions = new Interactions(config.limits.pendingInteractions, config.limits.timeoutMs, (event) => {
+    this.interactions = new Interactions(config.limits.pendingInteractions, config.limits.timeoutMs, (event, childRef, toolRef): void | Promise<void> => {
       if (!this.active || this.active.interactionsCancelled || this.state !== 'open') { this.interactions.cancel(); return; }
+      if (childRef !== undefined) {return this.childInteraction(event, childRef, toolRef);}
       this.emit(event, this.active.input);
     });
-    const preToolUse = config.toolBinding ? toolBindingHook(config.toolBinding, this.sessionRef, nativeSession, (toolId, toolName) => {
+    const currentToolOwner = (toolId: string, toolName: string) => {
       const active = this.active; const owner = this.toolOwners.get(toolId);
       if (active === undefined || !owner || owner.name !== toolName || owner.input !== active.input) { return; }
       return this.state === 'open' && !active.interactionsCancelled ? { ...active.input, nativeRef: active.nativeRef, revoked: active.toolRevocation.signal } : undefined;
-    }, config.limits.timeoutMs) : undefined;
+    };
+    const preToolUse = config.toolBinding ? toolBindingHook(config.toolBinding, this.sessionRef, nativeSession, currentToolOwner, config.limits.timeoutMs) : undefined;
+    this.capture = config.capture ? new ClaudeCapture({ port: config.capture, sessionRef: this.sessionRef, nativeSession,
+      names: config.nativeTools, currentOwner: currentToolOwner, maxPairs: config.limits.outputEvents,
+      maxBytes: config.limits.outputBytes, timeoutMs: config.limits.timeoutMs }) : undefined;
+    this.subagents = config.subagents ? new ClaudeSubagents({ port: config.subagents, sessionRef: this.sessionRef, nativeSession, currentOwner: currentToolOwner,
+      awaitOwner: (id, name, signal) => this.awaitToolOwner(id, name, signal, currentToolOwner),
+      maxEvents: config.limits.outputEvents, maxBytes: config.limits.outputBytes, timeoutMs: config.limits.timeoutMs }) : undefined;
+    const beforeHooks = [...(this.subagents ? [this.subagents.hook] : []), ...(preToolUse ? [preToolUse] : []), ...(this.capture ? [this.capture.hook] : [])];
     this.query = factory({ prompt: this.inputs(), options: { ...options(config, nativeSession, restore), canUseTool: this.requestInteraction,
-      ...(preToolUse ? { hooks: { PreToolUse: [{ hooks: [preToolUse] }] } } : {}) } });
+      ...(beforeHooks.length ? { hooks: { PreToolUse: [{ hooks: beforeHooks }],
+        ...(this.capture ? { PostToolUse: [{ hooks: [this.capture.hook] }], PostToolUseFailure: [{ hooks: [this.capture.hook] }],
+          ...(this.capture.completesBatches ? { PostToolBatch: [{ hooks: [this.capture.batchHook] }] } : {}) } : {}) } } : {}) } });
     this.readLoop = this.read();
   }
   submit(input: Input): Promise<Reply<Handoff>> {
@@ -74,17 +107,29 @@ export class ClaudeSession implements Session {
     return this.state === 'open' ? this.interactions.reply(ref, reply) : fail('unavailable');
   }
   private readonly requestInteraction: CanUseTool = (...args) => {
+    if ((args[2].agentID === undefined && this.subagents?.ownsTool(args[2].toolUseID)) ||
+        (args[2].agentID !== undefined && !this.subagents?.canInteract(args[2].agentID, args[2].toolUseID, args[0]))) {
+      return Promise.resolve({ behavior: 'deny', message: 'Child interaction provenance unavailable' });
+    }
     if (this.state !== 'open' || !this.active || this.active.interactionsCancelled) {
       return Promise.resolve({ behavior: 'deny', message: 'Interaction unavailable for this operation' });
     }
     return this.interactions.request(...args);
   };
+  private async childInteraction(event: EventPayload, childRef: string, toolRef: string | undefined): Promise<void> {
+    const active = this.active;
+    if (!active || !this.subagents || !toolRef || event.kind !== 'interaction') {throw new Error('Child interaction unavailable');}
+    await this.subagents.interaction(childRef, toolRef, event);
+    if (this.active !== active || active.interactionsCancelled || this.state !== 'open') {throw new Error('Child interaction stale');}
+    this.emit(event, active.input);
+  }
   checkReadiness(): Promise<Reply<void>> {
     if (this.state === 'closed' || (this.failure && this.failure !== 'dependency-unavailable')) {return Promise.resolve(fail(this.failure ?? 'unavailable'));}
     if (!this.readiness) {this.readiness = this.probe().finally(() => { this.readiness = undefined; });}
     return this.readiness;
   }
   private async probe(): Promise<Reply<void>> {
+    if (this.subagents && !this.query.stopTask) {return fail('unsupported');}
     const abort = new AbortController();
     try {
       const healthy = await bounded((async () => {
@@ -138,16 +183,43 @@ export class ClaudeSession implements Session {
     if (this.closing) {return this.closing;}
     // Seal before the first await, including interaction and iterable admission.
     this.unavailable('unknown'); this.state = 'closed'; this.interactions.close(); this.rejectQueued('unavailable'); this.wake();
-    this.closing = this.shutdown(); return this.closing;
+    this.closing = Promise.resolve().then(() => this.shutdown()); return this.closing;
   }
   private async shutdown(): Promise<CloseReceipt> {
+    if (this.subagents) {
+      try { await bounded(this.subagents.stopOwned(id => this.query.stopTask!(id)), this.config.limits.timeoutMs); } catch { /* Physical custody still must close independently. */ }
+    }
+    const captured = this.capture?.close();
+    let stopped = false;
     try {
-      this.query.close();
-      await bounded(this.readLoop, this.config.limits.timeoutMs);
-      const stopped = await bounded(this.config.custody.confirmStopped(), this.config.limits.timeoutMs);
-      return { logicallyClosed: true, cleanup: stopped ? 'confirmed' : 'unknown' };
-    } catch { return { logicallyClosed: true, cleanup: 'unknown' }; }
-    finally { this.feed.end(); }
+      // Keep SDK stdin and iterator teardown behind the original captured owner's stop.
+      stopped = await bounded(this.config.custody.confirmStopped(), this.config.limits.timeoutMs);
+      this.observeClose({ stage: 'custody', outcome: stopped ? 'confirmed' : 'unconfirmed' });
+    } catch { this.observeClose({ stage: 'custody', outcome: 'error' }); }
+    finally {
+      this.inputClosed.resolve();
+      let sdkClosed = false;
+      try {
+        this.query.close(); sdkClosed = true;
+        this.observeClose({ stage: 'sdk-close', outcome: 'completed' });
+        await bounded(this.readLoop, this.config.limits.timeoutMs);
+        this.observeClose({ stage: 'sdk-read', outcome: 'completed' });
+      } catch {
+        stopped = false;
+        this.observeClose({ stage: sdkClosed ? 'sdk-read' : 'sdk-close', outcome: 'error' });
+      }
+      try {
+        await captured;
+        if (this.capture) { this.observeClose({ stage: 'capture-close', outcome: 'completed' }); }
+      } catch { stopped = false; this.observeClose({ stage: 'capture-close', outcome: 'error' }); }
+      this.feed.end();
+    }
+    return { logicallyClosed: true, cleanup: stopped ? 'confirmed' : 'unknown' };
+  }
+  private observeClose(observation: Parameters<NonNullable<ClaudeConfig['observeClose']>>[0]): void {
+    // Observation failures/rejections cannot change teardown order, budgets or the cached receipt.
+    try { void Promise.resolve(this.config.observeClose?.(Object.freeze(observation))).catch(() => {}); }
+    catch { /* Private operational observations are best effort. */ }
   }
   private async *inputs(): AsyncGenerator<SDKUserMessage> {
     while (this.state !== 'closed') {
@@ -173,6 +245,8 @@ export class ClaudeSession implements Session {
       pending.receipt.resolve({ ok: true, value: { inputId: pending.input.inputId, operationRef: pending.input.operationRef, delivery: 'client-consumed', providerAcceptance: 'unknown' } });
       yield { type: 'user', message: { role: 'user', content }, parent_tool_use_id: null, session_id: this.nativeSession, uuid: pending.nativeRef };
     }
+    // Closed admission is synchronous; EOF must still wait for caller-owned physical cleanup.
+    await this.inputClosed.promise;
   }
   private handoffAvailable(): boolean {
     // This check follows an await; TypeScript's earlier narrowing is not a lifecycle fence.
@@ -180,9 +254,12 @@ export class ClaudeSession implements Session {
   }
   private async read(): Promise<void> {
     try {
-      for await (const message of this.query) {
-        if (this.state === 'closed') {break;}
-        this.accept(message);
+      // A for-await break invokes Query.return(), which can retire the SDK root before its owner.
+      const iterator = this.query[Symbol.asyncIterator]();
+      for (;;) {
+        const next = await iterator.next();
+        if (next.done || this.state === 'closed') {break;}
+        const accepted = this.accept(next.value); if (accepted) {await accepted;}
       }
       if (this.state !== 'closed') { this.emit({ kind: 'diagnostic', code: 'iterator-ended' }); this.unavailable('unknown'); }
     } catch (error) { if (this.state !== 'closed') {
@@ -191,12 +268,14 @@ export class ClaudeSession implements Session {
     } }
     finally { this.feed.end(); }
   }
-  private accept(message: unknown): void {
+  private async accept(message: unknown): Promise<void> {
     const m = record(message);
     if (Boolean(m.session_id) && m.session_id !== this.nativeSession) { this.unavailable('unknown'); return; }
+    if (await this.capture?.acceptTask(m)) {return;}
+    if (await this.acceptNested(m)) {return;}
     const input = this.correlate(m);
     if (m.type === 'system' && m.subtype === 'compact_boundary') {
-      if (m.session_id !== this.nativeSession || Boolean(m.parent_tool_use_id) || Boolean(m.agent_id) || Boolean(m.resume_reason)) { return; }
+      if (!this.mainCompaction(m)) { return; }
       // One session-lifetime dedup owner, independent of foreground/background attribution.
       for (const fact of this.normalizer.normalize(message).facts) { this.emit(fact, input); }
       return;
@@ -208,9 +287,35 @@ export class ClaudeSession implements Session {
       if (input && fact.kind === 'tool') { if (!this.ownTool(fact.toolRef, fact.name, input)) { return; } }
       this.emit(fact, input);
     }
-    this.acceptTerminal(terminal, failure, input);
-    this.knownTerminal = undefined;
-    this.acceptInitialization(m);
+    return this.finishAcceptance(m, terminal, failure, input);
+  }
+  private mainCompaction(message: Record<string, unknown>): boolean {
+    return message.session_id === this.nativeSession && !message.parent_tool_use_id && !message.agent_id && !message.resume_reason;
+  }
+  private async acceptNested(message: Record<string, unknown>): Promise<boolean> {
+    if (this.subagents && await this.subagents.accept(message)) {return true;}
+    if ((message.parent_tool_use_id !== null && message.parent_tool_use_id !== undefined) || message.agent_id !== undefined) {
+      this.emit({ kind: 'diagnostic', code: 'unknown-event' }); return true;
+    }
+    return false;
+  }
+  private finishAcceptance(m: Record<string, unknown>, terminal: 'succeeded' | 'failed' | 'unknown' | undefined,
+    failure: FailureCode | undefined, input: Input | undefined): void | Promise<void> {
+    // An idle native acknowledgment is observational, never a foreground completion.
+    if (this.active === undefined && input === undefined && idleNativeSuccess(m, this.nativeSession)) {
+      this.emit({ kind: 'diagnostic', code: 'unknown-event' });
+      return;
+    }
+    const settle = (recheckOwner = false) => {
+      if (recheckOwner && this.active?.input !== input) {this.knownTerminal = undefined; return;}
+      this.acceptTerminal(terminal, failure, input);
+      this.knownTerminal = undefined; this.acceptInitialization(m);
+    };
+    if (terminal && input && this.capture && (this.capture.completesBatches || this.capture.retainsBackground)) {
+      // Cancellation/unavailability can retire the owner during the awaited observer.
+      return this.capture.finishInput(input, terminal).then(() => settle(true));
+    }
+    settle();
   }
   private ownPartialTool(m: Record<string, unknown>, input: Input): boolean {
     if (m.type !== 'stream_event') { return true; }
@@ -268,7 +373,26 @@ export class ClaudeSession implements Session {
     // IDs have no proved global uniqueness contract. Retain bounded tombstones across turns.
     if (!prior && this.nativeToolIdentities.size >= this.config.limits.outputEvents) { this.unavailable('output-limit'); return false; }
     this.nativeToolIdentities.set(id, { nativeInput, name });
-    this.toolOwners.set(id, { input, name }); return true;
+    this.toolOwners.set(id, { input, name });
+    this.toolOwnershipChanged.resolve(); this.toolOwnershipChanged = deferred<void>(); return true;
+  }
+  /** SDK control callbacks race its independent output iterator; await an exact observed tool, never infer its owner. */
+  private async awaitToolOwner(id: string, name: string, signal: AbortSignal,
+    current: (id: string, name: string) => ForegroundToolOwner | undefined): Promise<ForegroundToolOwner | undefined> {
+    const active = this.active;
+    if (!active || this.pendingToolOwners >= this.config.limits.outputEvents) {return;}
+    this.pendingToolOwners++;
+    const scope = AbortSignal.any([signal, active.toolRevocation.signal, AbortSignal.timeout(this.config.limits.timeoutMs)]);
+    let abort!: () => void;
+    const ended = new Promise<void>(resolve => { abort = resolve; scope.addEventListener('abort', abort, { once: true }); if (scope.aborted) {abort();} });
+    try {
+      while (!scope.aborted && this.state === 'open' && this.active === active) {
+        const owner = current(id, name);
+        if (owner) {return owner;}
+        await Promise.race([this.toolOwnershipChanged.promise, ended]);
+      }
+      return undefined;
+    } finally { scope.removeEventListener('abort', abort); this.pendingToolOwners--; }
   }
   private toolResultOwner(content: unknown): Input | undefined {
     if (!this.active || !Array.isArray(content)) { return undefined; }
@@ -285,6 +409,10 @@ export class ClaudeSession implements Session {
     this.state = 'unavailable';
     // A disappeared dependency during an accepted turn does not prove the turn stopped.
     this.failure = this.active && code === 'dependency-unavailable' ? 'unknown' : code;
+    // Idle readiness may recover; retire old leases without disabling future original pairs.
+    if (this.capture?.retainsBackground) {
+      void (this.failure === 'dependency-unavailable' ? this.capture.revoke() : this.capture.close());
+    }
     if (this.active) {
       this.active.toolRevocation.abort();
       if (!this.active.handed) { this.active.receipt.resolve({ ok: false, code, delivery: 'known-not-sent' }); this.active = undefined; }
@@ -297,7 +425,7 @@ export class ClaudeSession implements Session {
     }
     if (code === 'output-limit') {
       this.feed.finishWith({ sessionRef: this.sessionRef, kind: 'diagnostic', code });
-      this.query.close();
+      void this.close();
     }
     this.interactions.cancel(); this.rejectQueued(code); this.wake();
   }

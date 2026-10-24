@@ -14,8 +14,10 @@ function plainData(value: unknown): Record<string, unknown> | undefined {
 function validatedReply(value: unknown): InteractionReply | undefined {
   try {
     const reply = plainData(value);
+    if (!reply || Object.keys(reply).length !== 2) {return;}
     if (reply?.kind === 'permission' && (reply.decision === 'allow' || reply.decision === 'deny')) { return { kind: 'permission', decision: reply.decision }; }
     if (reply?.kind === 'question') {
+      if (reply.decision === 'deny') {return { kind: 'question', decision: 'deny' };}
       const answers = plainData(reply.answers);
       if (answers && Object.values(answers).every((answer) => typeof answer === 'string')) { return { kind: 'question', answers: answers as Record<string, string> }; }
     }
@@ -27,9 +29,9 @@ export class Interactions {
   private sealed = false;
   private readonly max: number;
   private readonly timeoutMs: number;
-  private readonly emit: (event: EventPayload) => void;
-  constructor(max: number, timeoutMs: number, emit: (event: EventPayload) => void) { this.max = max; this.timeoutMs = timeoutMs; this.emit = emit; }
-  readonly request: CanUseTool = (tool, input, { signal }) => {
+  private readonly emit: (event: EventPayload, childRef?: string, toolRef?: string) => unknown;
+  constructor(max: number, timeoutMs: number, emit: (event: EventPayload, childRef?: string, toolRef?: string) => unknown) { this.max = max; this.timeoutMs = timeoutMs; this.emit = emit; }
+  readonly request: CanUseTool = (tool, input, { signal, agentID, toolUseID }) => {
     if (this.sealed || signal.aborted) { return Promise.resolve({ behavior: 'deny', message: 'Interaction unavailable' }); }
     if (this.pending.size >= this.max) {
       this.emit({ kind: 'diagnostic', code: 'backpressure' });
@@ -45,7 +47,11 @@ export class Interactions {
         clearTimeout(timer); signal.removeEventListener('abort', abort); resolve(result);
       };
       this.pending.set(ref, { kind, input, finish }); signal.addEventListener('abort', abort, { once: true });
-      this.emit({ kind: 'interaction', interactionRef: ref, request: kind === 'question' ? { kind, questions: input.questions } : { kind, tool, input } });
+      const event: EventPayload = { kind: 'interaction', interactionRef: ref, request: kind === 'question' ? { kind, questions: input.questions } : { kind, tool, input } };
+      try {
+        const emission = this.emit(event, agentID, toolUseID);
+        void Promise.resolve(emission).catch(() => finish({ behavior: 'deny', message: 'Interaction provenance unavailable' }));
+      } catch { finish({ behavior: 'deny', message: 'Interaction provenance unavailable' }); }
     });
   };
   reply(ref: string, reply: InteractionReply): Reply<void> {
@@ -54,8 +60,11 @@ export class Interactions {
     if (!pending) {return fail('stale');}
     const validated = validatedReply(reply);
     if (!validated || validated.kind !== pending.kind) {return fail('unsupported');}
-    const updatedInput = validated.kind === 'question' ? { ...pending.input, answers: validated.answers } : pending.input;
-    pending.finish(validated.kind === 'permission' && validated.decision === 'deny' ? { behavior: 'deny', message: 'Denied by authority' } : { behavior: 'allow', updatedInput });
+    if (validated.decision === 'deny') {pending.finish({ behavior: 'deny', message: 'Denied by authority' });}
+    else {
+      const updatedInput = validated.kind === 'question' ? { ...pending.input, answers: validated.answers } : pending.input;
+      pending.finish({ behavior: 'allow', updatedInput });
+    }
     return { ok: true, value: undefined };
   }
   cancel(): void { for (const p of this.pending.values()) {p.finish({ behavior: 'deny', message: 'Interaction cancelled' });} }

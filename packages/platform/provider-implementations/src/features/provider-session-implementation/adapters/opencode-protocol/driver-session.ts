@@ -1,4 +1,5 @@
-import { createHash } from 'node:crypto'
+import { OpenCodeInputWindowCapture } from './input-window-capture.ts'
+import { createHash, randomUUID } from 'node:crypto'
 import { setTimeout as delay } from 'node:timers/promises'
 import type { CloseReceipt, Event, EventPayload, FailureCode, Input, InteractionReply, Reply, Session } from '@agent-teams/provider-session-contracts'
 import { bounded, deferred, EventFeed } from '../provider-session-io/io.ts'
@@ -9,7 +10,7 @@ import { AttachmentFailure, inputFingerprint, prepareAttachments, snapshotInput,
 const failure = (code: FailureCode, unsent = false) => ({ ok: false as const, code, ...(unsent ? { delivery: 'known-not-sent' as const } : {}) })
 const handoff = (input: Input) => ({ ok: true as const, value: { inputId: input.inputId, operationRef: input.operationRef,
   delivery: 'client-consumed' as const, providerAcceptance: 'unknown' as const } })
-type Pending = { input: Input; nativeId: string; done: ReturnType<typeof deferred<ReturnType<typeof handoff> | ReturnType<typeof failure>>>; handed: boolean; preparing: boolean; interactionsRevoked: boolean; interactionAbort: AbortController; turn?: DriverTurn }
+type Pending = { capture?: OpenCodeInputWindowCapture; input: Input; nativeId: string; done: ReturnType<typeof deferred<ReturnType<typeof handoff> | ReturnType<typeof failure>>>; handed: boolean; preparing: boolean; interactionsRevoked: boolean; interactionAbort: AbortController; turn?: DriverTurn }
 type Interaction = { permission: DriverPermission; owner: Pending; answering: boolean }
 
 /** Volatile bounded native-session consumer. Runtime owns durable operations and recovery. */
@@ -132,6 +133,7 @@ export class OpenCodeDriverSession implements Session {
         try {
           const attachments = await prepareAttachments(pending.input, { trustedBinding: this.config.trustedBinding, sessionRef: this.sessionRef, port: this.config.attachments, signal: pending.interactionAbort.signal, timeoutMs: this.config.limits.timeoutMs })
           if (!this.canSubmit(pending)) { pending.done.resolve(failure('stale', true)); continue }
+          if (!await this.observeBefore(pending)) { pending.done.resolve(failure('stale', true)); continue }
           pending.preparing = false
           const turn = await this.protocol.queue(pending.nativeId, pending.input.content, attachments)
           if (!this.isOpen()) { pending.done.resolve(failure('unknown')); continue }
@@ -139,12 +141,24 @@ export class OpenCodeDriverSession implements Session {
           await this.poll(pending, turn)
         } catch (error) {
           if (this.rejectAttachments(error, pending)) { continue }
+          pending.capture?.gap('transport')
           if (!pending.handed && executionWasNotSubmitted(error)) {
             pending.done.resolve(failure('dependency-unavailable', true)); this.active = undefined; this.seal('dependency-unavailable')
           } else { pending.done.resolve(failure('unknown')); this.seal('unknown') }
         }
       }
     } finally { this.feed.end() }
+  }
+  private async observeBefore(pending: Pending): Promise<boolean> {
+    if (this.config.engine === 'opencode-v1' && this.config.capture) {
+      pending.preparing = true
+      pending.capture = new OpenCodeInputWindowCapture({ identity: { sessionRef: this.sessionRef, windowRef: randomUUID(),
+        inputId: pending.input.inputId, operationRef: pending.input.operationRef, nativeSessionId: this.config.nativeSessionId },
+        port: this.config.capture, abort: this.abort.signal, timeoutMs: this.config.limits.timeoutMs,
+        maxItems: this.config.limits.outputEvents, maxBytes: this.config.limits.outputBytes })
+      await pending.capture.before()
+    }
+    return this.canSubmit(pending)
   }
   private canSubmit(pending: Pending): boolean { return this.isOpen() && this.active === pending && !pending.interactionsRevoked && !this.hasControl() }
   private rejectAttachments(error: unknown, pending: Pending): boolean {
@@ -164,6 +178,8 @@ export class OpenCodeDriverSession implements Session {
       if (!this.isOpen()) {return}
       if (snapshot.terminal) {
         pending.interactionsRevoked = true; pending.interactionAbort.abort()
+        await pending.capture?.after(turn.nativeInputId, snapshot.terminal, snapshot.observations ?? [])
+        if (!this.isOpen() || this.active !== pending) {return}
         this.emit({ kind: 'result', outcome: snapshot.terminal }, pending)
         this.knownTerminal = undefined; this.interactions.clear(); if (this.active === pending) {this.active = undefined}
         return
@@ -195,6 +211,7 @@ export class OpenCodeDriverSession implements Session {
     const pending = this.active; this.active = undefined
     if (pending) {
       pending.interactionsRevoked = true; pending.interactionAbort.abort()
+      pending.capture?.gap(code === 'output-limit' ? 'limit' : 'transport')
       pending.done.resolve(failure(code, pending.preparing))
       this.feed.finishWith(pending.preparing ? { kind: 'diagnostic', code, sessionRef: this.sessionRef } : knownTerminal ?? (code === 'output-limit' && this.knownTerminal ? { ...this.knownTerminal, code } : undefined) ?? { kind: 'result', outcome: 'unknown', code, sessionRef: this.sessionRef,
         inputId: pending.input.inputId, operationRef: pending.input.operationRef })

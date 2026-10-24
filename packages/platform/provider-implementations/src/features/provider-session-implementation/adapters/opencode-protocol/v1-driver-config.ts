@@ -1,3 +1,5 @@
+import { snapshotOpenCodeCapture } from './input-window-capture.ts'
+import type { OpenCodeInputWindowPort } from './input-window-capture.ts'
 import { record } from './v2-projection-helpers.ts'
 import { createHash } from 'node:crypto'
 import type { Limits, OpenConfig } from '@agent-teams/provider-session-contracts'
@@ -10,6 +12,7 @@ export type OpenCodeV1DriverConfig = {
   model: Readonly<{ providerID: string; modelID: string }>; agent?: string; variant?: string
   limits: Limits
   attachments?: AttachmentPort
+  capture?: OpenCodeInputWindowPort
   fetchImpl?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
   /** Exact CLI/Host/profile/MCP/model custody, read-only and generation-aware. */
   probe: (signal: AbortSignal) => Promise<boolean>
@@ -32,5 +35,7 @@ export function snapshotV1Config(c: OpenCodeV1DriverConfig, request: OpenConfig)
     || Object.keys(c.model).some(key => !['providerID', 'modelID'].includes(key))
     || [c.agent, c.variant].some(value => value !== undefined && (typeof value !== 'string' || !value || value.length > 4096))
     || typeof c.probe !== 'function' || typeof c.confirmStopped !== 'function') {throw new Error('opencode.v1.invalid-config')}
-  return { ...c, ...(c.attachments !== undefined ? { attachments: snapshotAttachmentPort(c.attachments)! } : {}), binding: { ...c.binding }, limits: { ...c.limits }, model: { providerID: c.model.providerID, modelID: c.model.modelID } }
+  const { capture: suppliedCapture, ...base } = c
+  const capture = snapshotOpenCodeCapture(suppliedCapture)
+  return { ...base, ...(capture ? { capture } : {}), ...(c.attachments !== undefined ? { attachments: snapshotAttachmentPort(c.attachments)! } : {}), binding: { ...c.binding }, limits: { ...c.limits }, model: { providerID: c.model.providerID, modelID: c.model.modelID } }
 }

@@ -28,7 +28,7 @@ export function createCodexDriverFactory(host: CodexDriverHost): DriverFactory {
       restored = selectedDriverCheckpoint(checkpoint, config)
     }
     const driver = new CodexDriverSession(config, restored)
-    const mandatoryNativeTools = Object.keys(config.requiredMcpTools ?? {}).length > 0
+    const mandatoryNativeTools = Object.keys(config.requiredMcpTools ?? {}).length > 0 || config.mcpPolicy !== undefined
     try {
       if (!mandatoryNativeTools) {
         const ready = await driver.checkReadiness()

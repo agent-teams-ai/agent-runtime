@@ -125,6 +125,8 @@ function extractToolCall(part: OpenCodeMessagePart): {
   const { rawOutput, outputText, isError } = toolOutput(state, status)
 
   const toolCall: OpenCodeCanonicalToolCall = {
+    partId: asString(partRecord.id),
+    metadata: asRecord(state.metadata),
     callId: asString(partRecord.callID),
     toolName: asString(partRecord.tool),
     title: asString(state.title),

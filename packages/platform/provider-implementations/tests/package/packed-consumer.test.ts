@@ -15,7 +15,7 @@ test('packed consumer imports codecs and declarations without donor checkout or 
   assert.ok(!files.split('\n').some(path => /^package\/(?:src|tests|node_modules)\//u.test(path)))
   const consumer = `import { CodexAppServerClient, createCodexDriverFactory, mapCodexNativeExecLine } from '@agent-teams/provider-implementations/codex';
 import type { CodexDriverConfig, CodexDriverHost } from '@agent-teams/provider-implementations/codex';
-import { createClaudeDriverFactory, openClaudeSession } from '@agent-teams/provider-implementations/claude';
+import { createClaudeDriverFactory, openClaudeSession, readClaudeMetadata, probeClaudeModel } from '@agent-teams/provider-implementations/claude';
 import { EventFeed } from '@agent-teams/provider-implementations/session-io';
 import type { DriverFactory, Session, EventPayload, Input } from '@agent-teams/provider-session-contracts';
 import type { ClaudeConfig, ClaudeDriverHost } from '@agent-teams/provider-implementations/claude';
@@ -32,7 +32,7 @@ if (compaction.kind !== 'compaction' || nativeOptions.fastMode !== false || name
 const factory: (host: ClaudeDriverHost) => DriverFactory = createClaudeDriverFactory;
 const codexFactory: (host: CodexDriverHost) => DriverFactory = createCodexDriverFactory;
 if (typeof codexFactory !== 'function') throw Error('Codex canonical adapter');
-if (typeof factory !== 'function' || typeof openClaudeSession !== 'function' || typeof EventFeed !== 'function') throw Error('provider API');
+if (typeof factory !== 'function' || typeof openClaudeSession !== 'function' || typeof readClaudeMetadata !== 'function' || typeof probeClaudeModel !== 'function' || typeof EventFeed !== 'function') throw Error('provider API');
 type ConsumerSession = Pick<Session, 'submit' | 'observe' | 'interrupt' | 'close'>;
 export type { ConsumerSession };
 import type { CodexApprovalReply, CodexNativeNormalizedEvent } from '@agent-teams/provider-implementations/codex';
@@ -83,6 +83,9 @@ const original = native();
 const client = new CodexAppServerClient({ transport: original.transport, onEvent() {}, async requestApproval() { return { kind: 'decision', decision: 'decline' }; } });
 try {
   await client.initialize({ clientInfo: { name: 'packed-consumer', version: '0' } });
+  assert.equal(typeof client.getRuntimeIdentity().codexHome, 'string');
+  await new Promise<void>(resolve => { const ack = (value: unknown) => { if ((value as { commandId?: string }).commandId === 'metadata') { original.child.off('message', ack); resolve(); } }; original.child.on('message', ack); original.child.send({ kind: 'metadata', method: 'account/read', response: { account: null, requiresOpenaiAuth: true }, id: 'metadata' }); });
+  assert.deepEqual(await client.readAccount(), { account: null, requiresOpenaiAuth: true });
   const session = await client.resumeThread('packed-native-thread');
   const submission = session.submitTurn({ input: [{ type: 'text', text: 'packed' }] });
   const ref = await submission.accepted;

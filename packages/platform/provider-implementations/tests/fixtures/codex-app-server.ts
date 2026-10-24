@@ -7,6 +7,7 @@ type Command = { id: string | number } & (
   | { kind: 'approval'; requestId: string | number; method: string; params: Record<string, unknown> }
   | { kind: 'raw'; text: string }
   | { kind: 'mcp-status'; mode: string }
+  | { kind: 'metadata'; method: string; response: unknown }
   | { kind: 'hold-interrupts' | 'release-interrupts' | 'disconnect' | 'reject-next-resume' }
 )
 
@@ -16,6 +17,7 @@ let heldInterrupts = false
 let rejectResume = false
 let mcpMode = 'healthy', mcpReads = 0
 const pendingInterrupts: NativeMessage[] = []
+const metadata = new Map<string, unknown>()
 const active = new Map<string, string>()
 const ownedThreads = new Set<string>()
 const emit = (payload: unknown) => process.stdout.write(`${JSON.stringify(payload)}\n`)
@@ -50,7 +52,8 @@ readline.createInterface({ input: process.stdin }).on('line', line => {
   ipc({ event: 'wire', message })
   if (typeof message.method !== 'string') {return}
   const params = message.params ?? {}
-  if (message.method === 'initialize') {return result(message.id, { userAgent: 'isolated-codex-fixture' })}
+  if (metadata.has(message.method)) { return result(message.id, metadata.get(message.method)) }
+  if (message.method === 'initialize') {return result(message.id, { userAgent: 'isolated-codex-fixture', codexHome: process.env.HOME, platformFamily: 'unix', platformOs: process.platform })}
   if (message.method === 'initialized') {return}
   if (message.method === 'thread/start' || message.method === 'thread/resume') {
     if (message.method === 'thread/resume' && rejectResume) {
@@ -101,6 +104,7 @@ process.on('message', value => {
   if (command.kind === 'notify') {notify(command.method, command.params)}
   if (command.kind === 'approval') {emit({ jsonrpc: '2.0', id: command.requestId, method: command.method, params: command.params })}
   if (command.kind === 'raw') {process.stdout.write(command.text)}
+  if (command.kind === 'metadata') {metadata.set(command.method, command.response)}
   if (command.kind === 'mcp-status') {mcpMode = command.mode; mcpReads = 0}
   if (command.kind === 'hold-interrupts') {heldInterrupts = true}
   if (command.kind === 'reject-next-resume') {rejectResume = true}
