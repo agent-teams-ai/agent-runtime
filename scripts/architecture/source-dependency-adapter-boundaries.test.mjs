@@ -76,6 +76,8 @@ const copyWorkspacePackageManifests = async root => {
     "packages/contexts/runtime-configuration": true,
     "packages/contexts/runtime-security": true,
     "packages/platform/filesystem-custody": true,
+    "packages/platform/provider-implementations": true,
+    "packages/platform/provider-session-contracts": true,
     "experiments/interactive-provider-contract": true,
   })) {
     await writeFixtureFile(
@@ -212,7 +214,7 @@ function registerPolicyChecks() {
     })).includes("architecture.source-dependencies.forbidden-package-dependency"));
     const interactive = "packages/contexts/agent-execution/src/features/interactive-agent-session";
     const selected = boundariesById.get("core.agent-execution.interactive-session");
-    assert.deepEqual(selected.allow, {boundaries: [], packages: [], builtins: [], runtimeReferences: []});
+    assert.deepEqual(selected.allow, {boundaries: ["contracts.provider-session"], packages: ["@agent-teams/provider-session-contracts"], builtins: [], runtimeReferences: []});
     for (const [source, expected] of [
       ["import 'node:fs';", "architecture.source-dependencies.forbidden-builtin-dependency"],
       ["import type {} from '@anthropic-ai/claude-agent-sdk';", "architecture.source-dependencies.forbidden-package-dependency"],
@@ -426,6 +428,7 @@ function registerAdapterChecks() {
     assert.deepEqual(composition.allowedBuiltins, ["node:util"]);
     assert.deepEqual(composition.allowedRuntimeReferences, []);
     assert.deepEqual(production.allowedBoundaries, [
+      "contracts.provider-session",
       "core.agent-execution.interactive-session",
       "adapter.agent-execution.interactive-postgres",
       "composition.agent-execution.interactive-session",

@@ -51,12 +51,24 @@ product.
 Accepted interactive C contract is tracked in
 [ADR-0091](../decisions/0091-interactive-agent-session-synthetic-vertical-slice.md)
 and its [candidate qualification plan](../spikes/interactive-session-c-first-slice-qualification.md).
+The narrow [ADR-0092 workspace library successor](../decisions/0092-provider-implementation-workspace-library.md)
+selects ordinary runtime workspace delivery for the extracted implementations.
+Its native package/layout qualification is separate from complete donor parity,
+production Host wiring, B retirement, real credentials and deployment readiness.
 No interactive implementation, Host adoption, real Claude credential route or
 deployment tuple is qualified by that contract. Its synthetic acceptance and
 remaining real-provider/Host gates remain prospective; existing qualified
 targets and frozen contained-turn contracts are unchanged. Root technical review
 accepted the scoped successor and prospective qualification plan on 2026-10-21
 under the existing A–F owner direction; no campaign PASS is asserted.
+
+The first ADR-0092 workspace package has separate synthetic qualification in
+[its source-bound public-import record](../../architecture/sdk-growth/provider-implementations-public-imports.json):
+137 provider protocol/packaging cases under each actual Node 24.21.0 and
+26.11.1, plus 24 installed Claude SDK/CLI localhost cases on Node 24.21.0.
+Native typed quality and active FMS/CMS source enrollment are separate blocking
+checks. This evidence does not retire B's experimental implementation, complete
+donor parity or qualify a production Host/provider/deployment tuple.
 
 - `foundation accepted`: ownership and contracts may be implemented.
 - `scoped qualified`: the named revision/platform/scenario passed its retained

@@ -25,11 +25,12 @@ export function interactionAnswer(value: unknown): InteractionReply | undefined 
     return {kind: "permission", decision: data.decision};
   }
   if (data.kind !== "question") {return;}
+  if (data.decision === "deny") {return {kind: "question", decision: "deny"};}
   const answers = dataRecord(data.answers); if (!answers) {return;}
   if (Object.values(answers).some(answer => typeof answer !== "string")) {return;}
   return {kind: "question", answers: Object.fromEntries(Object.keys(answers).toSorted().map(key => [key, answers[key] as string]))};
 }
 export function answerFingerprint(interactionId: string, answer: InteractionReply): string {
   return JSON.stringify(["reply", interactionId, answer.kind,
-    answer.kind === "permission" ? answer.decision : Object.entries(answer.answers).toSorted(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)]);
+    answer.kind === "permission" || answer.decision === "deny" ? answer.decision : Object.entries(answer.answers).toSorted(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)]);
 }

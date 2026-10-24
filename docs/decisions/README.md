@@ -29,6 +29,8 @@ related:
   - ADR-0024
   - ADR-0090
   - ADR-0091
+  - ADR-0092
+  - ADR-0093
 blocked_by: []
 code_anchors:
   - enforcement: required
@@ -50,6 +52,12 @@ immutable evidence; a later change uses an explicit superseding decision.
   subset without mutating this document.
 
 ## Accepted
+
+- [ADR-0093: Provider Session contracts package](0093-provider-session-contracts-package.md)
+
+- [ADR-0092: Provider implementation workspace library](0092-provider-implementation-workspace-library.md)
+  selects the provider implementation workspace package and scoped native adoption;
+  the implementation and qualification remain separately evidenced.
 
 - [ADR-0001: Runtime profile and activation boundaries](0001-runtime-profile-and-activation-boundaries.md)
 - [ADR-0002: Architecture reconciliation, tenancy, and operator recovery](0002-architecture-reconciliation-tenancy-and-operator-recovery.md)

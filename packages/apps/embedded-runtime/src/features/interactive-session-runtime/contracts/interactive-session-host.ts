@@ -13,7 +13,7 @@ export interface SessionView extends SessionRef {
     readonly status: "admitted" | "dispatching" | "client_consumed" | "succeeded" | "failed" | "cancelled" | "reconcile_required";
     readonly delivery: "admitted" | "dispatching" | "client_consumed" | "known_not_sent" | "unknown"; readonly cancellationRequested: boolean}[];
   readonly events: readonly {readonly sequence: number; readonly generation: number; readonly operationId?: string; readonly inputId?: string;
-    readonly kind: "text" | "tool" | "tool-result" | "usage" | "result" | "interaction" | "diagnostic"; readonly data: JsonValue}[];
+    readonly kind: "text" | "tool" | "tool-result" | "usage" | "compaction" | "result" | "interaction" | "diagnostic"; readonly data: JsonValue}[];
 }
 export interface InteractiveSessionApi {
   readonly open: (ref: SessionRef, commandId: string, configRevision: string, requiredCapabilities: readonly string[]) => Promise<SessionReply>;

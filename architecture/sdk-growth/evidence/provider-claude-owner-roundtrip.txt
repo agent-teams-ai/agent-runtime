@@ -1,0 +1,33 @@
+✔ compaction roundtrips through the neutral persisted event without inventing operation attribution (2.034459ms)
+✔ durable admission replay returns its original runtime-generated operation; conflicting payload cannot dispatch (1.023625ms)
+✔ unknown create/claim commits never authorize open or handoff; restart recovers without replay (0.507125ms)
+✔ unknown handoff fences queued input and is never resent (0.377291ms)
+✔ known-not-sent is explicit; successful terminal receipt releases exactly the next admitted input (0.527583ms)
+✔ interaction reply is independent of full prompt queue; revoked and expired callbacks cannot receive a grant (1.346083ms)
+✔ result racing an interrupt acknowledgement cannot release the next handoff (0.6795ms)
+✔ unknown control acknowledgement keeps future handoff fenced (0.9345ms)
+✔ close seals immediately, joins callers and requires both driver close and custody proof (0.812458ms)
+✔ host deadline failure preserves cleanup uncertainty and still invokes custody (0.277459ms)
+✔ selected checkpoint restore advances generation and never restores an old callback or accepts an old ref (0.500541ms)
+✔ unattributed background facts retain no operation; bounds stop admission without trimming cursor history (0.262709ms)
+✔ denied close neither seals admission nor caches a denial against a later authorized close (0.2215ms)
+✔ dispatch suspended at authorization cannot begin handoff after an authorized close cutoff (0.299208ms)
+✔ reply suspended at authorization never invokes a callback revoked by interrupt (0.361292ms)
+✔ late effect completions preserve closed state and canceled callback facts (0.661458ms)
+✔ unknown cleanup retains the owner handle and can reconcile without reissuing logical close (0.259709ms)
+✔ invalid interaction answers cannot persist a decision or grant a provider callback (0.906417ms)
+✔ question reply fingerprint is independent of dictionary insertion order and oversized answers cannot claim (0.41275ms)
+✔ interaction validation snapshots data without caller get traps and contains reflective Proxy failures (0.386ms)
+✔ lost-owner closure requires independent exact-generation logical and grant proof before compatible idle restore (0.629542ms)
+✔ physical lost-owner closure cannot replay or restore an uncertain active handoff (0.303375ms)
+✔ restored provider may reuse its local interaction ID while old-generation authority stays revoked (0.421667ms)
+✔ trusted factory disposal retains cleanup authority after public close permission is revoked (3.132375ms)
+✔ a late factory handle is retired after independent custody closure without a post-cutoff readiness probe (0.284084ms)
+ℹ tests 25
+ℹ suites 0
+ℹ pass 25
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 115.610083

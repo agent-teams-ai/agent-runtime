@@ -200,9 +200,24 @@ test("source origin accepts only the two exact HTTPS URLs", () => {
       "https://github.com/agent-teams-ai/agent-runtime.git"]) {
       execFileSync("git", ["-C", checkout, "remote", "set-url", "origin", remote]);
       assert.equal(inspectSource(checkout, localCommit, localTree).commit, localCommit);
-      for (const padded of [` ${remote}`, `${remote} `, `\t${remote}`, `${remote}\t`, `\r${remote}`, `${remote}\r`]) {
+      for (const padded of [` ${remote}`, `${remote} `, `\t${remote}`, `${remote}\t`]) {
         execFileSync("git", ["-C", checkout, "remote", "set-url", "origin", padded]);
         assert.throws(() => inspectSource(checkout, localCommit, localTree), /wrong repository identity/u);
+      }
+      // inspectSource authorizes the exact URL reported by Git, not set-url argv.
+      // Git versions may canonicalize CR when storing config; cover that result
+      // explicitly, while a retained CR must still fail the unchanged allowlist.
+      for (const padded of [`\r${remote}`, `${remote}\r`]) {
+        execFileSync("git", ["-C", checkout, "remote", "set-url", "origin", padded]);
+        const raw = execFileSync("git", ["-C", checkout, "remote", "get-url", "origin"], { encoding: "utf8" });
+        assert.equal(raw.at(-1), "\n");
+        const reported = raw.slice(0, -1);
+        if (reported === remote) {
+          assert.equal(inspectSource(checkout, localCommit, localTree).commit, localCommit);
+        } else {
+          assert.equal(reported, padded, "CR is either retained exactly or canonicalized by Git");
+          assert.throws(() => inspectSource(checkout, localCommit, localTree), /wrong repository identity/u);
+        }
       }
     }
     execFileSync("git", ["-C", checkout, "remote", "set-url", "origin",

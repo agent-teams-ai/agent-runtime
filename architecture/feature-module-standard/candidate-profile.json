@@ -102,6 +102,37 @@
         ],
         "adoption": "active",
         "activationAuthority": "ADR-0021"
+      },
+      {
+        "id": "provider-implementations",
+        "role": "platform",
+        "moduleRoot": "packages/platform/provider-implementations",
+        "sourceRoot": "packages/platform/provider-implementations/src",
+        "packageName": "@agent-teams/provider-implementations",
+        "ownerDocument": "ADR-0092",
+        "curatedExports": [
+          ".",
+          "./composition",
+          "./claude",
+          "./codex",
+          "./opencode",
+          "./session-io"
+        ],
+        "adoption": "active",
+        "activationAuthority": "ADR-0092"
+      },
+      {
+        "id": "provider-session-contracts",
+        "role": "platform",
+        "moduleRoot": "packages/platform/provider-session-contracts",
+        "sourceRoot": "packages/platform/provider-session-contracts/src",
+        "packageName": "@agent-teams/provider-session-contracts",
+        "ownerDocument": "ADR-0093",
+        "curatedExports": [
+          "."
+        ],
+        "adoption": "active",
+        "activationAuthority": "ADR-0093"
       }
     ],
     "productionRoots": [
@@ -110,7 +141,9 @@
       "packages/platform/filesystem-custody/src",
       "packages/contexts/provider-access/src",
       "packages/contexts/runtime-configuration/src",
-      "packages/contexts/runtime-security/src"
+      "packages/contexts/runtime-security/src",
+      "packages/platform/provider-implementations/src",
+      "packages/platform/provider-session-contracts/src"
     ],
     "outOfScope": [
       "Module Kit",
@@ -580,6 +613,29 @@
         "public": "packages/apps/embedded-runtime/src/features/interactive-session-runtime/index.ts",
         "internal": "packages/apps/embedded-runtime/src/features/interactive-session-runtime/internal.ts"
       }
+    },
+    {
+      "id": "provider-session-implementation",
+      "root": "packages/platform/provider-implementations/src/features/provider-session-implementation",
+      "roles": [
+        "contracts",
+        "adapters"
+      ],
+      "entrypoints": {
+        "public": "packages/platform/provider-implementations/src/features/provider-session-implementation/index.ts",
+        "internal": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts"
+      }
+    },
+    {
+      "id": "provider-session-contracts",
+      "root": "packages/platform/provider-session-contracts/src/features/provider-session-contracts",
+      "roles": [
+        "contracts"
+      ],
+      "entrypoints": {
+        "public": "packages/platform/provider-session-contracts/src/features/provider-session-contracts/index.ts",
+        "internal": "packages/platform/provider-session-contracts/src/features/provider-session-contracts/internal.ts"
+      }
     }
   ],
   "assemblyFiles": [
@@ -637,7 +693,15 @@
     "packages/apps/embedded-runtime/src/composition/trusted-runtime-access-scope.ts",
     "packages/contexts/agent-execution/src/interactive-contracts.ts",
     "packages/apps/embedded-runtime/src/composition/interactive-session-host.ts",
-    "packages/apps/embedded-runtime/src/composition/interactive-session-host.root.ts"
+    "packages/apps/embedded-runtime/src/composition/interactive-session-host.root.ts",
+    "packages/platform/provider-implementations/src/index.ts",
+    "packages/platform/provider-implementations/src/composition.ts",
+    "packages/platform/provider-implementations/src/claude.ts",
+    "packages/platform/provider-implementations/src/codex.ts",
+    "packages/platform/provider-implementations/src/opencode.ts",
+    "packages/platform/provider-implementations/src/session-io.ts",
+    "packages/platform/provider-session-contracts/src/index.ts",
+    "packages/platform/provider-session-contracts/src/composition.ts"
   ],
   "featureEdges": [
     {
@@ -708,6 +772,20 @@
       "kinds": [
         "runtime"
       ]
+    },
+    {
+      "from": "agent-execution",
+      "to": "provider-session-contracts",
+      "kinds": [
+        "type"
+      ]
+    },
+    {
+      "from": "provider-implementations",
+      "to": "provider-session-contracts",
+      "kinds": [
+        "type"
+      ]
     }
   ],
   "extensions": [],
@@ -744,7 +822,9 @@
       "packages/contexts/provider-access",
       "packages/platform/filesystem-custody",
       "packages/contexts/runtime-configuration",
-      "packages/contexts/runtime-security"
+      "packages/contexts/runtime-security",
+      "packages/platform/provider-implementations",
+      "packages/platform/provider-session-contracts"
     ],
     "applicationRoots": [
       "packages/apps/embedded-runtime"
@@ -803,6 +883,26 @@
           "testRoot": "packages/contexts/runtime-security/tests",
           "featureTestsRoot": "packages/contexts/runtime-security/tests/features",
           "moduleTestsRoot": "packages/contexts/runtime-security/tests/package"
+        },
+        {
+          "moduleRoot": "packages/platform/provider-implementations",
+          "sourceRoot": "packages/platform/provider-implementations/src",
+          "featuresRoot": "packages/platform/provider-implementations/src/features",
+          "moduleComposition": "packages/platform/provider-implementations/src/composition.ts",
+          "publicEntrypoint": "packages/platform/provider-implementations/src/index.ts",
+          "testRoot": "packages/platform/provider-implementations/tests",
+          "featureTestsRoot": "packages/platform/provider-implementations/tests/features",
+          "moduleTestsRoot": "packages/platform/provider-implementations/tests/package"
+        },
+        {
+          "moduleRoot": "packages/platform/provider-session-contracts",
+          "sourceRoot": "packages/platform/provider-session-contracts/src",
+          "featuresRoot": "packages/platform/provider-session-contracts/src/features",
+          "moduleComposition": "packages/platform/provider-session-contracts/src/composition.ts",
+          "publicEntrypoint": "packages/platform/provider-session-contracts/src/index.ts",
+          "testRoot": "packages/platform/provider-session-contracts/tests",
+          "featureTestsRoot": "packages/platform/provider-session-contracts/tests/features",
+          "moduleTestsRoot": "packages/platform/provider-session-contracts/tests/package"
         }
       ],
       "applications": [

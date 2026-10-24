@@ -116,6 +116,16 @@
       "id": "ADR-0091",
       "path": "docs/decisions/0091-interactive-agent-session-synthetic-vertical-slice.md",
       "immutableDigest": "sha256:73d645ffcb2f8da5fe99a4e2810a46c767a1e8d36e59e8016267204725e25efd"
+    },
+    {
+      "id": "ADR-0092",
+      "path": "docs/decisions/0092-provider-implementation-workspace-library.md",
+      "immutableDigest": "sha256:190c87866e7d39767374939c9cafed58aa9ccae1b68dc50bfee759eb2c95cc33"
+    },
+    {
+      "id": "ADR-0093",
+      "path": "docs/decisions/0093-provider-session-contracts-package.md",
+      "immutableDigest": "sha256:2be5e0a71c610f4f727d8825fb13b8c8112364fe6d2e4607ad4552e973446959"
     }
   ]
 }

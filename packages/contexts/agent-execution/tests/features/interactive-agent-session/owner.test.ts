@@ -2,7 +2,19 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {InteractiveSessionOwner} from "../../../dist/features/interactive-agent-session/application/use-cases/interactive-session-owner.js";
 import {utf8Bytes} from "../../../dist/features/interactive-agent-session/domain/session.js";
+import {normalizeProviderEvent} from "../../../dist/features/interactive-agent-session/application/use-cases/normalize-provider-event.js";
 import {deferred, fixture, MemorySessionStore, open, ref, submit} from "./support.ts";
+
+test("compaction roundtrips through the neutral persisted event without inventing operation attribution", async () => {
+  const f = fixture(); await open(f);
+  const observation = normalizeProviderEvent({kind: "compaction", sessionRef: "TEST-native", sourceRef: "TEST-opaque", reason: "automatic"}, 200);
+  assert.equal((await f.owner.record(ref, observation)).status, "accepted");
+  const persisted = (await f.owner.read(ref))!.events.find(event => event.kind === "compaction");
+  assert.deepEqual(persisted?.data, {kind: "compaction", sourceRef: "TEST-opaque", reason: "automatic"});
+  assert.equal(persisted?.operationId, undefined); assert.equal(persisted?.inputId, undefined);
+  const restarted = new InteractiveSessionOwner(f.deps);
+  assert.deepEqual((await restarted.read(ref))!.events, (await f.owner.read(ref))!.events);
+});
 
 test("durable admission replay returns its original runtime-generated operation; conflicting payload cannot dispatch", async () => {
   const f = fixture(); await open(f);
@@ -306,4 +318,18 @@ test("a late factory handle is retired after independent custody closure without
   pending.resolve({driver: f.driver, capabilities: []}); assert.equal((await opening).status, "unavailable");
   assert.equal(f.calls.closes, 1); assert.equal(readiness, 0);
   assert.equal((await owner.read(ref))!.status, "closed");
+});
+
+test("question denial is a distinct durable answer; ambiguous payloads cannot claim or call the provider", async () => {
+  const f = fixture(); await open(f); const input = await submit(f); await f.owner.dispatch(ref);
+  await f.owner.record(ref, {kind: "interaction", ...input, interactionId: "deny-question", requestKind: "question", expiresAt: 200});
+  const before = (await f.store.read(ref))!.commands.length;
+  for (const answer of [{kind: "question", decision: "deny", answers: {}}, {kind: "question", decision: "deny", extra: true}]) {
+    assert.equal((await f.owner.reply(ref, "deny-command", "deny-question", answer as never)).status, "unsupported");
+  }
+  assert.equal((await f.store.read(ref))!.commands.length, before); assert.deepEqual(f.calls.replies, []);
+  assert.equal((await f.owner.reply(ref, "deny-command", "deny-question", {kind: "question", decision: "deny"})).status, "accepted");
+  assert.equal((await f.owner.reply(ref, "deny-command", "deny-question", {decision: "deny", kind: "question"})).status, "duplicate");
+  assert.equal((await f.owner.reply(ref, "deny-command", "deny-question", {kind: "question", answers: {}})).status, "conflict");
+  assert.deepEqual(f.calls.replies, ["deny-question"]);
 });

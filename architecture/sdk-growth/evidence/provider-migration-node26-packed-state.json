@@ -1,0 +1,16 @@
+{
+  "job": {
+    "id": "5146f0eb2df52aac62fa2b27f8135e03",
+    "status": "exited",
+    "started_at": "2026-10-24T06:18:25Z"
+  },
+  "result": {
+    "exit_code": 0,
+    "signal": null,
+    "duration_ms": 133511
+  },
+  "pid": 38211,
+  "finished_at": "2026-10-24T06:20:39Z",
+  "updated_at": "2026-10-24T06:20:39Z",
+  "logs_drained": true
+}

@@ -25,6 +25,48 @@ code_anchors:
 
 # Feature Module Standard v1 scoped active adoption
 
+## Provider Session contracts extraction
+
+[ADR-0093](../decisions/0093-provider-session-contracts-package.md) supersedes
+ADR-0092's install coupling. The eighth production package,
+`packages/platform/provider-session-contracts`, is a `platform` with one
+contracts-only feature and no dependencies, peers or runtime values. Its root
+exposes the unchanged fourteen provider Session SPI types. Provider adapters and
+Agent Execution depend directly on this root; the old curated import remains a
+compatibility reexport of those same definitions.
+
+The local FMS interpretation admits exactly two existing Agent Execution files
+as named type-only forwarders to the canonical package root: `src/interactive-contracts.ts`
+and the interactive-session outbound `interactive-provider-driver.ts` port.
+This is a scoped local interpretation, not a claim of unmodified FMS v1
+conformance. It admits no general cross-module application/domain imports.
+The blocking checker and rejecting fixture retain runtime-value, deep-import,
+undeclared-edge and other-layer rejection. The package owns no Host, lifecycle
+or configurable composition graph; CMS records it as a technical contract
+boundary. Other composition owners and their existing adoption remain unchanged.
+
+## Provider implementation workspace scope
+
+[ADR-0092](../decisions/0092-provider-implementation-workspace-library.md)
+adds the seventh production package at `packages/platform/provider-implementations`
+as an active `platform` module. One `provider-session-implementation` feature has
+real `contracts` and `adapters` layers. Claude, Codex, OpenCode and fixed session
+IO mechanisms remain cohesive adapter directories; no extra policy or Host is
+created. The root entry exports existing portable types only. `./composition`
+and the four finite `./claude`, `./codex`, `./opencode`, `./session-io` facades
+use named re-exports through the feature's internal entry. Their exact admitted
+paths carry the same no-inline-behavior grammar; this does not permit arbitrary
+extra platform assembly files. Under ADR-0093, its cross-module source edge is the type-only public
+`@agent-teams/provider-session-contracts` root. The earlier Agent Execution peer
+and its historical qualification remain recorded in ADR-0092.
+
+The native active registry, package census and rejecting scope fixtures enforce
+this successor without changing the immutable FMS v1 authority or any former
+module's classification. Historical six-module conformance descriptions below
+retain their campaign scope; the current executable profile includes this additive
+package. Complete provider migration, Host wiring and real-provider qualification
+remain separate from this layout adoption.
+
 ## Additive ordinary session scope
 
 [ADR-0090](../decisions/0090-ordinary-user-session-codex-execution-profile.md)
@@ -170,6 +212,7 @@ beside it. The active production scope contains only:
 - `packages/contexts/runtime-configuration/src/**`;
 - `packages/contexts/runtime-security/src/**`;
 - `packages/platform/filesystem-custody/src/**`;
+- `packages/platform/provider-implementations/src/**` under ADR-0092;
 - the package assembly files `src/index.ts` and `src/composition.ts` in those
   six packages;
 - the extra Embedded Runtime `src/composition/*.ts` assembly files listed in
@@ -199,6 +242,7 @@ and `packages/platform` with exactly one role and one adoption state:
 | Runtime Security | `bounded-context` | ADR-0005 | active under ADR-0021 |
 | Embedded Runtime | `host-app` | ADR-0008 | active under ADR-0023 |
 | Filesystem Custody | `platform` | ADR-0017 | active under ADR-0019 |
+| Provider implementations | `platform` | ADR-0092 | active under ADR-0092 |
 
 All six modules expose `.` and `./composition` today. The set is a per-module
 fact rather than a consequence of the role, which is what let Filesystem Custody

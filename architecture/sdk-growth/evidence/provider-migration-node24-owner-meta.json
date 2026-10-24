@@ -1,0 +1,39 @@
+{
+  "job": {
+    "id": "a461f97c986d98f3fab2152eea469b36"
+  },
+  "schema_version": "0.5",
+  "command": [
+    "/usr/bin/env",
+    "-i",
+    "HOME=/Volumes/Transcend/dev/TEST-D-gate-prep-ab2k6vsi/home",
+    "TMPDIR=/Volumes/Transcend/dev/TEST-D-gate-prep-ab2k6vsi/tmp",
+    "PATH=/Volumes/Transcend/dev/TEST-D-gate-prep-ab2k6vsi/bin:/Library/Developer/CommandLineTools/usr/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+    "COREPACK_HOME=/Users/belief/.cache/node/corepack",
+    "COREPACK_ENABLE_NETWORK=0",
+    "COREPACK_ENABLE_AUTO_PIN=0",
+    "COREPACK_DEFAULT_TO_LATEST=0",
+    "GIT_CONFIG_GLOBAL=/dev/null",
+    "GIT_CONFIG_NOSYSTEM=1",
+    "GIT_OPTIONAL_LOCKS=0",
+    "/Users/belief/.codex/worktrees/provider-migration-two-stage-plan/old-agent-teams-frontend/resources/legacy-agent-host/node/v24.21.0/darwin-arm64/node",
+    "--test",
+    "--test-concurrency=1",
+    "--test-timeout=60000",
+    "tests/features/interactive-agent-session/owner.test.ts"
+  ],
+  "created_at": "2026-10-24T02:17:46Z",
+  "root": "/Users/belief/.codex/plugins/data/agent-plugins/1c1e9d402d2702d970a503b8b40bb29f94f43144d4dd7f794c2ba39db32ac96b/jobs",
+  "env_keys": [],
+  "cwd": "/Users/belief/dev/projects/agent-teams-ai/_worktrees/runtime-provider-legacy-host/packages/contexts/agent-execution",
+  "tags": [],
+  "inherit_env": true,
+  "abandon_job_after_ms": 0,
+  "timeout_ms": 0,
+  "kill_after_ms": 0,
+  "progress_every_ms": 0,
+  "shell_wrapper": [
+    "sh",
+    "-lc"
+  ]
+}

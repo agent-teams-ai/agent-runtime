@@ -20,10 +20,12 @@ export const packageRoots = {
   'runtime-security': 'packages/contexts/runtime-security',
   'embedded-runtime': 'packages/apps/embedded-runtime',
   'filesystem-custody': 'packages/platform/filesystem-custody',
+  'provider-implementations': 'packages/platform/provider-implementations',
+  'provider-session-contracts': 'packages/platform/provider-session-contracts',
 } as const;
 export type PackageId = keyof typeof packageRoots;
 export const shardIds = ['agent-execution-1', 'agent-execution-2', 'agent-execution-3',
-  'provider-access', 'runtime-configuration', 'runtime-security', 'embedded-runtime', 'filesystem-custody'] as const;
+  'provider-access', 'runtime-configuration', 'runtime-security', 'embedded-runtime', 'filesystem-custody', 'provider-implementations', 'provider-session-contracts'] as const;
 export type ShardId = typeof shardIds[number];
 export const aePatterns = ['tests/features/runtime-installation-discovery/*.test.ts',
   'tests/features/contained-agent-turn/*.test.ts',
@@ -55,7 +57,7 @@ export interface ExpectedEvidence extends ProductSource {
 
 async function assertPhysicalCustody(root: string, tracked: readonly string[], roots: readonly string[]): Promise<void> {
   // The development proof builds its own output without joining the fixed
-  // six-package product universe. All of its source remains under custody.
+  // eight-package product universe. All of its source remains under custody.
   const generatedRoots = [...roots, 'experiments/interactive-provider-contract'];
   const generated = (path: string) => generatedRoots.some(base =>
     ['dist', '.cache', 'node_modules'].some(dir => path === `${base}/${dir}` || path.startsWith(`${base}/${dir}/`)));
@@ -339,7 +341,7 @@ export function assertPackageEvidence(expected: ExpectedEvidence, receipts: read
   assert.match(expected.sha, /^[a-f0-9]{40}$/u); assert.match(expected.inputTree, /^[a-f0-9]{40}$/u);
   assert.match(expected.workflow.runId, /^[1-9][0-9]*$/u); assert.match(expected.workflow.workflowSha, /^[a-f0-9]{40}$/u);
   assert.ok(Number.isSafeInteger(expected.workflow.attempt) && expected.workflow.attempt > 0);
-  assert.equal(receipts.length, 8, 'eight shard reports required');
+  assert.equal(receipts.length, 10, 'ten shard reports required');
   const packageReports = receipts.map(object);
   assert.deepEqual(packageReports.map(report => report.requestedShard).toSorted(), [...shardIds].toSorted(), 'missing/duplicate/extra shard');
   const union: string[] = [];
@@ -360,7 +362,7 @@ export function assertPackageEvidence(expected: ExpectedEvidence, receipts: read
     const index = shardIds.indexOf(report.requestedShard as ShardId);
     const id: PackageId = index < 3 ? 'agent-execution' : report.requestedShard as PackageId;
     assert.equal(report.packageName, `@agent-teams/${id}`);
-    const commands = array(report.commands); assert.equal(commands.length, 3, 'all-six clean/build and selected test required');
+    const commands = array(report.commands); assert.equal(commands.length, 3, 'all-eight clean/build and selected test required');
     prerequisiteCommands.forEach((command, i) => packageCommand(commands[i], command.executable, command.argv, root));
     for (let i = 1; i < commands.length; i++) { assert.ok(Date.parse(String(object(commands[i]).start)) >= Date.parse(String(object(commands[i - 1]).end)), 'clean/build/test must execute in order'); }
     const selected = expected.universe.filter((_, i) => i % 3 === index);

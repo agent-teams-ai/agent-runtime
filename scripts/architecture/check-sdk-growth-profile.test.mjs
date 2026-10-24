@@ -13,12 +13,24 @@ const root = fileURLToPath(new URL("../../", import.meta.url));
 const digest = bytes => createHash("sha256").update(bytes).digest("hex");
 const contractPath = "architecture/c0/ar-owned-lifetime/contract.json";
 const contract = JSON.parse(readFileSync(join(root, contractPath), "utf8"));
+const providerProofPath = "architecture/sdk-growth/provider-implementations-public-imports.json";
+const providerRoot = "packages/platform/provider-implementations";
 function fixture(t) {
   const directory = mkdtempSync(join(tmpdir(), "ar-sdk-profile-"));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   for (const path of ["packages/contexts/agent-execution/tests/package/interactive-contracts-packed-consumer.test.ts", contractPath, "architecture/c0/ar-owned-lifetime/identity.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "architecture/sdk-growth", "architecture/get-modular/consumer-profile.json", "architecture/get-modular/evidence/consumer-module-standard.md", "architecture/get-modular/evidence/a3-cms-pin-review.json", "architecture/get-modular/evidence/creation-cleanup-cms-pin-review.json", "architecture/get-modular/evidence/creation-cleanup-cms-pin-delta.diff", "architecture/get-modular/evidence/sdk-growth-standard-review.json", "architecture/get-modular/evidence/sdk-growth-current-standard.md", "architecture/consumer-module-standard/contained-turn-profile.json", ...contract.inventory.packages.map(pkg => pkg.manifest)]) {
     mkdirSync(dirname(join(directory, path)), { recursive: true });
     cpSync(join(root, path), join(directory, path), { recursive: true });
+  }
+  const providerProof = JSON.parse(readFileSync(join(root, providerProofPath), "utf8"));
+  for (const { path } of providerProof.sourceInputs) {
+    mkdirSync(dirname(join(directory, path)), { recursive: true });
+    cpSync(join(root, path), join(directory, path));
+  }
+  const extraction = JSON.parse(readFileSync(join(root, "architecture/sdk-growth/provider-migration-program.json"), "utf8"));
+  for (const {path} of extraction.currentInputs) {
+    mkdirSync(dirname(join(directory, path)), {recursive: true});
+    cpSync(join(root, path), join(directory, path));
   }
   return directory;
 }
@@ -30,7 +42,50 @@ function mutate(directory, path, change) {
 }
 
 test("EF 1.7.2 tooling retains EF 1.6.0 qualification and historical EF 1.5.1 observation with admission blocked", t => {
-  assert.deepEqual(checkSdkGrowthProfile(fixture(t)), { status: "pending-authority-qualification", packages: 6, metadataRoots: 1, releaseEligible: false });
+  assert.deepEqual(checkSdkGrowthProfile(fixture(t)), { status: "pending-authority-qualification", packages: 8, metadataRoots: 1, releaseEligible: false });
+});
+test("provider qualification rejects an omitted package and an unqualified curated export", t => {
+  const missing = fixture(t);
+  mutate(missing, "architecture/sdk-growth/profile.yaml", value => { value.packages = value.packages.filter(pkg => pkg.packageName !== "@agent-teams/provider-implementations"); });
+  assert.throws(() => checkSdkGrowthProfile(missing), /SDK_PROVIDER_SCOPE_DRIFT/u);
+  const extra = fixture(t);
+  mutate(extra, `${providerRoot}/package.json`, value => { value.exports["./unqualified"] = value.exports["./claude"]; });
+  assert.throws(() => checkSdkGrowthProfile(extra), /SDK_PROVIDER_SOURCE_DRIFT/u);
+});
+test("provider qualification rejects artifact SPI substitution and publication overclaims", t => {
+  const substituted = fixture(t);
+  mutate(substituted, `${providerRoot}/package.json`, value => { value.dependencies["@agent-teams/provider-session-contracts"] = "file:/TEST/canonical.tgz"; });
+  assert.throws(() => checkSdkGrowthProfile(substituted), /SDK_PROVIDER_SOURCE_DRIFT/u);
+  const published = fixture(t);
+  mutate(published, providerProofPath, value => { value.releaseEligible = true; });
+  assert.throws(() => checkSdkGrowthProfile(published), /SDK_PROVIDER_ADMISSION_OVERCLAIM/u);
+});
+test("provider qualification rejects missing source coverage and changed qualified source bytes", t => {
+  const omitted = fixture(t);
+  mutate(omitted, providerProofPath, value => { value.sourceInputs.pop(); });
+  assert.throws(() => checkSdkGrowthProfile(omitted), /SDK_PROVIDER_SOURCE_DRIFT/u);
+  const changed = fixture(t);
+  writeFileSync(join(changed, `${providerRoot}/src/claude.ts`), "export {};\n");
+  assert.throws(() => checkSdkGrowthProfile(changed), /SDK_PROVIDER_SOURCE_DRIFT/u);
+});
+test("provider capability successor rejects a changed predecessor and missing current source coverage", t => {
+  const predecessor = fixture(t);
+  mutate(predecessor, "architecture/sdk-growth/provider-session-contracts-extraction.json", value => { value.sourceBase = "changed"; });
+  assert.throws(() => checkSdkGrowthProfile(predecessor), /SDK_PROVIDER_SOURCE_DRIFT/u);
+  const current = fixture(t);
+  mutate(current, "architecture/sdk-growth/provider-codex-mcp-readiness.json", value => { value.currentInputs.pop(); });
+  assert.throws(() => checkSdkGrowthProfile(current), /SDK_PROVIDER_SOURCE_DRIFT/u);
+});
+test("provider qualification rejects failed engine, SDK-process and retained evidence claims", t => {
+  const engine = fixture(t);
+  mutate(engine, providerProofPath, value => { value.engines[0].passed = false; });
+  assert.throws(() => checkSdkGrowthProfile(engine), /SDK_PROVIDER_QUALIFICATION_DRIFT/u);
+  const sdk = fixture(t);
+  mutate(sdk, providerProofPath, value => { value.sdkProcess.tests = 0; });
+  assert.throws(() => checkSdkGrowthProfile(sdk), /SDK_PROVIDER_QUALIFICATION_DRIFT/u);
+  const evidence = fixture(t);
+  mutate(evidence, providerProofPath, value => { value.evidenceSha256 = "0".repeat(64); });
+  assert.throws(() => checkSdkGrowthProfile(evidence), /SDK_PROVIDER_SOURCE_DRIFT/u);
 });
 for (const script of ["sdk-growth:profile", "test:sdk-growth:profile", "test:sdk-growth:packed"]) {
   for (const replacement of [undefined, "node -e 'process.exit(0)'"]) {
@@ -184,7 +239,7 @@ test("scoped interactive proof cannot qualify another or omit its actual public 
   ]) {
     const directory = fixture(t);
     mutate(directory, "packages/contexts/agent-execution/package.json", change);
-    assert.throws(() => checkSdkGrowthProfile(directory), /SDK_PUBLIC_IMPORT_QUALIFICATION_DRIFT/u);
+    assert.throws(() => checkSdkGrowthProfile(directory), /SDK_PROVIDER_SOURCE_DRIFT/u);
   }
 });
 test("historical and scoped public import qualifications must remain disjoint", t => {
@@ -195,7 +250,7 @@ test("historical and scoped public import qualifications must remain disjoint", 
 test("scoped proof rejects substituted manifest targets and release admission", t => {
   const directory = fixture(t);
   mutate(directory, "packages/contexts/agent-execution/package.json", value => {value.exports["./interactive-contracts"].import = "./dist/index.js";});
-  assert.throws(() => checkSdkGrowthProfile(directory), /SDK_SCOPED_IMPORT_PROOF_DRIFT/u);
+  assert.throws(() => checkSdkGrowthProfile(directory), /SDK_PROVIDER_SOURCE_DRIFT/u);
   const promoted = fixture(t);
   mutate(promoted, "architecture/sdk-growth/interactive-contracts-public-import.json", value => {value.releaseEligible = true;});
   assert.throws(() => checkSdkGrowthProfile(promoted), /SDK_SCOPED_IMPORT_PROOF_DRIFT/u);
@@ -204,7 +259,7 @@ for (const path of ["architecture/sdk-growth/evidence/interactive-contracts-publ
   test(`scoped public import proof rejects changed evidence or executable consumer: ${path}`, t => {
     const directory = fixture(t);
     writeFileSync(join(directory, path), "unqualified replacement\n");
-    assert.throws(() => checkSdkGrowthProfile(directory), /SDK_SCOPED_IMPORT_PROOF_DRIFT/u);
+    assert.throws(() => checkSdkGrowthProfile(directory), path.startsWith("packages/") ? /SDK_PROVIDER_SOURCE_DRIFT/u : /SDK_SCOPED_IMPORT_PROOF_DRIFT/u);
   });
 }
 test("scoped public import proof rejects missing successor", t => {
@@ -389,3 +444,40 @@ test("historical PR C0 transition matches exact Git bytes and only the authorize
     afterWorkflowBytes.toString("utf8")
   );
 });
+
+test("Session contracts reject omitted adoption, runtime dependencies, peers and an unqualified public subpath", t => {
+  const missing = fixture(t);
+  mutate(missing, "architecture/sdk-growth/profile.yaml", value => {value.packages = value.packages.filter(pkg => pkg.packageName !== "@agent-teams/provider-session-contracts");});
+  assert.throws(() => checkSdkGrowthProfile(missing), /SDK_CONTRACT_SCOPE_DRIFT/u);
+  for (const change of [
+    value => {value.dependencies = {pg: "8.23.0"};},
+    value => {value.peerDependencies = {"@agent-teams/agent-execution": "0.0.0"};},
+  ]) {
+    const directory = fixture(t);
+    mutate(directory, "packages/platform/provider-session-contracts/package.json", change);
+    assert.throws(() => checkSdkGrowthProfile(directory), /SDK_CONTRACT_CLOSURE_DRIFT/u);
+  }
+  const extra = fixture(t);
+  mutate(extra, "packages/platform/provider-session-contracts/package.json", value => {value.exports["./private"] = value.exports["."];});
+  assert.throws(() => checkSdkGrowthProfile(extra), /SDK_CONTRACT_SCOPE_DRIFT/u);
+});
+
+for (const mutation of ["predecessor", "coverage", "engine", "completion", "evidence", "admission"]) {
+  test(`provider program successor rejects ${mutation} drift`, t => {
+    const directory = fixture(t);
+    const path = "architecture/sdk-growth/provider-migration-program.json";
+    mutate(directory, path, value => {
+      if (mutation === "predecessor") { value.predecessorSha256 = "0".repeat(64); }
+      if (mutation === "coverage") { value.currentInputs.pop(); }
+      if (mutation === "engine") { value.engines[0].node = "v24.0.0"; }
+      if (mutation === "evidence") { value.evidence[0].sha256 = "0".repeat(64); }
+      if (mutation === "admission") { value.releaseEligible = true; }
+      if (mutation === "completion") {
+        const evidence = value.evidence.find(item => item.path === value.engines[0].provider.completion);
+        mutate(directory, evidence.path, receipt => { receipt.result.exit_code = 1; });
+        evidence.sha256 = digest(readFileSync(join(directory, evidence.path)));
+      }
+    });
+    assert.throws(() => checkSdkGrowthProfile(directory), /SDK_PROVIDER_(?:SOURCE_DRIFT|QUALIFICATION_DRIFT|ADMISSION_OVERCLAIM)/u);
+  });
+}

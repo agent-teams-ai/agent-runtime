@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "binary": {
+    "version": "codex-cli 0.162.0",
+    "sha256": "8238273076041e55beded03ba1d51e034f997b7d100b0642d36daf036620fe57"
+  },
+  "protocol": {
+    "method": "mcpServerStatus/list",
+    "params": {
+      "threadId": "exact owned native thread",
+      "serverName": "exact configured server",
+      "detail": "toolsAndAuthOnly",
+      "limit": 100,
+      "cursor": "opaque pagination token"
+    },
+    "requiredState": {
+      "runtimeStatus": "connected",
+      "toolsError": null,
+      "tools": "exact raw map key and Tool.name"
+    }
+  },
+  "limits": {
+    "pagesPerServer": 16,
+    "servers": 64,
+    "toolsPerServer": 256,
+    "readinessDeadline": "existing config.limits.timeoutMs"
+  },
+  "primarySource": {
+    "tag": "rust-v0.162.0",
+    "commit": "1f3f93473394b620b35580859b7e6864f7a9f948",
+    "tests": "codex-rs/app-server/tests/suite/v2/mcp_server_status.rs:698; raw look-up.raw map keys at 811",
+    "handler": "codex-rs/app-server/src/request_processors/mcp_processor.rs:403,451,505,531"
+  },
+  "qualification": "Generated readonly pinned binary schemas in fresh TEST HOME; synthetic protocol seam only; no native conversation or model launched."
+}

@@ -51,11 +51,36 @@ const moduleForPath = (declaredModules, path) => [...declaredModules.values()]
 // curated assembly entries, only from a layer that is allowed to hold outward
 // integrations, and only across a declared module edge. Anything else stays an
 // undeclared local dependency.
-const invalidInteractiveSpiUse = (target, path, imported) => target.id === "agent-execution"
-  && path === "packages/contexts/agent-execution/src/interactive-contracts.ts" && imported.kind !== "type";
+const invalidInteractiveSpiUse = (target, path, imported) => imported.kind !== "type" && (
+  target.id === "agent-execution" && path === "packages/contexts/agent-execution/src/interactive-contracts.ts"
+  || target.id === "provider-session-contracts");
+
+const moduleLayerUseIssues = ({source, target, imported, isAssembly, issue, layerForPath, path, sourceFeature, targetPath}) => {
+  const isFeatureEntrypoint = Object.values(sourceFeature?.entrypoints ?? {}).includes(path);
+  const sourceLayer = !isFeatureEntrypoint && sourceFeature ? layerForPath(sourceFeature, path) : undefined;
+  // The public package entry exposes only the module's own contracts. Host-app
+  // extra composition-directory assembly files are the rest of that module
+  // composition surface, so they may carry another module's curated entry.
+  const extraHostCompositionAssembly = Boolean(isAssembly) && path.startsWith(`${source.sourceRoot}/composition/`);
+  // ADR-0093: the two existing Agent Execution SPI facades forward exactly the
+  // consumer contract; this grants no general inward cross-module value edge.
+  const canonicalSpiForward = target.id === "provider-session-contracts"
+    && targetPath === "packages/platform/provider-session-contracts/src/index.ts"
+    && imported.kind === "type" && imported.syntax === "re-export"
+    && ["packages/contexts/agent-execution/src/interactive-contracts.ts",
+      "packages/contexts/agent-execution/src/features/interactive-agent-session/application/ports/outbound/interactive-provider-driver.ts"].includes(path);
+  const permitted = canonicalSpiForward || (isAssembly
+    ? path === `${source.sourceRoot}/composition.ts` || extraHostCompositionAssembly
+    : ["adapters", "composition"].includes(sourceLayer));
+  if (!permitted) {
+    const holder = isAssembly ? "the public package entry" : isFeatureEntrypoint ? "a feature entrypoint" : sourceLayer ?? "unowned code";
+    return [issue("FM_INVALID_LAYER_DIRECTION", path, imported.line, `${holder} cannot depend on another production module`)];
+  }
+  return [];
+};
 
 export const curatedModuleImportIssues = (context) => {
-  const { declaredModules, imported, isAssembly, issue, layerForPath, path, sourceFeature, targetPath, declaredModuleEdges, observedModuleEdges, moduleEdgeLocations } = context;
+  const { declaredModules, imported, issue, path, targetPath, declaredModuleEdges, observedModuleEdges, moduleEdgeLocations } = context;
   const target = moduleForPath(declaredModules, targetPath);
   const source = moduleForPath(declaredModules, path);
   if (!target || !source || target.id === source.id) {return;}
@@ -67,19 +92,7 @@ export const curatedModuleImportIssues = (context) => {
   if (!curatedTargets.includes(targetPath)) {
     issues.push(issue("FM_MODULE_DEEP_IMPORT", path, imported.line, `${source.id} must consume ${target.id} through a curated assembly entry`));
   }
-  const isFeatureEntrypoint = Object.values(sourceFeature?.entrypoints ?? {}).includes(path);
-  const sourceLayer = !isFeatureEntrypoint && sourceFeature ? layerForPath(sourceFeature, path) : undefined;
-  // The public package entry exposes only the module's own contracts. Host-app
-  // extra composition-directory assembly files are the rest of that module
-  // composition surface, so they may carry another module's curated entry.
-  const extraHostCompositionAssembly = Boolean(isAssembly) && path.startsWith(`${source.sourceRoot}/composition/`);
-  const permitted = isAssembly
-    ? path === `${source.sourceRoot}/composition.ts` || extraHostCompositionAssembly
-    : ["adapters", "composition"].includes(sourceLayer);
-  if (!permitted) {
-    const holder = isAssembly ? "the public package entry" : isFeatureEntrypoint ? "a feature entrypoint" : sourceLayer ?? "unowned code";
-    issues.push(issue("FM_INVALID_LAYER_DIRECTION", path, imported.line, `${holder} cannot depend on another production module`));
-  }
+  issues.push(...moduleLayerUseIssues({...context, source, target}));
   const key = `${source.id}->${target.id}`;
   if (!declaredModuleEdges.get(key)?.has(imported.kind)) {
     issues.push(issue("FM_UNDECLARED_MODULE_EDGE", path, imported.line, `${imported.kind} module edge ${key} is not declared`));

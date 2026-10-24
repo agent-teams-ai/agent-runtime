@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -156,6 +157,7 @@ test('interactive TEST proof is additive, mandatory once, and executes the real 
     value => { workflowObject(value.scripts).check = 'pnpm build && pnpm test && pnpm typecheck'; },
     value => { workflowObject(value.scripts).check = 'pnpm build && pnpm typecheck && pnpm test && pnpm test'; },
     value => { workflowObject(value.scripts).build = 'true'; },
+    value => { workflowObject(value.scripts).build = 'tsc -p tsconfig.build.json'; },
     value => { workflowObject(value.scripts).typecheck = 'tsc -p tsconfig.build.json'; },
     value => { workflowObject(value.scripts).test = 'node --test test/session.test.ts'; },
     value => { delete workflowObject(value.scripts).test; },
@@ -231,6 +233,20 @@ test('Docs successor rejects semantic bypasses, qualification drift and lost Run
       mutate(changed);
       assert.throws(() => assertFullInventory(changed, baseline.scripts), name);
     });
+  }
+});
+
+test('provider enrollment changes only its reviewed platform trust digests', async () => {
+  const predecessor: Record<string, string> = JSON.parse(execFileSync('git',
+    ['show', '90824d10995561ae9057b05612d7071d12e17cd9:scripts/ci/platform-contract.json'], { encoding: 'utf8' }));
+  const current: Record<string, string> = JSON.parse(await readFile(new URL('./platform-contract.json', import.meta.url), 'utf8'));
+  const changed = ['.github/workflows/ci-darwin-packages.yml', 'scripts/ci/node-runtime-compatibility.test.mjs'];
+  assert.deepEqual(Object.keys(current).toSorted(), Object.keys(predecessor).toSorted());
+  for (const [path, digest] of Object.entries(predecessor)) {
+    if (changed.includes(path)) {
+      assert.equal(current[path], createHash('sha256').update(await readFile(new URL(`../../${path}`, import.meta.url))).digest('hex'));
+      assert.notEqual(current[path], digest);
+    } else { assert.equal(current[path], digest, path); }
   }
 });
 

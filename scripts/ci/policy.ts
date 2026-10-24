@@ -65,7 +65,7 @@ export function assertInteractiveProviderPackage(manifest: unknown): void {
   assert.ok(scripts !== null && typeof scripts === 'object' && !Array.isArray(scripts));
   assert.equal(Reflect.get(scripts, 'check'), 'pnpm build && pnpm typecheck && pnpm test', 'interactive proof phase order');
   const commands = {
-    build: 'tsc -p tsconfig.build.json',
+    build: "pnpm --filter '@agent-teams/interactive-provider-contract-experiment^...' -r run build && tsc -p tsconfig.build.json",
     typecheck: 'tsc -p tsconfig.json',
     test: 'node --test test/session.test.ts test/failures.test.ts test/fixture-host.test.ts test/live-preflight.test.ts',
   } as const;

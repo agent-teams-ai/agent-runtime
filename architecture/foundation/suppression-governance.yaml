@@ -23,6 +23,11 @@ governedRoots:
   - packages/contexts/runtime-security/src
   - packages/platform/filesystem-custody/src
   - packages/platform/filesystem-custody/native
+  - packages/platform/provider-implementations/src
+  - packages/platform/provider-implementations/tests
+  - packages/platform/provider-implementations/scripts
+  - packages/platform/provider-session-contracts/src
+  - packages/platform/provider-session-contracts/tests
 nonWaivableRulePrefixes:
   - access-control.
   - security.

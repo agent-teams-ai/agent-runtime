@@ -23,6 +23,18 @@ test("the reviewed registry accepts the current repository profile", async () =>
 // the governed tree by itself, so every way of widening it must be rejected.
 // Without these cases, deleting the enforcement call leaves the suite green.
 const scopeMutations = {
+  "omits the admitted provider implementation package": (profile) => {
+    profile.scope.productionModules = profile.scope.productionModules.filter(({ id }) => id !== "provider-implementations");
+  },
+  "adds a provider facade beyond its finite admission": (profile) => {
+    profile.assemblyFiles.push("packages/platform/provider-implementations/src/hidden.ts");
+  },
+  "omits an admitted provider facade": (profile) => {
+    profile.assemblyFiles = profile.assemblyFiles.filter(path => path !== "packages/platform/provider-implementations/src/claude.ts");
+  },
+  "widens provider package exports beyond its finite admission": (profile) => {
+    profile.scope.productionModules.find(({ id }) => id === "provider-implementations").curatedExports.push("./hidden");
+  },
   "adds an undeclared production module": (profile) => {
     profile.scope.productionModules.push({
       id: "smuggled-module", role: "bounded-context", moduleRoot: "packages/contexts/smuggled",

@@ -220,6 +220,18 @@ remain independently enforced history against retained predecessor bytes.
 - Complete document SHA-256: `11a389b223506dc303fa986a7a37350b847013d85beb2de9d74cb8c97363e824` (84,490 bytes).
 - Retained bytes are recorded by the consumer profile; they are evidence, not a second authority.
 
+ADR-0092 adds the ordinary provider implementation workspace library to the live
+source census and FMS digest. Its one technical feature is explicitly classified
+as `not-adopted` by the passive Host Assembly profile: fixed protocol/SDK
+implementations, volatile native session state and static IO helpers are not a
+new Host or independently selected resource owner. This classification grants
+no Foundation/FMS exception. The exact public facade and canonical type-only SPI
+relationships are retained; every prior boundary relationship is unchanged. Any
+later configurable Host/provider wiring must qualify its actual composition
+boundary. The upstream CMS revision was checked at `ddf1e0b` on 2026-10-21;
+it equals the pinned revision above, so this scope change has no standard-byte
+delta or pin migration.
+
 Document identity, package versions/archive integrity, Core compatibility token,
 and local adoption authority are distinct. The profile retains the approved published
 Core and Assembly 0.6.0 plus resources 0.2.0 archives, verifies their SHA-256 and lock integrity,
@@ -1313,3 +1325,26 @@ for its whole `test` command. A leak a guard finds is fixed, not allowed.
 Agent Execution, Provider Access and Runtime Security run hundreds of contained-turn
 files in one command each, so they adopt guards together with LIB-PROCESS,
 LIB-CODEX-1 and STORE-2-core.
+
+
+## Provider adapter protocol census
+
+The provider migration extends private Claude capture/subagent observations and
+finite metadata/model reads, Codex MCP/model/question mappings, selected native
+argument handling and attachment request helpers inside the existing
+provider-session-implementation feature. The consumer profile enumerates their
+actual curated export relationships and Foundation source entrypoints. These
+fixed helpers remain under ADR-0092; they are not new Host or Assembly owners.
+
+This reconciliation changes no production root, feature identity, exception,
+standard pin or configurable graph relationship. Full-feature FMS checking and
+the fixed-library not-adopted CMS classification remain applicable. Curated
+source entrypoints do not admit arbitrary package deep imports. The source
+policy continues to reject undeclared imports and dependencies in inner layers;
+the provider adapter owns native DTO validation and technical Node mappings.
+
+Current-source census and its rejecting fixtures must pass for the integrated
+bytes. Census consistency does not certify the migration, qualify native
+effects or replace historical SDK-growth evidence. Current-input and static
+packed-consumer qualification require an evidenced successor; historical
+receipt hashes and the existing release-admission block remain unchanged.

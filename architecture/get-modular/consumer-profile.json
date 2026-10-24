@@ -20,7 +20,7 @@
   },
   "fms": {
     "profile": "architecture/feature-module-standard/candidate-profile.json",
-    "sha256": "d05150f789650722db091e308fd6ef310b2932b046f561c4bb5d5fd12d8753a0",
+    "sha256": "5e406d240847de227e1ca13d34632b4f90bc0743de6a0e4f9c5a11a73edf5c23",
     "features": [
       "runtime-installation-discovery",
       "contained-agent-turn",
@@ -58,7 +58,9 @@
       "setup-inspection-planning",
       "trusted-runtime-access-scope",
       "interactive-agent-session",
-      "interactive-session-runtime"
+      "interactive-session-runtime",
+      "provider-session-implementation",
+      "provider-session-contracts"
     ]
   },
   "productionRoots": [
@@ -67,7 +69,9 @@
     "packages/contexts/provider-access/src",
     "packages/contexts/runtime-configuration/src",
     "packages/contexts/runtime-security/src",
-    "packages/platform/filesystem-custody/src"
+    "packages/platform/filesystem-custody/src",
+    "packages/platform/provider-implementations/src",
+    "packages/platform/provider-session-contracts/src"
   ],
   "boundaries": [
     {
@@ -4278,6 +4282,11 @@
         },
         {
           "from": "packages/contexts/agent-execution/src/composition.ts",
+          "to": "packages/contexts/agent-execution/src/features/interactive-agent-session/internal.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/composition.ts",
           "to": "packages/contexts/agent-execution/src/features/runtime-installation-discovery/internal.ts",
           "mode": "runtime"
         },
@@ -5602,26 +5611,6 @@
           "mode": "type-only"
         },
         {
-          "from": "packages/contexts/agent-execution/src/features/runtime-installation-discovery/adapters/outbound/node-executable-file-observer.ts",
-          "to": "@agent-teams/filesystem-custody/composition",
-          "mode": "runtime"
-        },
-        {
-          "from": "packages/contexts/agent-execution/src/index.ts",
-          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/index.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/agent-execution/src/index.ts",
-          "to": "packages/contexts/agent-execution/src/features/runtime-installation-discovery/index.ts",
-          "mode": "type-only"
-        },
-        {
-          "from": "packages/contexts/agent-execution/src/composition.ts",
-          "to": "packages/contexts/agent-execution/src/features/interactive-agent-session/internal.ts",
-          "mode": "runtime"
-        },
-        {
           "from": "packages/contexts/agent-execution/src/features/interactive-agent-session/index.ts",
           "to": "packages/contexts/agent-execution/src/features/interactive-agent-session/contracts/interactive-provider-driver.ts",
           "mode": "type-only"
@@ -5647,13 +5636,28 @@
           "mode": "runtime"
         },
         {
+          "from": "packages/contexts/agent-execution/src/features/runtime-installation-discovery/adapters/outbound/node-executable-file-observer.ts",
+          "to": "@agent-teams/filesystem-custody/composition",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/contexts/agent-execution/src/index.ts",
+          "to": "packages/contexts/agent-execution/src/features/contained-agent-turn/index.ts",
+          "mode": "type-only"
+        },
+        {
           "from": "packages/contexts/agent-execution/src/index.ts",
           "to": "packages/contexts/agent-execution/src/features/interactive-agent-session/index.ts",
           "mode": "type-only"
         },
         {
+          "from": "packages/contexts/agent-execution/src/index.ts",
+          "to": "packages/contexts/agent-execution/src/features/runtime-installation-discovery/index.ts",
+          "mode": "type-only"
+        },
+        {
           "from": "packages/contexts/agent-execution/src/interactive-contracts.ts",
-          "to": "packages/contexts/agent-execution/src/features/interactive-agent-session/index.ts",
+          "to": "@agent-teams/provider-session-contracts",
           "mode": "type-only"
         }
       ]
@@ -6523,7 +6527,13 @@
         "packages/contexts/agent-execution/src/features/interactive-agent-session/contracts/interactive-session.ts",
         "packages/contexts/agent-execution/src/features/interactive-agent-session/domain/session.ts"
       ],
-      "relationships": []
+      "relationships": [
+        {
+          "from": "packages/contexts/agent-execution/src/features/interactive-agent-session/application/ports/outbound/interactive-provider-driver.ts",
+          "to": "@agent-teams/provider-session-contracts",
+          "mode": "type-only"
+        }
+      ]
     },
     {
       "id": "core.embedded-runtime.interactive-host",
@@ -6545,6 +6555,716 @@
         "packages/apps/embedded-runtime/src/features/interactive-session-runtime/index.ts"
       ],
       "relationships": []
+    },
+    {
+      "id": "contracts.provider-implementations",
+      "owner": "provider-implementations",
+      "roots": [
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/contracts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/index.ts",
+        "packages/platform/provider-implementations/src/index.ts"
+      ],
+      "entrypoints": [
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/contracts/codex-approval.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/contracts/codex-events.ts"
+      ],
+      "status": "not-adopted",
+      "rationale": "ADR-0092 fixed technical workspace library: this is one provider-session feature with type-only contracts, curated factory facades and private SDK/protocol adapters. No Host, resource lifetime, configurable Assembly graph or product authority is introduced. This classification grants no exemption from Foundation or FMS rules.",
+      "reviewTrigger": "An independently composed capability, infrastructure lifetime owner or changed configurable Host/provider relationship requires reviewed CMS adoption before integration.",
+      "relationships": [
+        {
+          "from": "packages/platform/provider-implementations/src/index.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/index.ts",
+          "mode": "type-only"
+        }
+      ]
+    },
+    {
+      "id": "adapter.provider-implementations",
+      "owner": "provider-implementations",
+      "roots": [
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters"
+      ],
+      "entrypoints": [
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/capture.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/config.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/factory.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/interactions.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/metadata.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/model-probe.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/normalize.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/open-session.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/subagents.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/tool-binding.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/app-server.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/approval-request.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/approval-response.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/driver-config.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/driver-factory.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/exec-jsonl.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/input-window-capture.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/mcp-catalog-probe.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/mcp-catalog.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/mcp-policy.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/mcp-status.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/model-options.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/model-probe-config.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/model-probe.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/rpc-client.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/rpc-types.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/session-types.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/thread-session.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/wire-frames.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/OpenCodeClientFactory.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/OpenCodeMessageIds.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/OpenCodeSseEventStream.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/bound-session.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/canonical-message-types.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/input-window-capture.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/session-binding-types.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/session-bindings.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/terminal-proof.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/types.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v1-driver-config.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v1-driver-factory.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-control-transport.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-driver-config.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-driver-factory.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-driver-native.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-driver-output.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-driver-session.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-execution-transport.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-failures.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-native-cut.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-projection-types.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-session-control.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-turn-projection.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/provider-session-io/attachments.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/provider-session-io/extra-argv.ts",
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/provider-session-io/io.ts"
+      ],
+      "status": "not-adopted",
+      "rationale": "ADR-0092 fixed technical workspace library: this is one provider-session feature with type-only contracts, curated factory facades and private SDK/protocol adapters. No Host, resource lifetime, configurable Assembly graph or product authority is introduced. This classification grants no exemption from Foundation or FMS rules.",
+      "reviewTrigger": "An independently composed capability, infrastructure lifetime owner or changed configurable Host/provider relationship requires reviewed CMS adoption before integration.",
+      "relationships": [
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/config.ts",
+          "to": "@agent-teams/provider-session-contracts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/factory.ts",
+          "to": "@agent-teams/provider-session-contracts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/interactions.ts",
+          "to": "@agent-teams/provider-session-contracts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/normalize.ts",
+          "to": "@agent-teams/provider-session-contracts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/open-session.ts",
+          "to": "@agent-teams/provider-session-contracts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/primitives.ts",
+          "to": "@agent-teams/provider-session-contracts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/session.ts",
+          "to": "@agent-teams/provider-session-contracts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/subagents.ts",
+          "to": "@agent-teams/provider-session-contracts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/app-server.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/contracts/codex-approval.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/approval-request.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/contracts/codex-approval.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/approval-response.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/contracts/codex-approval.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/driver-config.ts",
+          "to": "@agent-teams/provider-session-contracts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/driver-factory.ts",
+          "to": "@agent-teams/provider-session-contracts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/driver-interactions.ts",
+          "to": "@agent-teams/provider-session-contracts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/driver-interactions.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/contracts/codex-approval.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/driver-output.ts",
+          "to": "@agent-teams/provider-session-contracts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/driver-output.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/contracts/codex-events.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/driver-session.ts",
+          "to": "@agent-teams/provider-session-contracts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/exec-jsonl.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/contracts/codex-events.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/notification-items.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/contracts/codex-events.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/notification-mapper.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/contracts/codex-events.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/rpc-client.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/contracts/codex-approval.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/rpc-types.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/contracts/codex-approval.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/session-types.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/contracts/codex-approval.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/session-types.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/contracts/codex-events.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/thread-session.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/contracts/codex-approval.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/user-questions.ts",
+          "to": "@agent-teams/provider-session-contracts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/user-questions.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/contracts/codex-approval.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/driver-protocol.ts",
+          "to": "@agent-teams/provider-session-contracts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/driver-session.ts",
+          "to": "@agent-teams/provider-session-contracts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v1-driver-config.ts",
+          "to": "@agent-teams/provider-session-contracts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v1-driver-factory.ts",
+          "to": "@agent-teams/provider-session-contracts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v1-driver-output.ts",
+          "to": "@agent-teams/provider-session-contracts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-driver-backend.ts",
+          "to": "@agent-teams/provider-session-contracts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-driver-config.ts",
+          "to": "@agent-teams/provider-session-contracts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-driver-factory.ts",
+          "to": "@agent-teams/provider-session-contracts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-driver-output.ts",
+          "to": "@agent-teams/provider-session-contracts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/provider-session-io/attachments.ts",
+          "to": "@agent-teams/provider-session-contracts",
+          "mode": "type-only"
+        }
+      ]
+    },
+    {
+      "id": "composition.provider-implementations",
+      "owner": "provider-implementations",
+      "roots": [
+        "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+        "packages/platform/provider-implementations/src/composition.ts",
+        "packages/platform/provider-implementations/src/claude.ts",
+        "packages/platform/provider-implementations/src/codex.ts",
+        "packages/platform/provider-implementations/src/opencode.ts",
+        "packages/platform/provider-implementations/src/session-io.ts"
+      ],
+      "entrypoints": [
+        "packages/platform/provider-implementations/src/claude.ts",
+        "packages/platform/provider-implementations/src/codex.ts",
+        "packages/platform/provider-implementations/src/opencode.ts"
+      ],
+      "status": "not-adopted",
+      "rationale": "ADR-0092 fixed technical workspace library: this is one provider-session feature with type-only contracts, curated factory facades and private SDK/protocol adapters. No Host, resource lifetime, configurable Assembly graph or product authority is introduced. This classification grants no exemption from Foundation or FMS rules.",
+      "reviewTrigger": "An independently composed capability, infrastructure lifetime owner or changed configurable Host/provider relationship requires reviewed CMS adoption before integration.",
+      "relationships": [
+        {
+          "from": "packages/platform/provider-implementations/src/claude.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/claude.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/codex.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/codex.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/composition.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/composition.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/capture.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/factory.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/factory.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/metadata.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/metadata.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/model-probe.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/model-probe.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/open-session.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/open-session.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/subagents.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/tool-binding.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/app-server.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/app-server.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/approval-request.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/approval-response.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/approval-response.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/driver-config.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/driver-factory.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/driver-factory.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/exec-jsonl.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/exec-jsonl.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/mcp-catalog-probe.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/mcp-catalog-probe.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/mcp-catalog.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/mcp-catalog.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/mcp-policy.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/mcp-policy.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/model-options.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/model-options.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/model-probe-config.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/model-probe.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/rpc-types.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/rpc-types.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/session-types.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/codex-protocol/thread-session.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/OpenCodeClientFactory.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/OpenCodeClientFactory.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/OpenCodeMessageIds.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/OpenCodeSseEventStream.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/OpenCodeSseEventStream.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/bound-session.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/canonical-message-types.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/session-binding-types.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/session-bindings.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/terminal-proof.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/terminal-proof.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/types.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v1-driver-config.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v1-driver-factory.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v1-driver-factory.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-control-transport.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-driver-config.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-driver-factory.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-driver-factory.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-execution-transport.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-execution-transport.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-failures.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-native-cut.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-native-cut.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-projection-types.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-session-control.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-session-control.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/opencode-protocol/v2-turn-projection.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/provider-session-io/extra-argv.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/provider-session-io/io.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/contracts/codex-approval.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/contracts/codex-events.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/opencode.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "mode": "runtime"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/opencode.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-implementations/src/session-io.ts",
+          "to": "packages/platform/provider-implementations/src/features/provider-session-implementation/internal.ts",
+          "mode": "runtime"
+        }
+      ]
+    },
+    {
+      "id": "contracts.provider-session",
+      "owner": "provider-session-contracts",
+      "roots": [
+        "packages/platform/provider-session-contracts/src"
+      ],
+      "entrypoints": [
+        "packages/platform/provider-session-contracts/src/index.ts"
+      ],
+      "status": "not-adopted",
+      "rationale": "ADR-0093 dependency-free consumer SPI artifact; named erased type definitions and reexports have no Host, resource lifetime or independently composed behavior. Foundation and FMS enforce the actual contract boundary.",
+      "reviewTrigger": "Runtime values, external dependencies, lifecycle or configurable composition requires explicit successor adoption.",
+      "relationships": [
+        {
+          "from": "packages/platform/provider-session-contracts/src/composition.ts",
+          "to": "packages/platform/provider-session-contracts/src/features/provider-session-contracts/internal.ts",
+          "mode": "type-only"
+        },
+        {
+          "from": "packages/platform/provider-session-contracts/src/index.ts",
+          "to": "packages/platform/provider-session-contracts/src/features/provider-session-contracts/index.ts",
+          "mode": "type-only"
+        }
+      ]
     }
   ],
   "compositions": [
@@ -6649,6 +7369,14 @@
       {
         "name": "@agent-teams/filesystem-custody",
         "root": "packages/platform/filesystem-custody"
+      },
+      {
+        "name": "@agent-teams/provider-implementations",
+        "root": "packages/platform/provider-implementations"
+      },
+      {
+        "name": "@agent-teams/provider-session-contracts",
+        "root": "packages/platform/provider-session-contracts"
       }
     ],
     "featureRoots": [
@@ -6688,7 +7416,9 @@
       "packages/contexts/runtime-security/src/features/contained-turn-egress",
       "packages/contexts/runtime-security/src/features/provider-process-egress-authorization",
       "packages/contexts/runtime-security/src/features/setup-source-inspection-authorization",
-      "packages/platform/filesystem-custody/src/features/stable-filesystem-custody"
+      "packages/platform/filesystem-custody/src/features/stable-filesystem-custody",
+      "packages/platform/provider-implementations/src/features/provider-session-implementation",
+      "packages/platform/provider-session-contracts/src/features/provider-session-contracts"
     ]
   },
   "sdkGrowth": {

@@ -30,7 +30,7 @@ export interface InteractiveSessionDependencies {
   readonly limits: SessionLimits;
 }
 export type DriverObservation = {
-  readonly kind: "text" | "tool" | "tool-result" | "usage" | "diagnostic";
+  readonly kind: "text" | "tool" | "tool-result" | "usage" | "compaction" | "diagnostic";
   readonly operationId?: string; readonly inputId?: string; readonly data: JsonValue;
 } | {
   readonly kind: "result"; readonly operationId: string; readonly inputId: string;

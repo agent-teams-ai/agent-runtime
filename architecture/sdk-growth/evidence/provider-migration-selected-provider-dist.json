@@ -1,0 +1,54 @@
+{
+  "rootBuildAndPack": {
+    "archive": "/Volumes/Transcend/dev/TEST-D-typed-quality-successor-final-20261024/artifacts/agent-teams-provider-implementations-0.0.0.tgz",
+    "sha256": "dad39edf2f02a23ae68768722b5bba2e7beddf2125ae79d0bacb4e8b303d1dce",
+    "regularMembers": 209,
+    "distMembers": 206,
+    "sourceDistMismatch": [],
+    "predecessor": "/Volumes/Transcend/dev/TEST-D-typed-quality-successor-20261024/artifacts/agent-teams-provider-implementations-0.0.0.tgz",
+    "predecessorSha256": "3272076745c91d1c3067c3f9f45d3c40e1b4e17a51ef62738e44446ab81b75f0",
+    "changedMembers": [
+      "package/dist/features/provider-session-implementation/adapters/claude-sdk/capture.js"
+    ],
+    "removed": [],
+    "nonDistMembers": [
+      {
+        "path": "package/package.json",
+        "sha256": "f11ac05990403897a3882ca46848d78b39fcb71f42465c60be89919dd7904a35",
+        "predecessorIdentical": true
+      },
+      {
+        "path": "package/README.md",
+        "sha256": "c69d5fb3b2180866be0a62c83f39b1ac7dce8eff395c34613a262402bc787e2e",
+        "predecessorIdentical": true
+      },
+      {
+        "path": "package/LICENSE",
+        "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+        "predecessorIdentical": true
+      }
+    ],
+    "scope": "206 provider dist members exactly match owning D; metadata compared only with327 predecessor. Other seven static packages have inert built-dist observations, not current-source correspondence."
+  },
+  "comparisons": [
+    {
+      "archive": "/Volumes/Transcend/dev/TEST-D-typed-quality-successor-final-20261024/artifacts/agent-teams-provider-implementations-0.0.0.tgz",
+      "sha256": "dad39edf2f02a23ae68768722b5bba2e7beddf2125ae79d0bacb4e8b303d1dce",
+      "distMembersCompared": 206,
+      "mismatches": []
+    },
+    {
+      "archive": "/Volumes/Transcend/dev/TEST-D-gate-prep-ab2k6vsi/tmp/ar-sdk-packed-0jz27o/archives/provider-implementations/agent-teams-provider-implementations-0.0.0.tgz",
+      "sha256": "4d3bcb5ec20270de0d5eecddaf002386c80146094a565e6973b27b02a8bd0aff",
+      "distMembersCompared": 206,
+      "mismatches": []
+    },
+    {
+      "archive": "/Volumes/Transcend/dev/TEST-D-gate-prep-ab2k6vsi/tmp/ar-sdk-packed-M4jAWt/archives/provider-implementations/agent-teams-provider-implementations-0.0.0.tgz",
+      "sha256": "4d3bcb5ec20270de0d5eecddaf002386c80146094a565e6973b27b02a8bd0aff",
+      "distMembersCompared": 206,
+      "mismatches": []
+    }
+  ],
+  "scope": "Exact 206 provider dist regular members only; different archive manifests/licenses are not source-equivalence evidence."
+}

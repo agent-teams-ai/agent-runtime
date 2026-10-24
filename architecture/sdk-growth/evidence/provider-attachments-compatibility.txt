@@ -1,0 +1,10 @@
+INTERACTIVE_PUBLIC_IMPORT_OBSERVATION {"packageName":"@agent-teams/agent-execution","exportPath":"./interactive-contracts","targets":{"types":"./dist/interactive-contracts.d.ts","import":"./dist/interactive-contracts.js"},"archiveSha256":"eae88cf7d0c88ed9aacba258898c1f5b15fd04fb688637f91a991550def33bb8","manifestSha256":"d320d84e0b4befe2085224cbbe4d93695a88efc4f13c1ae73ea371524ac51b38","strictTypesWithoutSdkOrWorkspace":true,"runtimeExports":[],"providerSpecificTypeRejected":true}
+✔ packed canonical SPI compiles outside checkout with no SDK/workspace dependencies and exports no runtime values (4647.227375ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 4728.549875

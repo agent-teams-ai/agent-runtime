@@ -193,13 +193,13 @@ test('official SDK process: isolated multi-turn/MCP, queued permission reply, in
     const pending = await permission(bEvents);
     const queued = b.submit({ inputId: 'input-b-after', operationRef: 'b-after', content: 'SDK_FIXTURE_B_AFTER_PERMISSION' });
     assert.equal(model.requests.some((request) => request.marker === 'B_AFTER_PERMISSION'), false);
-    assert.equal(b.respondToInteraction(pending.ref, { kind: 'permission', decision: 'allow' }).ok, true);
+    assert.equal((await b.respondToInteraction(pending.ref, { kind: 'permission', decision: 'allow' })).ok, true);
     const approved = [...pending.events, ...await collectTurn(bEvents, 'b-permission')];
     assert.ok(approved.some((event) => event.kind === 'text' && event.text === 'FIXTURE_DONE_B_PERMISSION'));
     assert.equal((await deadline(queued)).ok, true);
     const afterPermission = await collectTurn(bEvents, 'b-after');
     assert.ok(afterPermission.some((event) => event.kind === 'text' && event.text === 'FIXTURE_DONE_B_AFTER_PERMISSION'));
-    assert.equal(b.respondToInteraction(pending.ref, { kind: 'permission', decision: 'allow' }).ok, false, 'late duplicate reply cannot grant again');
+    assert.equal((await b.respondToInteraction(pending.ref, { kind: 'permission', decision: 'allow' })).ok, false, 'late duplicate reply cannot grant again');
 
     const cpA = a.checkpoint(); const cpB = b.checkpoint();
     assert.equal(cpA.ok, true); assert.equal(cpB.ok, true);
@@ -209,7 +209,7 @@ test('official SDK process: isolated multi-turn/MCP, queued permission reply, in
     assert.equal((await deadline(b.submit({ inputId: 'input-b-cancel', operationRef: 'b-cancel', content: 'SDK_FIXTURE_B_CANCEL' }))).ok, true);
     const cancelledPermission = await permission(bEvents);
     assert.equal((await deadline(b.interrupt('b-cancel'))).ok, true);
-    assert.equal(b.respondToInteraction(cancelledPermission.ref, { kind: 'permission', decision: 'allow' }).ok, false);
+    assert.equal((await b.respondToInteraction(cancelledPermission.ref, { kind: 'permission', decision: 'allow' })).ok, false);
     assert.equal((await b.close()).cleanup, 'confirmed');
     assert.equal(await readFile(join(root, 'b.calls'), 'utf8'), beforeCancelCalls, 'interrupted pending tool never received a grant');
     const receipts = await Promise.all(sessions.map((session) => session.close()));

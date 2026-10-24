@@ -274,8 +274,8 @@ test('empty pattern, runner option drift, symlink input and unsupported matched 
   await assert.rejects(enumerateExecutionFiles(f.root), /unsupported test path/);
 });
 
-test('eight literal shards and explicit platform contract reject unknown, array, whole-AE and unsupported runners', () => {
-  assert.equal(shardIds.length, 8);
+test('ten literal shards and explicit platform contract reject unknown, array, whole-AE and unsupported runners', () => {
+  assert.equal(shardIds.length, 10);
   assert.deepEqual(shardIds.slice(0, 3).map(id => selectShard(id).partitionIndex), [0, 1, 2]);
   for (const bad of [undefined, [], 'agent-execution', 'agent-execution-4', '@agent-teams/agent-execution', 'provider-access runtime-security'])
     { assert.throws(() => selectShard(bad)); }
@@ -293,11 +293,17 @@ test('eight literal shards and explicit platform contract reject unknown, array,
   assert.throws(() => validatePlatform('linux-x64', mac));
 });
 
-test('source inventory rejects missing sixth build, added package, test change and lifecycle hook', () => {
+test('source inventory rejects a missing production runner, added package, test change and lifecycle hook', () => {
   const clean = `node -e "const fs=require('node:fs'); for (const path of ['dist','.cache']) fs.rmSync(path, { recursive: true, force: true })"`;
   const entries = packages.map(p => ({ root: p.root, manifest: { name: p.name, scripts: { clean, build: p.build, test: p.test } } }));
   const root = { scripts: { 'product:build': "pnpm --filter './packages/**' -r run build" } };
   validateInventory(entries, root);
+  const provider = entries.find(entry => entry.manifest.name === '@agent-teams/provider-implementations'); assert.ok(provider);
+  assert.equal(selectShard('provider-implementations').package.root, 'packages/platform/provider-implementations');
+  assert.throws(() => validateInventory(entries.filter(entry => entry !== provider), root), /eight roots/);
+  assert.throws(() => validateInventory([...entries, provider], root), /eight roots/);
+  const suppressed = structuredClone(entries); Reflect.set(suppressed.find(entry => entry.manifest.name === provider.manifest.name)!.manifest.scripts, 'test', 'true');
+  assert.throws(() => validateInventory(suppressed, root), /test script/);
   assert.throws(() => validateInventory(entries.slice(1), root));
   assert.throws(() => validateInventory([...entries, { root: 'packages/contexts/new', manifest: {} }], root));
   const changed = structuredClone(entries); changed[0]!.manifest.scripts.test += ' --test-name-pattern=canary';
@@ -306,7 +312,7 @@ test('source inventory rejects missing sixth build, added package, test change a
   assert.throws(() => validateInventory(hook, root), /lifecycle hook/);
 });
 
-test('the named TEST package extends manifest custody while preserving the six production runners', async () => {
+test('the named TEST package extends manifest custody while preserving the eight production runners', async () => {
   const clean = `node -e "const fs=require('node:fs'); for (const path of ['dist','.cache']) fs.rmSync(path, { recursive: true, force: true })"`;
   const entries = packages.map(p => ({ root: p.root, manifest: { name: p.name, scripts: { clean, build: p.build, test: p.test } } }));
   const root = JSON.parse(await readFile(new URL('../../package.json', import.meta.url), 'utf8'));
@@ -321,7 +327,7 @@ test('the named TEST package extends manifest custody while preserving the six p
     const changed = structuredClone(proof); changed.manifest.scripts[key] = 'true';
     assert.throws(() => validateInventory([...entries, changed], root));
   }
-  assert.equal(packages.length, 6); assert.equal(shardIds.length, 8);
+  assert.equal(packages.length, 8); assert.equal(shardIds.length, 10);
 });
 
 test('actual Node full run and three partitions preserve file completion, identities/statuses and process isolation', async t => {

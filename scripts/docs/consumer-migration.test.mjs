@@ -9,6 +9,115 @@ const root = new URL("../../", import.meta.url);
 const read = path => readFile(new URL(path, root), "utf8");
 const json = async path => JSON.parse(await read(path));
 const sha256 = bytes => createHash("sha256").update(bytes).digest("hex");
+// Current Session SPI/native helper admissions are mutable consumer scope; historical policy bytes stay fixed.
+function reverseSessionSpiAndNativeHelpers(bytes) {
+  const marker = "\n- id: contracts.provider-implementations\n";
+  const offset = bytes.indexOf(marker);
+  assert.ok(offset > 0);
+  assert.equal(sha256(bytes.slice(offset)), "48927da1e060d0ce5b708b950aff98a973cbaa5da2061bc952efd77e7d5e940e");
+  const parts = bytes.split("\n- id: contracts.provider-session\n");
+  assert.equal(parts.length, 2);
+  bytes = parts[0] + "\n";
+  const remove = line => {
+    assert.equal(bytes.split(line).length - 1, 1, "exact current consumer admission");
+    bytes = bytes.replace(line, "");
+  };
+  for (const path of [
+    "claude-sdk/capture.ts",
+    "claude-sdk/config.ts",
+    "claude-sdk/interactions.ts",
+    "claude-sdk/metadata.ts",
+    "claude-sdk/model-probe.ts",
+    "claude-sdk/subagents.ts",
+    "codex-protocol/input-window-capture.ts",
+    "codex-protocol/mcp-catalog-probe.ts",
+    "codex-protocol/mcp-catalog.ts",
+    "codex-protocol/mcp-policy.ts",
+    "codex-protocol/model-options.ts",
+    "codex-protocol/model-probe-config.ts",
+    "codex-protocol/model-probe.ts",
+    "opencode-protocol/input-window-capture.ts",
+    "provider-session-io/extra-argv.ts",
+    "provider-session-io/attachments.ts",
+    "codex-protocol/mcp-status.ts"
+]) {
+    remove(`  - packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/${path}\n`);
+  }
+  for (const suffix of ["", "/src", "/tests"]) {
+    remove(`- packages/platform/provider-session-contracts${suffix}\n`);
+  }
+  const replacements = [
+    [
+        "    boundaries: [contracts.provider-session]\n    packages: [\"@agent-teams/provider-session-contracts\"]\n",
+        "    boundaries: []\n    packages: []\n"
+    ],
+    [
+        "    - contracts.provider-session\n",
+        ""
+    ],
+    [
+        "    - \"@agent-teams/provider-session-contracts\"\n",
+        ""
+    ],
+    [
+        "    boundaries: [\"contracts.provider-implementations\",\"contracts.provider-session\"]\n",
+        "    boundaries: [\"contracts.provider-implementations\",\"core.agent-execution.interactive-session\"]\n"
+    ],
+    [
+        "    packages: [\"@agent-teams/provider-session-contracts\",\"@anthropic-ai/claude-agent-sdk\",\"zod\"]\n",
+        "    packages: [\"@agent-teams/agent-execution\",\"@anthropic-ai/claude-agent-sdk\"]\n"
+    ],
+    [
+        "    builtins: [\"node:crypto\",\"node:buffer\",\"node:timers/promises\",\"node:util\"]\n",
+        "    builtins: [\"node:crypto\",\"node:buffer\",\"node:timers/promises\"]\n"
+    ],
+    [
+        "    boundaries: [\"adapter.provider-implementations\",\"contracts.provider-implementations\",\"composition.provider-implementations\",\"contracts.provider-session\"]\n",
+        "    boundaries: [\"adapter.provider-implementations\",\"contracts.provider-implementations\",\"composition.provider-implementations\",\"core.agent-execution.interactive-session\"]\n"
+    ],
+    [
+        "    packages: [\"@agent-teams/provider-session-contracts\",\"@agent-teams/provider-implementations\",\"@anthropic-ai/claude-agent-sdk\",\"typescript\",\"oxc-parser\"]\n",
+        "    packages: [\"@agent-teams/agent-execution\",\"@agent-teams/provider-implementations\",\"@anthropic-ai/claude-agent-sdk\",\"typescript\",\"oxc-parser\"]\n"
+    ],
+    [
+        "    builtins: [\"node:assert/strict\",\"node:buffer\",\"node:child_process\",\"node:crypto\",\"node:events\",\"node:fs\",\"node:fs/promises\",\"node:http\",\"node:module\",\"node:net\",\"node:os\",\"node:path\",\"node:readline\",\"node:test\",\"node:timers/promises\",\"node:url\",\"node:stream\"]\n",
+        "    builtins: [\"node:assert/strict\",\"node:buffer\",\"node:child_process\",\"node:crypto\",\"node:events\",\"node:fs\",\"node:fs/promises\",\"node:http\",\"node:module\",\"node:net\",\"node:os\",\"node:path\",\"node:readline\",\"node:test\",\"node:timers/promises\",\"node:url\"]\n"
+    ]
+];
+  for (const [current, previous] of replacements) {
+    assert.equal(bytes.split(current).length - 1, 1, "exact current consumer permission");
+    bytes = bytes.replace(current, previous);
+  }
+  return bytes;
+}
+// Reverse only the admitted D library and B compatibility amendments before
+// applying the unchanged historical source-policy byte oracles below.
+function reverseProviderImplementationAdmission(bytes) {
+  bytes = reverseSessionSpiAndNativeHelpers(bytes);
+  const marker = "\n- id: contracts.provider-implementations\n";
+  const parts = bytes.split(marker);
+  assert.equal(parts.length, 2);
+  assert.equal(sha256(marker + parts[1]), "0726474641cd0bf7b8f7f39537035c5c57f23b254f82cac923f275db7b2f00b3");
+  bytes = parts[0];
+  for (const suffix of ["", "/src", "/tests", "/scripts"]) {
+    const line = `- packages/platform/provider-implementations${suffix}\n`;
+    assert.equal(bytes.split(line).length - 1, 1);
+    bytes = bytes.replace(line, "");
+  }
+  const replacements = [
+    ["    packages:\n    - '@agent-teams/agent-execution'\n    builtins: []\n    runtimeReferences: []\n- id: experiments.interactive-claude-driver\n",
+      "    packages: []\n    builtins: []\n    runtimeReferences: []\n- id: experiments.interactive-claude-driver\n"],
+    ["    boundaries: []\n    packages:\n    - '@agent-teams/provider-implementations'\n    builtins: []\n",
+      "    boundaries:\n    - experiments.interactive-draft-contracts\n    packages:\n    - '@anthropic-ai/claude-agent-sdk'\n    builtins:\n    - node:crypto\n"],
+  ];
+  for (const [current, previous] of replacements) {
+    assert.equal(bytes.split(current).length - 1, 1);
+    bytes = bytes.replace(current, previous);
+  }
+  assert.equal(sha256(bytes), "90f99378a48ba60cb9a5e88eaa99c93c6070b45397c26a976d21d1a3f0b6cba2",
+    "retain the exact reviewed C14 source-policy predecessor");
+  return bytes;
+}
 const objectId = (type, bytes) => createHash("sha1")
   .update(Buffer.from(`${type} ${bytes.length}\0`)).update(bytes).digest("hex");
 const yaml = async path => {
@@ -95,6 +204,8 @@ test("Source Dependencies uses schema v3 with root package and every workspace p
     "packages/contexts/runtime-configuration",
     "packages/contexts/runtime-security",
     "packages/platform/filesystem-custody",
+    "packages/platform/provider-implementations",
+    "packages/platform/provider-session-contracts",
   ]);
   assert.deepEqual(policy.governedRoots, [
     "experiments/interactive-provider-contract",
@@ -125,11 +236,32 @@ test("Source Dependencies uses schema v3 with root package and every workspace p
     "packages/apps/embedded-runtime/scripts",
     "packages/contexts/provider-access/scripts",
     "packages/contexts/runtime-security/scripts",
+    "packages/platform/provider-implementations/src",
+    "packages/platform/provider-implementations/tests",
+    "packages/platform/provider-implementations/scripts",
+    "packages/platform/provider-session-contracts/src",
+    "packages/platform/provider-session-contracts/tests",
   ]);
   const source = await read("scripts/architecture/source-dependency-adapter-boundaries.test.mjs");
   assert.doesNotMatch(source, /engineering-foundation\/dist\/capabilities/u);
   assert.match(source, /foundationManifest\.bin\["agent-teams-foundation"\]/u);
   assert.match(source, /"architecture\.source-dependencies", "--consumer", root, "--json"/u);
+});
+
+test("provider policy reversal rejects changed ownership and compatibility permissions", async () => {
+  const current = await read("architecture/foundation/source-dependencies.yaml");
+  const marker = "\n- id: contracts.provider-implementations\n";
+  const offset = current.indexOf(marker);
+  assert.ok(offset > 0);
+  const changedProvider = current.slice(0, offset) + current.slice(offset).replace("node:crypto", "node:child_process");
+  assert.notEqual(changedProvider, current);
+  const removedRoot = current.replace("- packages/platform/provider-implementations/src\n", "");
+  const changedFacade = current.replace("'@agent-teams/provider-implementations'", "'@agent-teams/unadmitted-provider'");
+  const removedSpiRoot = current.replace("- packages/platform/provider-session-contracts\n", "");
+  const removedNativeHelper = current.replace("  - packages/platform/provider-implementations/src/features/provider-session-implementation/adapters/claude-sdk/capture.ts\n", "");
+  for (const mutant of [changedProvider, removedRoot, changedFacade, removedSpiRoot, removedNativeHelper]) {
+    assert.throws(() => reverseProviderImplementationAdmission(mutant));
+  }
 });
 
 test("stable31 managed bytes stay exact and the current Foundation source policy retains reviewed scope", async () => {
@@ -196,7 +328,7 @@ test("stable31 managed bytes stay exact and the current Foundation source policy
       1
     ]
   ];
-  let currentSourcePolicyBytes = await read("architecture/foundation/source-dependencies.yaml");
+  let currentSourcePolicyBytes = reverseProviderImplementationAdmission(await read("architecture/foundation/source-dependencies.yaml"));
   for (const [text, count] of interactivePolicyAdditions) {
     assert.equal(currentSourcePolicyBytes.split(text).length - 1, count, "exact admitted interactive SourcePolicy insertion");
     currentSourcePolicyBytes = currentSourcePolicyBytes.replaceAll(text, "");
