@@ -101,7 +101,7 @@ P для A включает 0–400 runtime + 0–150 integration; B — 3 000�
 
 ### Q3. Какую worker инфраструктуру мы сами будем поддерживать первой?
 
-**Рекомендация: A — self-hosted Linux VM workers с существующим qualified native/Docker profile**, затем autoscaling adapter при потребности. Kubernetes уместен, если команда уже его эксплуатирует. Ни один бренд не даёт hostile tenancy автоматически.
+**Рекомендация: A — self-hosted Linux VM workers с выбранным native/Docker profile после его реальной qualification**, затем autoscaling adapter при потребности. Kubernetes уместен, если команда уже его эксплуатирует. Ни один бренд не даёт hostile tenancy автоматически.
 
 | Вариант | Обещание и tradeoff | У / Н / С | P / T сверх общего fleet contract |
 | --- | --- | --- | --- |
@@ -187,8 +187,8 @@ Whole-harness replacement разделяется на выбор новой bind
 | Проход | Область | Статус / содержательный результат |
 | --- | --- | --- |
 | Self-review 1 | Authority, ownership, полнота исходных findings и новых исследований | Выполнен: явно сохранены четыре contexts, SQLite/PG и Connect/Buf; Operations закреплён под AE; ordinary retry отделён от broader known-not-accepted; уточнены capability/API versions, capacity reserve/bind, paused-worker fencing, session replacement и executable/data trust |
-| Self-review 2 | Минимальность, executable acceptance, версии, источники, LOC и вопросы | Запланирован после исправлений первого прохода |
-| Independent review wave 1 | Domain/libraries, scale/fencing, security/native | После обоих self-review |
+| Self-review 2 | Минимальность, executable acceptance, версии, источники, LOC и вопросы | Выполнен: F01/F05–F08/F14 перенесены в S2 acceptance; native/output/topology и Host limits связаны с S3–S5; убрано ложное впечатление уже qualified Docker profile; закреплены exact CMS delta/source-vs-release; Q1-B выбран под external-consumer цель, LOC остаются incremental |
+| Independent review wave 1 | Domain/libraries, scale/fencing, security/native | Готово к запуску после обоих self-review |
 | Independent review wave 2 | Harness/versioning, evidence/status, delivery/minimalism | После обоих self-review; независимые направления |
 | Delta review | Спорные исправления и отсутствие новых конфликтов | После disposition существенных findings |
 

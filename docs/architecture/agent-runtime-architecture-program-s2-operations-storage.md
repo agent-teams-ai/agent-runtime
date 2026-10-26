@@ -523,6 +523,40 @@ New rejection coverage is selected for real data/effect risk:
 - Host failure never closes borrowed storage; storage outlives incomplete cleanup; no DDL on Host creation.
 - Packed migrations are present; emitted declarations expose no Drizzle; public install has no private conformance edge.
 
+### Greenfield review refinements
+
+The [foundation invariants](agent-runtime-greenfield-foundation-plan.md#invariants)
+refine this selected profile without changing its one-shot dispatch or native
+ownership. Add the following rejecting cases to their existing owner suites:
+
+- **F08 encoded state:** every admitted state roundtrips within the 8 MiB encoded
+  UTF-8 envelope, including escaping and bounded compatible terminal/reconcile
+  growth. Reject an oversized candidate before mutation SQL; prior state stays
+  readable. Static headroom plus independent boundary vectors is sufficient;
+  this does not mandate a second reserve subsystem or physical storage split.
+- **F05 acceptance:** the actual Host/engine boundary reserves its future owned
+  obligation before durable acceptance. Cover delayed/lost acceptance ACK and
+  close races; unknown never becomes unaccepted overload. Duplicate lookup is
+  bounded separately and creates no second execution slot. A future accepted
+  durable backlog is a separate C0-C3 contract, not a new S2 outcome here.
+- **F06 actual acquisition:** an acquisition token survives the caller timeout
+  until underlying resolution/rejection or proven dequeue. A late client executes
+  no body and releases once. Test repeated timeout waves, not only one late
+  acquire. The owner accounts for all consumers of a shared pool; store-local
+  limits alone do not prove a deployment-wide bound.
+- **F07 progress:** finite aggregate pending/owned/closing/read/poll work leaves
+  bounded control/settlement progress under saturation. DB outage may prevent
+  durable cancellation; independent physical cutoff and retained debt remain
+  truthful. No dedicated semaphore is required where existing caps prove the bound.
+- **F01 portability:** inspect concrete engine/binding signatures against a
+  bounded in-process async harness. Reuse P599 independent cases; add a tiny
+  structural fixture only if they miss a process assumption. No fake PID or
+  physical drain fact, and no second production provider prerequisite.
+- **F14 retirement:** include restore to before acceptance after an external
+  effect, and attempted retirement of the last supported recovery path with
+  unresolved obligations. Preserve the current migration/recovery contract;
+  no generic workflow or recovery engine is introduced.
+
 Use one disposable database per relevant case, not search_path isolation against shared journals.
 The existing PostgreSQL runner retains no-skip file/name obligations and approved disposable environment.
 Update the roster once when new entry files land and once at removal; do not alter a frozen job to hide failures.

@@ -22,6 +22,23 @@ then the one slice brief assigned to the executor:
 - [S2: operations and storage](agent-runtime-architecture-program-s2-operations-storage.md).
 - [S3-S5: features and Host](agent-runtime-architecture-program-s3-s5-features-host.md).
 
+## Greenfield follow-through, 2026-10-26
+
+The [greenfield foundation plan](agent-runtime-greenfield-foundation-plan.md)
+records the larger target: independently reusable libraries, whole-harness
+replacement, session continuity, resource ownership and qualified multi-worker
+fleets. Its [industry research](../spikes/agent-runtime-industry-architecture-research.md)
+distinguishes historical fixes from documented limits; the
+[decisions and review](agent-runtime-foundation-decisions-and-review.md)
+record alternatives, costs and review dispositions.
+
+This v3 program remains the first bounded ordinary delivery. The added S2 and
+S3-S5 acceptance refinements cover encoded-state readability, future-obligation
+admission, real IO waiters, whole-harness seams and exact native qualification.
+C0-C3 remains the capacity delivery owner. Accepted contexts/ADRs, frozen
+contained, native ownership and current pins are unchanged; future fleet or
+hostile-tenancy qualification does not become a prerequisite for pure S1/S2.
+
 ## 1. Goal, scope and completion
 
 Rewrite the active ordinary execution path inside this repository, one coherent

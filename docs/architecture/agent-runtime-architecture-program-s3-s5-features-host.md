@@ -229,6 +229,39 @@ real Rust contract conformance and full Docker E2E are separate acceptance facts
 Native owns the broad physical matrix; runtime verifies policy mapping and one
 complete pinned chain, including unrelated-resource preservation.
 
+### Greenfield native and Host acceptance refinements
+
+Apply [F01/F05-F07/F09-F12/F16-F18](agent-runtime-greenfield-foundation-plan.md#invariants)
+through the existing NATIVE-INTEGRATION and owner suites:
+
+- Qualify the selected control boundary: an authentic private inherited FD can
+  be a local capability; PID/correlation alone cannot authorize control. An
+  unauthorized workload or stale caller cannot query/stop another target. A
+  trusted Host intentionally delegated several attempts remains a valid case.
+- State the selected source replay contract. Source occurrence identity,
+  canonical runtime output cursor and reader cursor are separate; a no-replay
+  gap cannot produce a complete-drain receipt after reconnect. Avoid importing
+  a universal replay journal where the actual transport has no replay.
+- Record the exact Host/keeper/daemon/network/mount-source topology, platform
+  and release tuple; prove real readiness, nonempty mount access and scoped
+  cleanup. Fixture conformance does not qualify the native Docker path.
+- Preserve PA destination/redirect and helper rights. Only if the selected
+  transport represents proxy/raw request targets, test conflicting authority
+  and absolute target. Permitted public egress without injected credentials is
+  not itself a bypass; private provider endpoints may be legitimate.
+- Whole-harness capability support, static compatibility/peer negotiation and
+  PA/RS permission remain separate checks before their respective effects.
+  Cooperative in-process modules share Host TCB/failure scope. New executable
+  extensions choose their own admitted trust profile before import/start.
+- Host admission reserves actual future obligations before acceptance and keeps
+  actual IO/closing debt bounded until settlement. Runtime-wide and shared
+  provider-account limits have named owners; local per-owner caps do not prove
+  a multi-replica quota or 10k capacity.
+
+These clarify selected-profile evidence; they do not create a TS custodian,
+second client/journal, OAuth service for every local FD, automatic pin upgrade,
+or fleet/security qualification prerequisite for independent pure libraries.
+
 ### S5-RELEASE: build before consumer cutovers
 
 Under `packages/apps/embedded-runtime/src/features/codex-releases/`:

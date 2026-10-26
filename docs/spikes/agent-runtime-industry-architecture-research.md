@@ -259,6 +259,16 @@ Codec результат получен чтением source branches и чис
 | Количество replicas заменяет capacity доказательство | Суммарные budgets и exact mixed-load campaign | F15/F18, fleet charter |
 | Подпись/контейнер/язык дают автоматическое доверие | Explicit trust class и authorized executable/data boundaries | F10/F16/F18, selected profile tests |
 
+## 8. Точный upstream delta для существующей модульной основы
+
+Это отдельное чтение Get Modular, уже выбранной reusable основы, не новый участник сравнительного agent-runtime benchmark. October 20 planning baseline — `077434e34d75506a610bc9271f8b5b9d5718c876`. Проверенный upstream main на 26.10.2026 — **`b1866ac5328231b7fe1d63ed136e7a905a2facc1`**, CMS blob **`df4eff7235ac781ec574903c6b2aec13bcd7bfaa`** ([точный CMS](https://github.com/agent-teams-ai/get-modular/blob/b1866ac5328231b7fe1d63ed136e7a905a2facc1/docs/architecture/common-assembly.md#consumer-module-standard)). Installed adoption и эти две research/planning revisions не смешиваются.
+
+- [ADR-0039](https://github.com/agent-teams-ai/get-modular/blob/b1866ac5328231b7fe1d63ed136e7a905a2facc1/docs/decisions/0039-retain-observation-load-drain-until-its-run-settles.md), accepted 21.10: unfinished Observation loader после escalation остаётся pending и удерживает dependencies до settlement, включая finally. Abandon завершает ожидание caller, а не cleanup. Сохраняется original close flight; повтор cleanup ради ожидания не нужен.
+- [ADR-0041](https://github.com/agent-teams-ai/get-modular/blob/b1866ac5328231b7fe1d63ed136e7a905a2facc1/docs/decisions/0041-preserve-complete-feature-maps-with-descriptor-unions.md), accepted 23.10: concrete descriptor-derived feature maps используют complete unions и отдельный `CapabilitiesOf<ImportedContracts>` base для каждого источника. Один combined union может скрыть value/revision collision. Existing manual maps поддерживаются; это не новый type framework и не automatic compiler patch adoption.
+- Source manifests показывают Assembly 0.7.0, Resources 0.2.1, Observation 0.2.0. **Npm archive/release qualification здесь не проверена**. Source version не является installed/published artifact evidence.
+
+Действие: P7a/N2 проводят exact delta review и registry/archive verification перед affected module adoption; owner обновляет profile/evidence/checks согласованно. Чтение current main не меняет runtime pin и не блокирует независимые pure S1/S2 libraries.
+
 ## Limitations
 
 Это design evidence, а не production qualification, security certification или полный аудит всех ошибок индустрии. Исторические fixes не доказывают, что каждый опубликованный/установленный выпуск уже исправлен; rolling documentation не фиксирует artifact hash. Реальные benchmarking, installed-version audits и native/PG/provider failure campaigns относятся к реализации конкретного среза. Рекомендации проверяются по их инвариантам; чужой бренд не является доказательством нашего преимущества.
