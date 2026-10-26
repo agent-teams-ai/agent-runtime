@@ -247,8 +247,11 @@ through the existing NATIVE-INTEGRATION and owner suites:
   cleanup. Fixture conformance does not qualify the native Docker path.
 - Preserve PA destination/redirect and helper rights. Only if the selected
   transport represents proxy/raw request targets, test conflicting authority
-  and absolute target. Permitted public egress without injected credentials is
-  not itself a bypass; private provider endpoints may be legitimate.
+  and absolute target. Both credential-bearing routes and credential-free
+  public egress retain the applicable RS final-dispatch/redirect authorization.
+  An authorized public destination is a valid positive case. A legitimate private
+  PA upstream requires its authorized route and qualified native/network topology;
+  it does not grant the workload an exception to its own egress policy.
 - Whole-harness capability support, static compatibility/peer negotiation and
   PA/RS permission remain separate checks before their respective effects.
   Cooperative in-process modules share Host TCB/failure scope. New executable

@@ -523,6 +523,25 @@ New rejection coverage is selected for real data/effect risk:
 - Host failure never closes borrowed storage; storage outlives incomplete cleanup; no DDL on Host creation.
 - Packed migrations are present; emitted declarations expose no Drizzle; public install has no private conformance edge.
 
+### First-public-release implementer usability
+
+Ports and types required by a published public factory, including the selected
+`./composition`, are supported implementer contracts for its declared profile
+from its first release. The [ecosystem choice](agent-runtime-foundation-decisions-and-review.md)
+concerns additional families/kits/support commitments; it cannot defer these
+already selected inputs. Document ownership, failure/unknown and lifetime
+semantics; independently compile a packed caller and required-port implementer,
+and reuse necessary independent boundary cases. Internal ports remain private;
+the joined storage-conformance package remains private and test-only. Intentional
+implementer breaks follow the current 0.x minor/migration policy.
+
+The first-publication record names the actual consuming runtime adapter/source
+and its contract exercise. If that consumer is not yet delivered, finish that
+concrete integration before publication; a fake-only suite or packed import is
+not the real consumer. This need not wait for the full S2-E Host switch, native
+activation or fleet qualification: a dependency-complete pure library and its
+real consuming source can be exercised before effectful activation.
+
 ### Greenfield review refinements
 
 The [foundation invariants](agent-runtime-greenfield-foundation-plan.md#invariants)

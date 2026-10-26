@@ -221,7 +221,7 @@ summary: Primary-source industry lessons and historical failure cases informing 
 
 **H, исправлено.** [GHSA-5qpp-g3j2-8frx](https://github.com/bytecodealliance/wasmtime/security/advisories/GHSA-5qpp-g3j2-8frx), опубликован 14.10.2026: absolute-form request target мог указывать другой host, если разрешённая connection authority являлась forwarding proxy/gateway. Исправлено в **36.0.18, 48.0.6, 49.0.3**.
 
-**Наш guard/test:** выбранный credential broker согласует URL, request target, Host/authority, redirect/proxy и фактического получателя PA secret. При существовании raw/proxy path проверяется conflicting absolute target и разрешённый positive case; при невозможности представить этот path достаточно зафиксировать это свойство. **Предел:** public egress сам по себе не является bypass; это не обнаруженная уязвимость нашего runtime и не запрет legitimate private provider origin.
+**Наш guard/test:** выбранный credential broker согласует URL, request target, Host/authority, redirect/proxy и фактического получателя PA secret. При существовании raw/proxy path проверяется conflicting absolute target и разрешённый positive case; при невозможности представить этот path достаточно зафиксировать это свойство. **Предел:** public egress сам по себе не является bypass; это не обнаруженная уязвимость нашего runtime и не запрет legitimate private provider origin. Credential-free public egress и PA-approved private upstream сохраняют применимую RS final-dispatch/redirect authority; profile/network и PA route не расширяют workload egress policy сами по себе.
 
 ### K12. Wasmtime filesystem: patch/platform входят в обещанную границу
 

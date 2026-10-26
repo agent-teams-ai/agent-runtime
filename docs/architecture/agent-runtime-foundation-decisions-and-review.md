@@ -44,6 +44,8 @@ F01–F18 основного плана обязательны в scope акти
 
 **Caller и implementer — разные аудитории.** Добавленный обязательный метод может сломать сторонний adapter, хотя caller по-прежнему компилируется. Поэтому объявленный public implementer contract получает отдельный compile case и необходимую portable suite. Это перенос различия из [OpenTelemetry stability](https://opentelemetry.io/docs/specs/otel/versioning-and-stability/), а не автоматическое принятие его LTS policy.
 
+Обязательные ports/types уже опубликованной factory, включая выбранный S2 `./composition`, с первого релиза являются её public implementer contract для заявленного profile. Это не зависит от Q1. Нужны README semantics/failures/lifetimes, отдельная packed implementer compilation и необходимые независимые behavior cases; intentional implementer break следует 0.x migration policy. Внутренние ports, которые consumer-у не нужны, остаются private.
+
 S2 `runtime-storage-conformance` остаётся **private и test-only**. При Q1-B/C публикуется отдельный owner-reviewed узкий testing export/kit для выбранного public contract; private joined suite целиком не публикуется. Dependencies направлены conformance → owners/adapters. Production не импортирует conformance; owner не получает обратную devDependency на suite, уже зависящую от него. Независимые expected outcomes не генерируются production mapper-ом. Fake pass не доказывает native stop, hostile isolation или 10k capacity.
 
 ### 1.2 Рост кода и feedback loop
@@ -75,17 +77,17 @@ Governed feature size/shape, visibility и split signals остаются у FMS
 
 ## 3. Семь настоящих продуктовых развилок
 
-### Q1. Когда сторонние авторы адаптеров получают поддерживаемый implementer API?
+### Q1. Насколько широко расширяем ecosystem support сверх обязательных public ports?
 
-**Рекомендация для заявленного видения: B — одна выбранная family при первом реальном external consumer; public S1/S2 библиотеки выпускаются раньше независимо.** Открытая экосистема не требует marketplace, dynamic discovery или hot replacement.
+**Рекомендация для заявленного видения: B — дополнительная выбранная family и portable kit при первом соответствующем external consumer.** Уже выбранные публичные S1/S2 factory/required-port contracts поддерживаются с их первого релиза во всех вариантах. Вопрос касается расширения independently supported families/testing distribution/support promises, а не отсрочки usability библиотеки. Открытая экосистема не требует marketplace, discovery или hot replacement.
 
 | Вариант | Обещание и tradeoff | У / Н / С | P / T |
 | --- | --- | --- | --- |
-| A. Public libraries/caller SDK; runtime adapters сначала сопровождают maintainers | Самая простая эволюция; undocumented internals не поддержанный plugin API | 9 / 8 / 2 | 0–250 / 200–650 |
-| **B. Поддержать внешних авторов одной capability family** | Точный owner contract, portable kit и migration example; независимый consumer не использует private imports/credentials | **8 / 8 / 5** | **600–1 800 / 1 500–4 000** |
+| A. Ограничить ecosystem обязательными public ports первого package/profile | Публичные implementer inputs поддержаны; готовые production adapters сначала ведут maintainers, новых отдельно сопровождаемых families/kits нет | 9 / 8 / 2 | 0–250 / 200–650 |
+| **B. Дополнительная independently supported capability family / portable kit** | Точный owner contract, portable kit и migration example; независимый consumer не использует private imports/credentials | **8 / 8 / 5** | **600–1 800 / 1 500–4 000** |
 | C. Сразу несколько независимо versioned adapter families | Сразу больше ecosystem obligations: compatibility windows, release notices, поддерживаемые combinations | 6 / 7 / 8 | 1 800–5 000 / 4 000–10 000 |
 
-**Когда ответ нужен:** до первого обещания поддерживать независимых harness/store/provider implementers. Нужно выбрать первую family, а не раскрыть все внутренние ports. Private S2 kit сохраняется во всех вариантах. Default B отражает пользовательскую цель; C без реальных authors расширит support surface раньше проверки usability.
+**Когда ответ нужен:** до дополнительного independently versioned family/kit/support promise. Выбирается конкретная дополнительная family, а не все внутренние ports. Уже экспортируемые обязательные implementer inputs не ждут этого ответа. Private S2 kit сохраняется во всех вариантах. Default B отражает пользовательскую цель; C без реальных authors расширит support surface раньше проверки usability. Цены не включают повторно обязательную first-package usability, уже заложенную в S1/S2.
 
 ### Q2. Нужно ли запускать произвольные недоверенные executable extensions?
 
@@ -188,11 +190,23 @@ Whole-harness replacement разделяется на выбор новой bind
 | --- | --- | --- |
 | Self-review 1 | Authority, ownership, полнота исходных findings и новых исследований | Выполнен: явно сохранены четыре contexts, SQLite/PG и Connect/Buf; Operations закреплён под AE; ordinary retry отделён от broader known-not-accepted; уточнены capability/API versions, capacity reserve/bind, paused-worker fencing, session replacement и executable/data trust |
 | Self-review 2 | Минимальность, executable acceptance, версии, источники, LOC и вопросы | Выполнен: F01/F05–F08/F14 перенесены в S2 acceptance; native/output/topology и Host limits связаны с S3–S5; убрано ложное впечатление уже qualified Docker profile; закреплены exact CMS delta/source-vs-release; Q1-B выбран под external-consumer цель, LOC остаются incremental |
-| Independent review wave 1 | Domain/libraries, scale/fencing, security/native | Готово к запуску после обоих self-review |
-| Independent review wave 2 | Harness/versioning, evidence/status, delivery/minimalism | После обоих self-review; независимые направления |
+| Independent review wave 1 | Domain/libraries, scale/fencing, security/native | Завершена: три независимых GPT-6.1 Sol xhigh review на `0a018f265`; четыре material P2/medium уточнения приняты, ни один не установлен как текущая production vulnerability |
+| Independent review wave 2 | Harness/versioning, evidence/status, delivery/minimalism | Запущена: три отдельных GPT-6.1 Sol xhigh review immutable `0a018f265`; результаты ожидаются |
 | Delta review | Спорные исправления и отсутствие новых конфликтов | После disposition существенных findings |
 
 Для каждого существенного finding сохраняется: конкретный дефект/контрпример, принятое изменение либо причина отказа, scope/owner и проверка. «Ещё один агент согласен» не заменяет доказательство. Новые советы не принимаются только из-за строгости формулировки; они должны улучшать инвариант без competing authority.
+
+### Disposition первой независимой волны
+
+| ID / scope | Контрпример и решение | Изменение / минимальная будущая проверка |
+| --- | --- | --- |
+| V01-1, P2/G1 | Q1 мог отложить поддержку ports уже публичной S2 factory. **Принято** | Main §4, здесь §1.1/Q1 и S2 public surface: обязательный public implementer contract с первого релиза; packed caller/implementer и existing independent cases, private suite не публикуется |
+| V02-FLEET-1, P2/G4–G5 | Closed-loop arrivals скрывают замедление; краткий 10k run может накопить debt без формального провала. **Принято** | Main §11.1: заранее заданные offered load, duration, throughput/latency/refusal/drift/drain pass/fail; exploratory evidence не qualification |
+| V02-FLEET-2, P2/extracted G4 owner | Reservation принята AE, bind задержан, allocator уже reused capacity. **Принято как связь с existing ADR-0001** | Main §8.1: подтверждённая current finalized binding до dispatch; unknown сохраняет bounded delivery obligation. Race bind/expiry/cancel и bind COMMIT/ACK-loss проверяются в этом future profile |
+| V03-01, medium/G2 | Credential-free egress мог выглядеть разрешённым самим profile. **Принято** | Main §9, research §5/K11, S3 acceptance: RS остаётся egress authority; legitimate PA upstream не расширяет workload route; denied/allowed public/private cases в existing suite |
+| V01 publication clarification, optional | First publish и полный Host cutover — разные моменты. **Уточнено** | S2 release record называет actual consumer/source exercise; fake-only suite не real consumer. Не ждём full native activation или fleet для чистой библиотеки |
+
+Контргипотезы о необходимости нового context/allocator, второго native supervisor, universal history, запрета всех private/public destinations или automatic lease retry отвергнуты: они не следуют из finding и конфликтуют с сохранёнными owners/scope. Три review сохранили существующие положительные protections; количество новых механизмов этим disposition не увеличено.
 
 ## 7. Validation record
 
@@ -200,8 +214,10 @@ Whole-harness replacement разделяется на выбор новой bind
 | --- | --- | --- |
 | Governed creation, indexes, bounded context, docs check/protocol | Существующие типы/metadata/reachability и документационные инварианты | PASS: 102 documents, valid adoption; bounded context exit 0; все 5 frozen-authority tests pass |
 | Local relative links, exact authority references, no frozen/accepted changes | Связность плана и отсутствие скрытого переписывания решений | Frozen authority PASS; relative destinations и staged diff проверяются перед каждым push |
-| Repository changed/fast/full routes | Реальный доступный consumer gate, с различением environment failures | Записать actual commands/outcomes; не заменять обещанием |
-| Remote tree/head/draft readback | Публикацию выбранных bytes в нужный PR | Проверить после каждого update |
+| Repository changed/fast/full routes | Реальный доступный consumer gate, с различением environment failures | BLOCKED в текущей среде: `pnpm check:changed` exit 1 — отсутствует `@oxc-parser/binding-linux-x64-gnu`; `pnpm check:fast` и `pnpm check` exit 1 на lint — отсутствует `@oxlint/binding-linux-x64-gnu`. Дальнейшие product phases не выполнены; green full gate не заявляется |
+| Remote tree/head/draft readback | Публикацию выбранных bytes в нужный PR | Первые `1654daa0c` и `0a018f265` опубликованы с CAS; remote trees совпали с local staged trees, Git author/committer identity проверена; последующие updates проверяются так же |
 | Provider/native/PG/10k campaigns | Runtime performance/security/correctness конкретной реализации | Не выполняются этой documentation delivery |
+
+Проверки выполнялись на exact Node 26.11.1 / pnpm 11.18.0. Для documentation workflow зависимости установлены frozen без optional packages/install scripts после нехватки диска при полной установке. Production source, dependency pins и gates не менялись; отсутствие native tool bindings не является проверенным кодовым регрессионным finding. Docs gates и пять frozen-authority tests проходят отдельно от blocked full route.
 
 Открытые продуктовые развилки не означают незавершённое исследование: у каждой есть default, три проработанных варианта, ограничения оценки и момент, когда выбор должен стать явным. Подтверждение преимуществ архитектуры производится реализацией и квалификацией соответствующего среза.
