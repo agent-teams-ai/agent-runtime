@@ -121,7 +121,7 @@ P для A включает 0–400 runtime + 0–150 integration; B — 3 000�
 | --- | --- | --- | --- |
 | **A. Central strict reservation** | Конечная поддержанная exposure; потеря authority уменьшает availability новых requests | **8 / 9 / 5** | **+0 / +0** к общему G4 |
 | B. Предварительно выделенные bounded escrow credits | Часть работы продолжается при partition; crash удерживает capacity. Credits не дублируются и остаются вычтенными до settlement/revocation proof | 6 / 8 / 8 | +800–1 800 / +1 500–3 000 |
-| C. Soft budget / fail-open | Выше availability, возможен явно принятый overshoot; не вариант для hard-cap обещания | 7 / 5 относительно hard-budget цели / 4 | −200…+400 / +300–800 |
+| C. Soft budget / fail-open | Выше availability, возможен явно принятый overshoot; не вариант для hard-cap обещания | 7 / 8 в пределах soft-policy обещания / 4 | −200…+400 / +300–800 |
 
 **Когда ответ нужен:** до обещания cross-worker/account limits и partition availability. TTL не возвращает возможно потраченные credits. PA/deployment владеют account scope; product cost priority mapping остаётся снаружи. Local PA cap и mutex не превращаются в global coordination. [LiteLLM production](https://docs.litellm.ai/docs/proxy/prod) и [account limits](https://docs.litellm.ai/docs/proxy/users) — ориентиры по scope; конкретный reservation design наш.
 
@@ -191,7 +191,7 @@ Whole-harness replacement разделяется на выбор новой bind
 | Self-review 1 | Authority, ownership, полнота исходных findings и новых исследований | Выполнен: явно сохранены четыре contexts, SQLite/PG и Connect/Buf; Operations закреплён под AE; ordinary retry отделён от broader known-not-accepted; уточнены capability/API versions, capacity reserve/bind, paused-worker fencing, session replacement и executable/data trust |
 | Self-review 2 | Минимальность, executable acceptance, версии, источники, LOC и вопросы | Выполнен: F01/F05–F08/F14 перенесены в S2 acceptance; native/output/topology и Host limits связаны с S3–S5; убрано ложное впечатление уже qualified Docker profile; закреплены exact CMS delta/source-vs-release; Q1-B выбран под external-consumer цель, LOC остаются incremental |
 | Independent review wave 1 | Domain/libraries, scale/fencing, security/native | Завершена: три независимых GPT-6.1 Sol xhigh review на `0a018f265`; четыре material P2/medium уточнения приняты, ни один не установлен как текущая production vulnerability |
-| Independent review wave 2 | Harness/versioning, evidence/status, delivery/minimalism | Запущена: три отдельных GPT-6.1 Sol xhigh review immutable `0a018f265`; результаты ожидаются |
+| Independent review wave 2 | Harness/versioning, evidence/status, delivery/minimalism | Завершена: три отдельных GPT-6.1 Sol xhigh review immutable `0a018f265`; пять material P2 уточнений приняты, исправлены attribution и scope одной оценки |
 | Delta review | Спорные исправления и отсутствие новых конфликтов | После disposition существенных findings |
 
 Для каждого существенного finding сохраняется: конкретный дефект/контрпример, принятое изменение либо причина отказа, scope/owner и проверка. «Ещё один агент согласен» не заменяет доказательство. Новые советы не принимаются только из-за строгости формулировки; они должны улучшать инвариант без competing authority.
@@ -208,6 +208,20 @@ Whole-harness replacement разделяется на выбор новой bind
 
 Контргипотезы о необходимости нового context/allocator, второго native supervisor, universal history, запрета всех private/public destinations или automatic lease retry отвергнуты: они не следуют из finding и конфликтуют с сохранёнными owners/scope. Три review сохранили существующие положительные protections; количество новых механизмов этим disposition не увеличено.
 
+### Disposition второй независимой волны
+
+| ID / scope | Контрпример и решение | Изменение / минимальная будущая проверка |
+| --- | --- | --- |
+| V04-01, P2/G3 replaying harness | Reconnect восстанавливает history с новыми IDs; text dedup либо сливает новое событие, либо дублирует старое. **Принято** | Main §7.2, research §3 и S3 output hook: no replay / stable occurrence replay / reconstructed snapshot; reset/mapping и old-live/rebuilt/new-identical case, без ложного gap repair |
+| V04-02, P2/первый structured resumable reader | Cursor после `text-start` сохраняется, reducer state при refresh теряется; продолжение с delta нечитаемо. **Принято** | Main §7.2: feed/epoch/representation/version и state/checkpoint/boundary precondition; cross-view/version и state-loss cases, explicit resync/refusal |
+| V04-03, P2/G3 interaction | Durable валидное approval переживает удалённый connection-owned callback. **Принято** | Main §5.2: provider interaction/continuation incarnation; decision acceptance отдельно от delivery/enforcement; same-generation reconnect, reused ID, revoke/cancel и unknown ACK cases |
+| V05-E01, P2/G0 evidence | Agno queue и session stores различны; non-Postgres session/run records не имеют описанного fencing. **Принято** | Research row 12/K07: точный store/config scope и сохранённая acceptance/terminal-error persistence; D-классификация, без заявления новой vulnerability |
+| V06-01, P2/G1–G2 roadmap | Полный store обещан до S3/S5, хотя требуемые owner versions/export cleanup входят в его publication graph. **Принято** | Main §12: ранние S1/S2-A/B независимы; S2-C/D публикуется вместе с нужными owner/export prerequisites до Host activation. Нет execution-only placeholder или ожидания всего fleet |
+| V04 attribution, optional | Signed-approval PR не подтверждает representation cursor semantics. **Исправлено** | Research row 14 и §3 дают отдельный официальный Workflow mid-part источник; patch/release coverage из него не выводится |
+| V06 score scope, optional | Q4 soft-budget Н сравнивалась с чужим hard-budget обещанием. **Исправлено** | Н оценивает выполнение soft policy; вариант по-прежнему явно непригоден для hard-cap promise |
+
+Q1 implementer finding, независимо повторённый V06, уже закрыт первой волной и не посчитан вторым дефектом. Все три wave-2 review проверяли исходный immutable `0a018f265`, а не одобряли исправления заранее. Поэтому ниже остаётся отдельная delta-проверка изменённых границ. Evidence review дополнительно подтвердил K01–K12 статусы/причины/ограничения, exact CMS source/blob и baseline arithmetic; он не квалифицирует все 52 системы или реальные deployments.
+
 ## 7. Validation record
 
 | Проверка | Что она подтверждает | Статус этой ревизии |
@@ -215,7 +229,7 @@ Whole-harness replacement разделяется на выбор новой bind
 | Governed creation, indexes, bounded context, docs check/protocol | Существующие типы/metadata/reachability и документационные инварианты | PASS: 102 documents, valid adoption; bounded context exit 0; все 5 frozen-authority tests pass |
 | Local relative links, exact authority references, no frozen/accepted changes | Связность плана и отсутствие скрытого переписывания решений | Frozen authority PASS; relative destinations и staged diff проверяются перед каждым push |
 | Repository changed/fast/full routes | Реальный доступный consumer gate, с различением environment failures | BLOCKED в текущей среде: `pnpm check:changed` exit 1 — отсутствует `@oxc-parser/binding-linux-x64-gnu`; `pnpm check:fast` и `pnpm check` exit 1 на lint — отсутствует `@oxlint/binding-linux-x64-gnu`. Дальнейшие product phases не выполнены; green full gate не заявляется |
-| Remote tree/head/draft readback | Публикацию выбранных bytes в нужный PR | Первые `1654daa0c` и `0a018f265` опубликованы с CAS; remote trees совпали с local staged trees, Git author/committer identity проверена; последующие updates проверяются так же |
+| Remote tree/head/draft readback | Публикацию выбранных bytes в нужный PR | `1654daa0c`, `0a018f265` и `cb8258757` опубликованы с CAS; remote trees совпали с local staged trees, Git author/committer identity проверена; последующие updates проверяются так же |
 | Provider/native/PG/10k campaigns | Runtime performance/security/correctness конкретной реализации | Не выполняются этой documentation delivery |
 
 Проверки выполнялись на exact Node 26.11.1 / pnpm 11.18.0. Для documentation workflow зависимости установлены frozen без optional packages/install scripts после нехватки диска при полной установке. Production source, dependency pins и gates не менялись; отсутствие native tool bindings не является проверенным кодовым регрессионным finding. Docs gates и пять frozen-authority tests проходят отдельно от blocked full route.

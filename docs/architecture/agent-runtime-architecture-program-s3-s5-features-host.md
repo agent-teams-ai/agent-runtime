@@ -238,10 +238,15 @@ through the existing NATIVE-INTEGRATION and owner suites:
   be a local capability; PID/correlation alone cannot authorize control. An
   unauthorized workload or stale caller cannot query/stop another target. A
   trusted Host intentionally delegated several attempts remains a valid case.
-- State the selected source replay contract. Source occurrence identity,
-  canonical runtime output cursor and reader cursor are separate; a no-replay
-  gap cannot produce a complete-drain receipt after reconnect. Avoid importing
-  a universal replay journal where the actual transport has no replay.
+- State the selected source replay contract: no replay, stable occurrence
+  replay or reconstructed snapshot/history. Source occurrence identity,
+  canonical runtime output cursor and reader cursor are separate; reconstructed
+  history does not repair an unproved gap or justify text dedup/complete drain.
+  A structured resumable reader states its representation/version and reducer
+  state/checkpoint or safe-boundary precondition. Apply these checks when that
+  profile is delivered; the ordinary transport gains no replay by assumption.
+  See the [specific recovery cases](agent-runtime-greenfield-foundation-plan.md#72-потоки--четыре-разных-контракта).
+  Avoid importing a universal replay journal or checkpoint service.
 - Record the exact Host/keeper/daemon/network/mount-source topology, platform
   and release tuple; prove real readiness, nonempty mount access and scoped
   cleanup. Fixture conformance does not qualify the native Docker path.

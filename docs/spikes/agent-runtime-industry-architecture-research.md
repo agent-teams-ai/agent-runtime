@@ -41,9 +41,9 @@ summary: Primary-source industry lessons and historical failure cases informing 
 | 09 | OpenAI Agents SDK | Ц / D | `ModelProvider` возвращает model; Runner сохраняет свой tools/handoff loop. Whole-harness replacement требует другого seam, чем смена LLM provider. | [ModelProvider](https://openai.github.io/openai-agents-js/openai/agents/interfaces/modelprovider/), [running agents](https://openai.github.io/openai-agents-js/guides/running-agents/) |
 | 10 | Hugging Face smolagents | Ц / D | Sandbox одного code snippet и sandbox всей agent system — разные профили. Executor isolation не изолирует автоматически controller/model/tools. | [Secure code execution](https://huggingface.co/docs/smolagents/en/tutorials/secure_code_execution) |
 | 11 | CrewAI | Ц / D | Crew/Flow — бизнесовая координация; `kickoff_async` оборачивает sync в thread, `akickoff` имеет иной путь. Async название не доказывает fleet capacity. | [Async execution](https://docs.crewai.com/v1.15.30/en/learn/kickoff-async) |
-| 12 | Agno / AgentOS | У / D | Queue retry повторяет весь run и tool calls; default `max_attempts=1`. Attempt fencing своих записей отдельно от идемпотентности внешних эффектов. | [Durable queue](https://docs.agno.com/agent-os/background-execution/durable-queue) |
+| 12 | Agno / AgentOS | У / D | Queue retry повторяет весь run и tool calls; default `max_attempts=1`. Store-scoped attempt fencing отдельно от идемпотентности внешних эффектов; non-Postgres session/run rows имеют явное исключение. | [Durable queue](https://docs.agno.com/agent-os/background-execution/durable-queue) |
 | 13 | Letta | Ц / D | Persistent agent identity, harness и computer разделены; approval — continuation boundary, connection-owned callbacks не воскресают из сохранённых IDs. | [Terminology](https://docs.letta.com/reference/terminology), [App Server lifecycle](https://docs.letta.com/self-hosting/app-server/protocol-lifecycle) |
-| 14 | Vercel AI SDK | У / H | Durable `WorkflowAgent` ранее не переносил signed-approval поддержку core. Wrapper должен сохранять provenance и representation-specific cursors, а не только happy-path result. | [Issue19964](https://github.com/vercel/ai/issues/19964), [PR19976](https://github.com/vercel/ai/pull/19976) |
+| 14 | Vercel AI SDK / Workflow integration | У / H, D | Durable `WorkflowAgent` ранее не переносил signed-approval поддержку core. Отдельно Workflow stream требует part state при mid-part resume. Wrapper сохраняет provenance и reader semantics. | [Issue19964](https://github.com/vercel/ai/issues/19964), [PR19976](https://github.com/vercel/ai/pull/19976); отдельно [Workflow resumable streams](https://workflow-sdk.dev/docs/ai/resumable-streams#mid-part-resumes) |
 | 15 | OpenClaw | У / D | Один gateway — один оператор/взаимно доверяющая команда; `sessionKey` — routing selector. Hostile tenant isolation требует иной границы. | [Trust model](https://docs.openclaw.ai/gateway/security/trust-model) |
 
 ### B. Протоколы и semantics удалённого взаимодействия — 5
@@ -153,9 +153,9 @@ summary: Primary-source industry lessons and historical failure cases informing 
 
 **Наш guard/test:** выданное approval → преобразование/UI → disconnect/replay → consume; missing/tampered/input-mismatch/expired/revoked отклоняются до эффекта. **Не доказывает:** auth/CSRF bypass всего SDK, текущую unpatched vulnerability или необходимость HMAC для каждого trusted in-process callback. Требуется provenance и точная binding/authority, механизм зависит от trust boundary.
 
-### K07. Agno: retry attempt fenced в storage, но tool effect всё равно повторяется
+### K07. Agno: store-scoped fencing не исключает повтор tool effect
 
-**D, официальная rolling documentation, прочитана 26.10.2026; не баг.** Queue `max_attempts>1` повторяет run с начала, включая уже исполненные tools; default 1 рекомендован для side effects. Attempt counter fencing отвергает late writes старого worker в собственные records. Submission idempotency — отдельный слой. [Источник](https://docs.agno.com/agent-os/background-execution/durable-queue).
+**D, официальная rolling documentation, прочитана 26.10.2026; не баг.** Queue `max_attempts>1` повторяет run с начала, включая уже исполненные tools; default 1 рекомендован для side effects. Attempt counter fencing отвергает late writes старого worker в поддержанной конфигурации. Queue store и session store различаются: при non-Postgres session store session/run rows теряют это fencing и running-state persistence; queue acceptance и terminal error persistence продолжают работать. Это documented backend limit, не новая vulnerability. Submission idempotency — отдельный слой. [Источник](https://docs.agno.com/agent-os/background-execution/durable-queue).
 
 **Наш guard/test:** fake tool совершает effect, теряет ACK до checkpoint; worker loss не разрешает blind repeat. Сохраняется query/idempotency/unknown path владельца эффекта. **Не доказывает:** что Agno скрывает эту семантику, что fencing бесполезен, что retries всегда запрещены либо что локальный claim даёт external-effect exactly-once.
 
@@ -194,6 +194,14 @@ summary: Primary-source industry lessons and historical failure cases informing 
 | Reuse уместен для механики с совпавшими constraints | Mature parser/schema tooling — private implementation choice; domain invariants/release policy остаются owner-owned | Packed offline/browser import; independent boundary vectors и effect/lifecycle oracles |
 
 Нельзя заключить, что agent-runtime «лучше 52 конкурентов». Системы обслуживают разные workloads, tenancy и failure domains; документация и issue histories имеют разную глубину. Здесь нет общего benchmark, performance ranking или одинакового conformance test. Правомерный результат — карта известных tradeoffs, выбранные инварианты и план квалификации собственного deployment.
+
+### Уточнения восстановления, принятые после независимой критики
+
+- **Rebuilt history и occurrences.** [ACP v2 migration](https://agentclientprotocol.com/protocol/v2/migration) сохраняет Draft status v2 и предупреждает, что agent/thought IDs могут меняться при reconnect/restart. Наш вывод: stable occurrence replay и reconstructed snapshot/history — разные capabilities; reset/mapping не разрешают text dedup или выдуманный complete drain. В main §7.2 указан конкретный old-live/rebuilt/new-identical case.
+- **Offset и состояние представления.** [Workflow SDK](https://workflow-sdk.dev/docs/ai/resumable-streams#mid-part-resumes) документирует, что ненулевой start index может оказаться внутри открытого logical part. Наш вывод: resume contract включает representation/version и необходимое reducer state либо безопасную boundary/full replay. Это отдельный источник от signed-approval PR K06; ни исторический дефект, ни исправление всех client versions из этого документа не выводятся.
+- **Сохранённое решение и живой callback.** [Letta App Server](https://docs.letta.com/self-hosting/app-server/protocol-lifecycle) удаляет connection-owned approvals/tool callbacks при disconnect. Наш вывод: AE request связывается с конкретной continuation incarnation, когда профиль зависит от неё; durable approval acceptance не равна подтверждённому enforcement. В main §5.2 определены current-pending proof либо reissue/refusal, без автоматического повторения accepted input.
+
+Это D → I: documented upstream semantics → наши минимальные contracts/tests для соответствующего G3 consumer. Не добавляем universal history, checkpoint service, callback manager или новую native authority.
 
 ## 4. Дополнительные механизмы масштабирования и модульности
 
