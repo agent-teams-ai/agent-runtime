@@ -223,3 +223,7 @@ and [Get Modular adoption](architecture/get-modular-adoption.md). This is author
 groundwork, not delivered adoption or provider qualification.
 
 - [ADR-0090: Ordinary user-session Codex execution profile](decisions/0090-ordinary-user-session-codex-execution-profile.md) accepts the ordinary contract; implementation and qualification remain pending.
+
+## Greenfield foundation research
+
+- [Agent Runtime Industry Architecture Research](spikes/agent-runtime-industry-architecture-research.md)

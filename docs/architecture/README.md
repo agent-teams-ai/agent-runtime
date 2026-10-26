@@ -21,6 +21,8 @@ independent competing source of truth.
 
 Documents:
 
+- [Agent Runtime Greenfield Foundation Plan](agent-runtime-greenfield-foundation-plan.md)
+- [Agent Runtime Foundation Decisions and Review](agent-runtime-foundation-decisions-and-review.md)
 - [Get Modular adoption](get-modular-adoption.md): planned passive setup scope,
   ADR-0015 authority, unresolved artifact/pin gates, and L0 transition contract.
 
