@@ -229,3 +229,14 @@ implementation, Host adoption and qualification remain pending:
 
 - [ADR-0091: Interactive Agent Session synthetic vertical slice](decisions/0091-interactive-agent-session-synthetic-vertical-slice.md)
 - [Interactive session C first slice qualification](spikes/interactive-session-c-first-slice-qualification.md)
+
+## Greenfield foundation research
+
+- [Agent Runtime Industry Architecture Research](spikes/agent-runtime-industry-architecture-research.md)
+
+- [Agent Runtime Framework Research](spikes/agent-runtime-framework-research.md)
+- [Agent Runtime Durability Research](spikes/agent-runtime-durability-research.md)
+- [Agent Runtime Library Research](spikes/agent-runtime-library-research.md)
+- [Agent Runtime Antipattern Register](spikes/agent-runtime-antipattern-register.md)
+- [Agent Runtime Modular Research Review](spikes/agent-runtime-modular-research-review.md)
+- [Agent Runtime Modular Architecture Spikes](spikes/agent-runtime-modular-architecture-spikes.md)
