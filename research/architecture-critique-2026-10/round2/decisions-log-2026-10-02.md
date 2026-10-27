@@ -135,3 +135,202 @@
 
 Кроме того (владелец, 10 октября): окна ревизий контрактов (бывший train 2) отложены до появления отдельно собранных плагинов; контракты меняются на месте вместе со всеми потребителями.
 
+
+## Version 3 inputs and supersession (2026-10-15 to 2026-10-19)
+
+This appendix preserves the earlier record. It distinguishes owner direction
+from technical defaults; it does not silently amend an accepted ADR or authorize
+implementation in another repository. The version 3 plan supplies the execution
+sequence and the smallest required successor records.
+
+50. Owner direction, October 15-16: rewrite the active ordinary path inside
+agent-runtime by slices, existing behavioral tests first, then one consumer
+switch. Build all selected libraries; do not replace them with a reduced scope.
+51. Owner direction, October 15: contained code stays frozen and is not deleted.
+No implementation dependency may wait for CONTAINED-REMOVAL. This supersedes the
+removal timing in decisions 14, 18, 25 and 32(5) for this program; it preserves
+contained code, tests, data and shared materialization ownership.
+52. Technical selections in the October 15 synthesis, accepted with option (a)
+on October 16: verified storage object with no Host pool; Provider Access grants
+in the store package and shared materialization with Provider Access; dedicated
+ordinary schemas; preserve #231 assertions while adapting narrowed port calls;
+one Provider Access rewrite with libraries/auth-file/refresh; capability feature
+names; Provider Access and Agent Execution directly nested after N2.
+53. Accepted reductions, October 16: generator before slices; preserve meaningful
+oracles and add only risk-driven tests; coherent PRs that avoid repeated registry
+churn, within the current review budget rather than a mandatory PR count.
+54. Correction after communication-catalog inspection, October 16: configuration
+and release are creation snapshots; journal is a required command; one upward
+receiver uses an explicit port. Observation stores/watch/events are not a
+prerequisite and no temporary substitute is built.
+55. Completion delegation, October 19: finish the outstanding plan with technical
+choices inside the accepted scope. The following are coordinator defaults, not
+additional owner quotations: infer recognized roles from nonempty directories
+after the scoped N2 successor; runtime root entrypoint for platform libraries;
+remove public Embedded Runtime ./composition at API cutover while preserving
+internal contained build/tests; keep Runtime Configuration private unless the
+public Host signature proves a standalone publication necessary.
+56. Verified source update, October 19: the process-runtime repository now
+publishes node-or-bun 0.2.1. Its current run-to-completion API lacks the duplex
+and POSIX group semantics the runtime needs. Plan a narrow separately owned
+extension there; do not create a duplicate @agent-teams/process. This is a
+planning choice and not authorization for implementation in that repository.
+57. Verified source update, October 19: Foundation 1.10.0 and the FMS package
+0.1.1 are published. Reuse their baseline/source graph/kernel rather than plan
+them as missing work. Baseline adoption uses its actual CLI configuration path,
+not an invented capability key. Consumer adoption and validation remain work.
+
+Earlier references to owner-only routine merge or repeated independent review
+are historical procedure. Current global/repository delivery rules govern actual
+execution; this planning delivery does not merge or publish product changes.
+
+58. Owner approval, October 19: implement the planned bounded interactive
+process extension in the existing process-runtime repository, whose package is
+node-or-bun. This supplies the repository scope missing from decision 56;
+PROCESS-DUPLEX requires no repeat owner scope confirmation. Preserve the existing
+run API and deliver the selected duplex stdio / Node POSIX group mechanism with
+its owning successor record, tests and release. Other repositories or unrelated
+capabilities are not added by this approval. The architecture program still
+rewrites the active ordinary path from scratch by slices, directly in the nested
+v1.1 target after N2; this approval does not turn the documentation delivery into
+an already completed implementation.
+
+59. Planning completeness audit, October 19: restore explicit cards and acceptance
+for the already accepted ACTIVE-SUPPORT module-rules lane, PUBLISH-NATIVE and
+filesystem-custody publication, conditional shared tooling/library-first standard
+successor, and the full source/feature/config/refresh checklist of Codex bump.
+This is a coordinator completion of existing scope, not a new owner feature
+request. Published FMS v1.1 provides nesting; it does not prove the separate
+LIBRARY_FIRST extraction criterion delivered. PUBLISH-NATIVE selects prebuilt
+optional artifacts matching the full existing native binding, with typed refusal
+for an unavailable tuple and no weakened JavaScript no-replace fallback.
+
+60. Owner direction, October 20: study Get Modular module communication,
+observation and events deeply and use the important module mechanism according
+to its actual recommendations. Coordinator selection: OBS-ADOPT adds a bounded
+live-operation summary view with an AE producer and Host subscriber/public
+`operations.watchSummary` bridge. This is a new selected inspection capability,
+not an assertion that the baseline already needed reactive replacements.
+Direct durable queries, journal acknowledgement, dispatch/settlement/cancellation
+and the distinct existing `onAccepted` failure semantics remain intact. This
+refines decision 54's blanket deferral while retaining immutable per-Host
+configuration/release and its protected command paths. The implementation card
+must supply its scoped public-contract/CMS successor; this plan changes no
+accepted ADR, installed package pin or runtime source.
+
+61. Verified source refresh, October 20: Observation 0.1.0 is public and its npm
+archive is byte-identical to the retained tested release artifact. Core/Assembly
+0.6.0, resources 0.2.0 and conformance 0.4.0 are published; review this compatible
+train directly for P7a/P7b with native TypeScript 7.0.2. Actual consumer adoption
+and qualification are still required. `watch` coalesces latest state, `load`
+serializes replaceable queries with cooperative cancellation, and `many()` is
+an explicitly ordered static extension point. They do not implement lossless
+events, dynamic registration, readiness authority or distributed notification.
+No new event bus, plugin framework, invented first `load` consumer or local
+copy of a shared mechanism is selected by this direction.
+
+62. Owner request, October 20: examine high-cost Get Modular foundation choices
+before the runtime rewrite and strengthen the implementation plan. The source
+review found no missing shared runtime primitive that blocks the selected
+static/nested/per-run scope. Coordinator selections now explicitly fix six
+contracts: capabilities/boundaries, ownership/lifetime, command/state/occurrence
+delivery, readiness/diagnostics, behavioral replacement/evolution and the future
+trust/isolation seam. Existing P7b/N2 and slice cutovers own their enforcement;
+there is no new platform-wide completion gate before S1/S2 authoring.
+The four runtime outcomes now have concrete implementation instructions and
+positive/rejecting acceptance. Diagnostics enter from an outer-root/per-Host
+input rather than creating an AE/Host cycle. OBS-ADOPT's public refusal,
+activation and close state machine retains sources through pending reader
+construction and incomplete cleanup; passive callbacks cannot become feedback
+commands. Optional events, plugin isolation, dynamic registries and hot
+replacement remain additive work for a selected consumer, not blanket module
+requirements. This records planning choices only; no Get Modular or runtime
+implementation is claimed.
+
+63. Owner request, October 20: make the six pre-rewrite decisions executable
+and estimate the three optional module capabilities. Coordinator refinements
+specify one descriptor/exact revision with coordinated contract updates, owned
+DTO snapshots (Assembly leaves values opaque), inert preparation, scoped async
+acquisition, admission before facade publication and retained construction
+failure/recovery. A synchronous non-acknowledging summary publication adapter
+cannot change the already confirmed command result. Existing feature cards,
+behavioral oracles and the one consumer cutover retain ownership; there is no
+new prerequisite phase or module-wide lifecycle interface.
+The main plan records separate estimated new production, integration, tests and
+documentation ranges for ephemeral typed events, executable dynamic
+contributions and a trusted cooperative in-process plugin Host. Their bounds
+and exclusions are estimation assumptions, not accepted future API designs or
+authorization to implement them now. Dynamic contribution metadata is plain
+data; executable invocation needs a separate owned facade and removal/drain
+contract. Durable/replay delivery and isolated plugins are larger distinct
+scopes. No new blocking product question was found for the selected runtime
+rewrite. Revisit those product choices only when a real consumer selects the
+future capability.
+
+64. Owner clarification request, October 20: focus further planning on this
+runtime, leaving module-platform work to another agent; establish whether the
+existing TypeScript Host is reusable and whether Rust/cross-platform readiness
+was already delivered. Source review distinguishes the real implemented ordinary/
+passive Embedded Host from the Rust technical Supervisor/Guardian spike.
+The September 6 Rust custody migration remains explicitly deferred, with domain,
+API, PA/RS, SDK and HTTP/TLS ownership retained in TypeScript; this request does
+not activate that separate migration. S5 writes the new ordinary/passive target
+composition/API once, preserving suitable independent mechanisms and meaningful
+tests, while replacing constructor DDL/raw-pool wiring and contained-ledger
+coupling. The frozen contained Host and shared materialization/native custody
+keep their separate existing ownership.
+The plan now records the current ordinary Darwin/non-root and arm64-auth limits,
+synthetic Host/Postgres evidence, distinct frozen Linux route evidence and the
+three-OS Rust spike's unqualified production status. No all-platform or successful
+live-provider claim follows from those tests. Existing Host assertions are
+mapped explicitly; obsolete positive constructor-migration expectations become
+verify-only/no-DDL rejection. No new product answer or Get Modular capability is
+needed to complete this bounded plan refinement.
+
+65. Owner-supplied native-team handoff, October 20: keep the new runtime in
+TypeScript and assign technical custody to a separate Rust lane in proposed
+`agent-teams-ai/custody-keeper` and `agent-teams-ai/custody-init` repositories.
+Working names are not created/published artifact claims. Native owns per-attempt
+keeper, init under Tini, Docker/process/resources, autonomous accepted deadlines,
+technical journals/recovery, normative protocols, generic TS client and native
+artifacts. Runtime owns operations/PG/claim/receipt decisions, PA/RS/SDK/provider
+and broker semantics, workspace/artifact contents, Host and the consumer-owned
+execution port/adapter. Generic client is not the runtime adapter.
+The handoff supersedes PROCESS-DUPLEX as this runtime's dependency and the native
+integration deferral in decision64; separately approved process-runtime work is
+not cancelled or taken over. Existing contained remains frozen. Guardian is a
+possible primitive reference, not a ready keeper/init implementation; Supervisor
+updater/generation work is not an extra prerequisite.
+The canonical program section now owns the seven-part shared integration
+contract, dependency direction and fixture/real-conformance/real-Docker evidence
+split. Keeper owns broker process custody from launch, TS its HTTP/TLS behavior;
+mounts never transfer source-directory deletion rights. Native startup/recovery
+invocation has an explicit Host/deployment owner; native never resumes/retries a
+provider. No second TS custody/client implementation or weaker automatic fallback.
+First native profile is Linux+Docker with exact artifact/provider/profile and
+credential/receipt successors, not relabelled Darwin or frozen contained evidence.
+NATIVE-AUTH explicitly resolves helper placement/credential rights with native/PA
+owners before activation. Runtime may develop against the agreed fixture while
+native is pending; only dependent physical cutover/E2E waits. Native owns its
+broad E2E matrix, runtime the policy mapping and complete integration; no test-line
+quota. This delivery records coordination, not native implementation, repository
+creation, provider activation or accepted-ADR changes.
+
+66. Owner-requested clarity audit, October 20: resolve five remaining handoff
+ambiguities. A dispatch claim gates workload execution, while a pre-claim
+auth-helper/broker uses only its existing bounded PA/RS preparation authority,
+separate purpose/identity/deadline and no workload permission. This removes the
+credentials-before-claim/helper-after-claim dependency cycle, not an authority
+exception for arbitrary executables. Persist the immutable native correlation
+key before the attempt's first native effect, include it in later preparation/
+claim identity and use stable child-purpose keys for lost-ack query/recovery.
+Native/client bootstrap owns exclusive live-versus-recovery custody; runtime
+does not add a second process/lock implementation.
+The ten-receipt bound is scoped to the retained Darwin set. AE/RS/PA/Host accept
+the native profile's finite required receipts and exact codec/digest mapping
+before dependent runtime contracts freeze; old validators/records are not
+weakened or relabelled. Native protocol/client owns the versioned dev fixture;
+runtime pins it and adds product assertions. The old preserve-factories/ports
+instruction applies only to unaffected protocol bindings, not a mandatory POSIX
+ABI for S1-NATIVE. Host/container path namespaces and safe technical journal/
+diagnostic data are explicit. No runtime/native implementation is claimed.

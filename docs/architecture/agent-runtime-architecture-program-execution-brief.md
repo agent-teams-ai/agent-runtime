@@ -8,237 +8,250 @@ summary: Self-contained execution brief for the remaining cards of the Agent Run
 
 # Agent Runtime Architecture Program: Execution Brief
 
-Version of 2026-10-11, written against agent-runtime main `2f457fe5`. Train 1 (AR-1a to AR-2) and the issue #189 briefs are merged; they changed product code, so cited product lines may have moved (the Provider Access auth files and the broker did not change); CI facts are unchanged since `44846323`. Sibling execution plans that run first or in parallel: the [Get Modular train 1 migration](get-modular-train-1-migration.md) (AR-1a, AR-1b, AR-1c, AR-2) and the [issue #189 test debt briefs](test-debt-189-plan.md). This brief tells an implementer how to execute the cards of the [architecture program plan](agent-runtime-architecture-program-plan.md). It does not authorize anything beyond what section 8 lists.
+Version 3, updated 2026-10-20. Execute one card from the
+[program plan](agent-runtime-architecture-program-plan.md), using its exact
+[S1](agent-runtime-architecture-program-s1-libraries.md),
+[S2](agent-runtime-architecture-program-s2-operations-storage.md) or
+[S3-S5](agent-runtime-architecture-program-s3-s5-features-host.md) contract.
+This brief replaces the October 11 move-first instructions. It does not authorize
+live provider runs, alter accepted ADR bytes or claim the program implemented.
 
-Authority order: the owner decisions log (`research/architecture-critique-2026-10/round2/decisions-log-2026-10-02.md`) wins over the plan, and the plan wins over this brief. When two of them disagree, or when anything is ambiguous, stop and ask. Do not settle a design question alone.
+## 1. Assignment contract
 
-## 1. Re-verify before every card
+Give an executor the following bounded input, filled from the selected card:
 
-Main moves fast: between 2026-10-04 and 2026-10-07 it received 48 CI commits that changed which files are frozen. Before a card starts, run these checks on a fresh clone and compare with the facts in this brief and in the plan (sections 2.3 and 5.0). If anything differs, stop and report the difference before writing code.
+- Card ID, concrete result, owning package/feature and allowed files.
+- Exact base commit and actual dependency commits/artifact identities.
+- Narrow required input/output ports and the slice's relevant invariants.
+- Existing behavioral case names to preserve, changed risks to test, applicable
+  package commands and final required repository/CI evidence.
+- The integrator responsible for profiles, lockfile, Host wiring, exports and
+  accepted-decision metadata; name any externally owned overlapping branch.
+- Exact cutover/rollback boundary, including who retains incomplete cleanup and
+  how nonempty legacy data refuses without loss.
+- For native-dependent cards, the external native owner, agreed client/fixture
+  contract and exact keeper/init/image artifact status. Link the canonical
+  [runtime/native boundary](agent-runtime-architecture-program-plan.md#native-team-coordination-contract-native-integration)
+  in the assignment; do not reconstruct its protocol or claim artifacts exist.
+
+The executor is not alone. Do not revert another lane or edit its reserved
+files. A library is mechanism; product permissions and recovery remain with
+consumers. No new adjacent feature, framework, universal manager, duplicate
+process package or silent replacement of a pinned contract.
+
+Only report a blocker when a concrete prerequisite prevents this card's dependent
+step. Continue independent work. Routine design/placement choices inside these
+contracts are resolved by the executor; do not create new owner questionnaires.
+
+For a rewritten module, fill the existing feature card/owning brief with the
+contract before implementing its adapters: semantic owner; public data/port
+shape and refusal/uncertainty meanings; descriptor/slots and chosen bindings;
+acquired versus borrowed resources and instance lifetime; command/state/occurrence
+classification; and the existing suite that proves the boundary. State readiness,
+cancellation and completion separately where they apply. Do not invent a second
+manifest, a base module interface or an ADR for every routine field. The main
+plan's four module-cutover outcomes define the concrete acceptance for P7b/N2
+and each affected slice. Follow its six-decision implementation order: one
+descriptor/revision, owned DTO snapshots, preparation before effects, scoped
+construction with retained failure cleanup, then the single consumer cutover.
+Assembly does not snapshot opaque run input or capability values for the Host.
+
+## 2. Bounded start check
+
+The [2026-10-27 integration checkpoint](agent-runtime-architecture-program-plan.md#2-verified-snapshot-and-moving-dependencies)
+takes precedence over the historical package snapshot below. Main already
+contains the scoped passive/ordinary 0.6.0 compatibility migration and the
+accepted [ADR-0091](../decisions/0091-interactive-agent-session-synthetic-vertical-slice.md)
+interactive successor. Preserve both, use the current adoption/readiness records,
+and execute only the remaining obligations of a selected card. The ordinary
+rewrite does not withdraw ADR-0091's separately owned Claude/session scope.
+
+Record the actual source head, `git status`, package manager, Node pin and changed
+inputs since the cited plan baseline. Use full Git history when repository
+checks read historical commits. Read the target AGENTS and pinned authority
+before editing; compare the current CMS/FMS pin with the reviewed successor.
+Only re-read a card's cited code if it changed or its contract is uncertain.
+
+At this plan's snapshot, agent-runtime is `efd3348f361fa6af84953325af5c0d2d8677d14a`,
+Node 26.11.1 and pnpm 11.18.0. Pinned Foundation remains 1.7.2 and Get Modular
+Core/Assembly 0.3.0. Released upstream versions are separate facts: Foundation
+1.10.0 and FMS package 0.1.1. The October 20 upstream refresh selects published
+Core/Assembly 0.6.0, resources 0.2.0, conformance 0.4.0 and Observation 0.1.0 for
+reviewed adoption, with native TypeScript 7.0.2. Verify actual artifacts and
+compiler/resolver behavior; no installed consumer pin changed in this plan.
+Do not change the toolchain/dependencies merely because a newer version exists.
+A dependency addition verifies current official metadata and its actual target
+compatibility, then pins the reviewed choice through the repository policy.
+
+Useful read-only start commands from the repository root:
 
 ```sh
-git clone https://github.com/agent-teams-ai/agent-runtime.git   # full history, never --depth
-cd agent-runtime
-git log -1 --format='%H %cd'
-git diff --stat aca6cbe7..origin/main -- scripts/ci scripts/docs architecture package.json pnpm-workspace.yaml .github/workflows 'packages/*/*/package.json'
-node --version            # must print v26.11.1
-cat .node-version         # 26.11.1 (active default after #232)
-node -p "require('./package.json').packageManager"   # pnpm@11.18.0
-grep -n 'df9260b0' scripts/ci/conformance.ts scripts/ci/full-contract.json
-grep -n "fixed six roots" scripts/ci/package-execution.ts
-gh api repos/agent-teams-ai/agent-runtime/rules/branches/main --jq '.[] | select(.type=="required_status_checks") | .parameters.required_status_checks[].context'
+git status --short --branch
+git rev-parse HEAD
+cat .node-version
+node --version
+node -p 'JSON.parse(require("node:fs").readFileSync("package.json", "utf8")).packageManager'
+gh pr view 230 --repo agent-teams-ai/agent-runtime --json state,headRefOid,updatedAt
+gh api repos/agent-teams-ai/agent-runtime/rules/branches/main
 ```
 
-Expected on 2026-10-08: the baseline literal at `scripts/ci/conformance.ts:263` and `scripts/ci/full-contract.json:2`; the six-package check at `scripts/ci/package-execution.ts:115`; required checks `check`, `docs-protocol / docs-protocol-check`, `postgres-durability`, `runtime-macos`, `commit-author-identity`.
+Inspect required checks and the relevant test scripts from the current source.
+Do not blindly recreate v2's frozen six-package inventory or historical check
+names. #232/#234 and earlier train/test-debt delivery are already merged.
+Existing #230 is separately owned; reading it is not authorization to message,
+modify or merge it.
 
-For cards in other repositories, run the same kind of check there before starting (expected heads, checked on 2026-10-11, in parentheses):
+## 3. Work order and ownership
 
-- Engineering Foundation, `agent-teams-ai/engineering-foundation` (`8e36bd76`, release 1.7.4): `git log -1`; `packages/engineering-foundation/src/capabilities/public-api-compatibility/application/rules.ts:47` still requires "an ADR-backed breaking-change entry"; `docs/architecture/executable-capabilities.md:82-86` still holds the extraction admission rule; pnpm 11.20.0.
-- get-modular, `agent-teams-ai/get-modular` (`55066670`; 0.4.0 released; the standard was revised in #164 and now differs from the agent-runtime pin `81063add`, see plan contradiction 16): `git log -1`; `docs/architecture/common-assembly.md:45-46` ("Feature Module Standard v1 ... remains the sole authority") and `:634-635` ("No wildcard, blanket directory exemption or automatic legacy inventory expansion") unchanged; pnpm 11.20.0.
-- `agent-teams-ai/.github` (`66d6d3d`): `git log -1`; `tools/feature-module-standard/check.mjs:60, 79-88` (published status and six markers); Feature Module Standard v1 blob `d0bfff20`; pnpm 11.18.0.
+1. Governance preparation: coordinate CI recovery ownership; CI-CONTRACT-1;
+   released Foundation/baseline adoption; one registry generator; scoped ADR
+   successors. P7-now's docs/named-port work may start independently.
+2. P7-now -> P7a -> P7b -> N2 for shared consumer/profile files. P7a/b own Host
+   roots/modules/groups and ordinary-session composition until merged.
+3. S1 mechanisms, S2 engine/store and S5 release data can develop in parallel,
+   with concrete dependencies in the main plan. Codex protocol borrows a byte
+   channel and does not wait for the external interactive process implementation.
+4. Security may cut over once its owner/store contracts and P7b are ready.
+   Provider Access and Agent Execution wait for N2 and land nested directly.
+5. The S2 state/store/owner contract activation is one coherent cutover. S5 wires
+   its Host responsibility there, not in a second mandatory migration PR.
+6. Public operations/Host and packed consumers follow the owners. Publish each
+   dependency-complete qualified package when ready; do not wait for all slices.
+7. Land OBS-ADOPT with S5-API: a real AE confirmed-summary producer and Host
+   subscriber serving `operations.watchSummary`, with per-reader scopes and
+   framework-neutral public types. It is a new bounded inspection view, not an
+   excuse to replace direct commands. Preserve journal acknowledgement, durable
+   `observe`, output/cursor delivery and exact `onAccepted` failure behavior.
+8. NATIVE-CONTRACT -> S1-NATIVE and NATIVE-AUTH -> selected Linux+Docker profile
+   cutover. Native team owns Rust custody/protocols/generic TS client/artifacts;
+   runtime owns its port/adapter, SDK facade and broker behavior. Pure libraries,
+   engine/store and TS policy proceed against the agreed executable fixture.
+   Real native artifacts and complete E2E gate only the dependent activation.
+   No TS custodian, copied client, stronger-profile claim or weaker fallback.
+   Native owns/version-publishes the dev fixture and bootstrap/recovery exclusion.
+   Runtime AE/RS/PA/Host accept the product receipt/profile mapping before its
+   codec/adapter freeze. Persist correlation before attempt-owned native effects;
+   distinguish PA/RS preparation helper/broker admission from workload claim.
 
-Also check, per card:
+Before each inter-module link, classify it with the main plan's communication
+table and current CMS authoring guide section 21. Choose a snapshot, query,
+command, latest-state subscription, replaceable query or ordered static
+contribution. A required call with one receiver stays a call. No global bus,
+string lookup, event chain, speculative `load` consumer or dynamic registry.
+Observation 0.1 does not implement lossless events. OBS-ADOPT's race, authority,
+scope, data-leak and failure-isolation cases live in S3-S5; do not substitute a
+package's green CI for this consumer qualification.
 
-- the owner questions the card depends on (plan section 4.2) are answered in the decisions log;
-- every `file:line` the card cites still points at the same code;
-- for ACCESS-AUTH-FILE and ACCESS-REFRESH: the latest stable `openai/codex` release (`gh release list -R openai/codex --exclude-pre-releases --limit 3`) and whether these files changed between the pinned helper tag `rust-v0.153.4` (`ORDINARY_CODEX_AUTH_BINARY_SHA256`) and the latest stable release: `codex-rs/login/src/auth/storage.rs` (`AuthDotJson`, `save`), `codex-rs/login/src/token_data.rs`, `codex-rs/login/src/auth/manager.rs` (`refresh_token`, `should_refresh_proactively` and its constants), `codex-rs/app-server/src/request_processors/account_processor.rs` and `codex-rs/app-server/src/models_refresh_worker.rs`.
+Integrator-owned files: root manifests/lockfile/workflows and AGENTS;
+`architecture/**`; shared architecture/CI/docs tooling; accepted-decision
+registry/index; all package public barrels; Embedded Runtime Host/composition.
+Workers own explicitly assigned feature/package source and mirrored tests.
+Reassign a bounded file before concurrent edits; there is no generic prohibition
+on parallel workers or independent tests.
 
-The owner migration of 2026-10-11 selects Node 26.11.1 as the active default. Put its bin directory first on PATH for every command (never switch the system Node); shell state may not persist between commands, so prefix each one. Invoke the retained Node 24 Corepack JavaScript with the selected Node executable and use a job-owned pnpm shim. Keep Node 24.21.0 as an explicit compatibility lane.
+## 3.1 Retained supporting deliveries
 
-## 2. Goal
+The main plan sections 5.1-5.4 own ACTIVE-SUPPORT, PUBLISH-NATIVE, conditional
+shared-tooling/library-first standard work and the full Codex bump contract.
+Assign those cards explicitly along with S1-S5; no module-config/setup lane,
+filesystem-custody publication or accepted tooling task is implicitly cancelled
+by the new slice sequence. ACTIVE-SUPPORT uses existing behavioral tests before
+writing its target layout; it does not add a new Claude execution feature.
+Do not publish custody without its matched prebuilt native artifact and packed
+qualification, or approve a bump without exact-tag defaults/config/refresh checks.
 
-Make the Codex ordinary path of agent-runtime a clean, modular reference architecture and move the reusable parts into libraries, without new features. Wave 1 is merged (plan #192, SEAM-1 #193, STORE-1b #191, STORE-1c #194). This brief covers wave 2 and the first cards of wave 3.
+## 4. Tests first and acceptance
 
-## 3. Ordered work list
+Copy the relevant behavioral cases to the target test owner before replacing the
+implementation. Adapt API call shape once; retain case purpose and meaningful
+assertions. Do not generate expected answers from new production code, assert
+source strings instead of behavior, or add test-only hooks to satisfy coverage.
+New tests address changed risks: money/authority, credentials, data loss,
+unknown commit, concurrency, process lifetime and confirmed regressions.
 
-Cards in different repositories can run in parallel, each in its own clone and pull request. agent-runtime pull requests merge one at a time.
+| Changed boundary | Minimum evidence beyond ordinary type/build checks |
+| --- | --- |
+| Process/session/JSONL | bounded bytes/backpressure, aborted-before-send zero writes, partial-send ambiguity, one start, clean EOF vs truncation, truthful profile-specific cleanup facts, no leaked handles; native physical custody stays with native tests |
+| Engine/owner ports | independent transition/readback table, CAS races, unknown claim never dispatches, G1 mismatch rejects, G2 retains cleanup, owner-loss projection never relaunches |
+| Postgres/migrations | borrowed pool, one-client locks, concurrent/partial migration, exact name/hash prefix, unknown commit, nonempty legacy intact, old-writer fence, owner-specific conformance |
+| Auth/capture/broker | strict secret byte handling, account/file identity, cumulative secret guard, actual sandbox fake helper rewrite permissions, stdin-first grace and bounded refusal |
+| Module adoption | reviewed content pin, structural layout/import checks, shared rejecting FMS fixtures, independent wiring oracle, smoke/isolate cleanup and own-property ports |
+| Host/API/package | exact replay/scope/uncertainty outcomes, failure/disposal recovery, verify-only/no DDL, public union parity and isolated tarball runtime/type imports |
+| Native integration | shared contract fixture versus real Rust conformance versus full TS/keeper/init/Docker E2E reported separately; no duplicate launch after lost ack, partial writes, controller/keeper crash cleanup and preservation of unrelated resources. Broad native matrix belongs to keeper. |
 
-**Wave 2, ready now:**
+Physical adapter claims need real disposable adapters. Tests never use the user's
+real projects or credentials. A separately permitted pinned-binary TEST run is
+not replaced by a mock, nor automatically repeated after an uncertain outcome.
+Frozen contained code still builds/typechecks. Ordinary and shared tests stay
+selected even when some contained-only tests are deliberately disabled.
 
-| # | Card | Repository | Role | Plan section |
-|---|---|---|---|---|
-| 1 | DOCS-1 parts (a) and (b) | agent-runtime | integrator | 5.2 |
-| 2 | DOCS-1 part (c) | agent-runtime | integrator | 5.2 |
-| 3 | ACCESS-AUTH-FILE and ACCESS-REFRESH (one pull request, after DOCS-1 part c) | agent-runtime | worker B | 5.3 |
-| 4 | CMS-REF (time-sensitive: before agent-runtime adopts get-modular 0.4.0) | get-modular | worker D | 5.2 |
-| 5 | EF-SURFACE | Engineering Foundation | worker C | 5.2 |
-| 6 | STANDARD-1c | Engineering Foundation | worker C | 5.2 |
-| 7 | STANDARD-1d | Engineering Foundation | worker E | 5.2 |
-| 8 | EF-README | Engineering Foundation | worker E | 5.2 |
-| 9 | STANDARD-1a | `agent-teams-ai/.github` | worker D | 5.2 |
-| 10 | FEATURE-STANDARD-2 (merge after CMS-REF) | `agent-teams-ai/.github` | worker D | 5.2 |
-| 11 | CI-CONTRACT-1 (after #230 and #232 merge) | agent-runtime | the CI line (decision 49) | 5.2 |
-| 12 | PUBLISH-NATIVE design note (low priority) | agent-runtime | integrator | 5.7 |
+## 5. Verification without check loops
 
-ISSUE-189-SYNC is done (decision 48).
+During editing run the affected package/risk suite and `pnpm check:changed`.
+Run documented `pnpm check:fast` at the final local checkpoint. The authoritative
+`pnpm check` and the full expected required CI roster prove the final candidate;
+keep exact SHA/run/attempt evidence. Follow project-specific required commands.
+Do not separately repeat build/typecheck/lint phases already covered by a
+successful stronger gate unless a changed input or unresolved risk requires it.
 
-**Wave 3, after CI-CONTRACT-1 merges:** CONTAINED-FREEZE, STORE-1a, then LIB-JSONL, LIB-PROCESS, LIB-CODEX-1, LIB-CODEX-2, STORE-0, STORE-2-core, GOV-2; CMS-PIN-2 after CMS-REF; STANDARD-1b merged after LIB-JSONL. Their briefs are written after CI-CONTRACT-1 lands, because its outcome changes their file lists.
+Docs changes follow `docs:info`, `docs:find`, dry-run/apply for new documents,
+manual index update, `docs:check` and `docs:protocol:check`. Preserve frontmatter,
+sidecar custody and accepted immutable bytes. A new plan is not code E2E evidence.
 
-## 4. What not to touch
+Registry commands are planned deliverables until GOV-REGISTRIES lands. Thereafter
+use its `registries:write` once and its read-only `--check`; do not hand-edit the
+same five projections in a loop. Foundation baseline is currently a CLI module:
+`agent-teams-foundation baseline check --config <owned-config> --consumer .`.
+It is not yet a key in `foundation.config.yaml`. Do not weaken either lint route
+or add automatic baseline expansion. Prune only proven fixed entries.
 
-- embedded-runtime Host and Assembly source (`packages/apps/embedded-runtime/src/**/composition/**`) and `packages/contexts/provider-access/src/features/contained-turn-access/composition/ordinary-provider-access-owner.ts`, except in the cards that own them (STORE-3, VERSION-2, API-1, ACCESS-LIB). Train 1 is done.
-- Contained-turn code: frozen (decision 32). Only mechanical import edits forced by moving shared parts. `ordinary-*` files inside `features/contained-agent-turn/` are active.
-- Accepted ADR bytes, `architecture/c0/**`, historical `architecture/sdk-growth/*` evidence. Successor records only.
-- Until CI-CONTRACT-1 merges: `scripts/ci/**`, `scripts/docs/consumer-migration.test.mjs`, `architecture/foundation/source-dependencies.yaml`, root `package.json` dependencies and scripts, package `test` scripts, `.github/workflows/*`.
-- Repositories other than agent-runtime, Engineering Foundation, `agent-teams-ai/.github`, `agent-teams-ai/modularity-host-test` and get-modular. In get-modular only CMS-REF; the resources train there is another program.
-- Persisted formats, SQL schemas, migrations.
-- npm publication, release workflows that publish, repository rulesets, branch protection.
-- Live Codex or any provider command on real projects. `pnpm check` stays synthetic.
-- Other people's pull requests and issues, including stale draft #180: no comments, edits or closing.
+One final meaningful review; delta fixes receive an appropriate delta review.
+Review scope, source SHA and results stay honest. Use available reviewers without
+making quota or another human account an artificial prerequisite. Repository
+protection and unresolved substantial findings still bind delivery.
 
-## 5. Review and readiness
+For final CI, record required checks from the actual rules and workflow source.
+Start one official `gh ... --watch` for the existing PR/run and retain its handle.
+A timeout limits observation, not command lifetime or provider effects. After
+completion, verify both full roster and current head. A skipped/missing check is
+not success unless the repository's accepted input-proof contract says so.
 
-- One independent reviewer per pull request, with a fresh context, given the card text, the diff, this brief and the plan. After fixes, a new review on the new head.
-- A pull request is ready for the owner only when the reviewer reports no unresolved P0, P1 or P2 finding, every review thread is resolved (the agent-runtime ruleset has `required_review_thread_resolution: true`) and required checks are green on the exact head.
-- **Review checklist for every pull request:**
-  1. The diff does only what the card says; no new feature, no speculative option.
-  2. Every invariant the card names has a rejecting test that fails without the change.
-  3. No accepted ADR bytes edited; every changed decision has a successor record registered in `docs/decisions/README.md` and `architecture/decisions/accepted-decisions.json`.
-  4. Every disabled gate keeps its code and carries why, when to return, owner and review date.
-  5. Registries and pins updated together: source policy plus its reversal step, census edges, ordinary scope, Feature Module Standard profile, workflow digests.
-  6. No secret is logged, journaled or decoded into a JavaScript string; buffers zeroed.
-  7. No local path, no email and no tool attribution (generated-by lines, co-author trailers) in code, comments, docs, commits or the pull request.
-  8. Budget respected or the overrun explained.
-  9. Local gates run on the final head (section 6) and CI `product` and `runtime-macos` evidence read, since local `pnpm check` does not run the product inventory check.
+## 6. Cutover and rollback
 
-## 6. Environment and commands
+Before the single state/storage activation, stop admission and prove old ordinary
+writers are fenced while contained access remains intact. Advisory migration
+locks alone do not fence legacy code that never takes them. S2 defines exact
+supported fresh/empty data preconditions; populated legacy rows and recovery
+obligations remain readable on the retained old release and are never deleted
+as a workaround. Do not invent acceptedAt or declare old grants harmless.
 
-- **Clone fresh** from `origin/main` for every pull request, with full history: `test:ci` reads `df9260b0` and `ccf6d6f8`. Branch names `<type>/<topic>`, for example `docs/ordinary-decision-records`; never `codex/...`.
-- **agent-runtime toolchain:** Node 26.11.1 is the active default (`.node-version`; `engines` is `>=24.21.0 <25 || >=26.10.0 <27` with `engine-strict`), with Node 24.21.0 retained as an explicit compatibility lane. Use pnpm 11.18.0 through the retained Node 24 Corepack JavaScript invoked by the selected Node executable and a job-owned pnpm shim, then run `pnpm install --frozen-lockfile`; do not install pnpm globally. Historical evidence remains that Node 24.18 fails `pnpm install`. Never run `n install` or `n <version>`: it switches the system Node; use the versions directory of the pinned version.
-- **Other repositories:** Engineering Foundation, modularity-host-TEST and get-modular use pnpm 11.20.0; `agent-teams-ai/.github` uses pnpm 11.18.0. Read each repository's `AGENTS.md`, checks and required contexts before the first change there.
-- **agent-runtime checks, in this order, on the final head:**
-  1. `pnpm check:changed` while working;
-  2. `pnpm check:fast` before review (it also runs `pnpm docs:qualification`);
-  3. `pnpm product:build && pnpm lint:typed` (`lint:typed` runs only in the full gate; wave 1 missed it);
-  4. full `pnpm check` before marking the pull request ready;
-  5. after push: CI `product` shards and `runtime-macos` evidence.
-- **Known local failure:** `test:sdk-growth:source` fails on macOS because it needs Linux `/proc/self/fd`; CI on Linux is the authority. Say so in the pull request body.
-- **PostgreSQL:** the required `postgres-durability` job is the authority. Local runs only against disposable clusters, through the variables the tests already use (`ORDINARY_TEST_POSTGRES_URL`, `ORDINARY_PA_TEST_POSTGRES_URL`, `PA_POSTGRES_DISPOSABLE_URL`, `RS_POSTGRES_DISPOSABLE_URL`, `AE_ACL_POSTGRES_DISPOSABLE_URL`, `POSTGRES_DURABILITY_URL`).
-- **Required checks on agent-runtime main:** `commit-author-identity`, `check` (aggregate of the required lanes), `docs-protocol / docs-protocol-check`, `postgres-durability`, `runtime-macos` (an evidence aggregator over eight `macos-product` runners). Branches must be up to date. `codex-review` is not required and can fail on an infrastructure error; ignore it.
+Switch consumers with the new owner ports, storage, tests and registry diff in
+one coherent checkpoint. Delete only replaced active ordinary files after all
+references are accounted for; never delete frozen siblings, shared materialization
+or historical evidence. The new Host does not migrate on construction.
 
-## 7. Gotchas
+Rollback closes admission, drains/reconciles existing work, retains incomplete
+cleanup and verifies which prior code/data combination is safe. Do not downgrade
+into a schema/record version that the old release cannot read, or call process
+absence proven because the observer timed out. Publication rollback follows
+actual immutable package/distribution behavior, never tag manipulation as data
+recovery.
 
-1. **CI contracts (plan section 2.3 item 1).** `scripts/ci/conformance.ts` compares root `package.json` metadata, the leaf command inventory and the source policy with the baseline `df9260b0`, asserts `.node-version` at `26.11.1`, pins platform digests in `scripts/ci/platform-contract.json`, authenticates the `73c771f2` PostgreSQL obligations through the exact Node bootstrap reversal and hard-codes the `foundation` and `docs` pull request obligations; `scripts/docs/consumer-migration.test.mjs:136-210` authenticates the source policy through a chain of reversal steps; the product fanout accepts exactly six packages with exact `test` scripts (`scripts/ci/package-execution.ts`, `scripts/ci/product-fanout-contract.ts`, `scripts/ci/product-workflow-contract.ts`, matrices in `ci-product.yml` and `ci-darwin-packages.yml`). A new package, a new source-policy root or entrypoint, a changed package `test` script, a root dependency or a new `check` command fails required checks until CI-CONTRACT-1 lands.
-2. **Source policy edits:** after any change to `architecture/foundation/source-dependencies.yaml`, add a reversal step for exactly the added lines at the top of the chain in `scripts/docs/consumer-migration.test.mjs:136-150` (pattern: the `comparatorAdmission` and `namespaceAdditions` steps), unless CI-CONTRACT-1 replaced the chain. Recheck after every rebase.
-3. **Registries a new or moved source file touches:** the source policy (roots are directories, entrypoints are per file), `architecture/get-modular/consumer-profile.json` census edges (the check prints actual against expected; there is no write mode), `architecture/feature-module-standard/ordinary-scope.json`. A new package also needs `packageRoots`, a boundary, `architecture/foundation/quality-source-coverage.yaml` `compilerProjects`, the Feature Module Standard profile and the product fanout entries. Editing `architecture/feature-module-standard/candidate-profile.json` changes `fms.sha256` in `consumer-profile.json`.
-4. **Workflow pins:** job definitions of `postgres-durability`, `runtime-macos` and `macos-product` and the bytes of `ci-darwin-packages.yml` are digest-pinned in `scripts/ci/platform-contract.json`; `postgres-durability` is also frozen to its `73c771f2` value by `scripts/ci/conformance.ts:305-306`; `scripts/ci/nightly-contract.ts:34-37` requires reused jobs to match the current `platform-contract.json`.
-5. **Engineering Foundation bump pins** (GOV-1 later): `scripts/foundation/check-quality-adoption.mjs:22`, `architecture/sdk-growth/activation.json` `installedTooling` checked against the lock in `scripts/architecture/check-sdk-growth-profile.mjs:158-170`, the 1.6.0 pin at `:155`, the Docs managed target files, the consumer migration test and `scripts/ci/conformance.ts:289`. `399ffc22` is the reference: 31 files.
-6. **SDK-growth:** `SDK_PUBLIC_IMPORT_QUALIFICATION_DRIFT` (`check-sdk-growth-profile.mjs:46`) rejects a new subpath of the six existing packages. New separate packages are not blocked by SDK-growth.
-7. **Decision records:** create them with `pnpm docs:new`, then register each in the `Accepted` section of `docs/decisions/README.md` and in `architecture/decisions/accepted-decisions.json` with its immutable digest. Index files are not byte-frozen; `scripts/docs/verify-frozen-document-bytes.mjs:18-21` freezes ADR 0001-0005 and two spike patterns only.
-8. **Merge order:** pull requests that touch shared registries merge one by one. Before each merge: rebase on the new main, recheck reversal steps and pins, rerun the full `check`, and ask for a new review if the diff changed beyond the rebase and pins.
-9. **Consumer Module Standard pin** is get-modular `81063add` (#201); upstream moved to the 0.4.0 revision (#164). The pin moves in agent-runtime's get-modular 0.4.0 adoption (to the CMS-REF merge commit if CMS-REF merged first) or in CMS-PIN-2; do not migrate it in any other card (plan contradiction 16). Until it moves, a card that changes module boundaries, capability contracts, composition or lifecycle ownership reviews the `81063add`..#164 delta for its scope and records it as outstanding work (workspace Consumer Module Standard maintenance rule).
-10. **Merge guard behavior:** right after `gh pr ready`, the first call of the merge guard may be refused transiently; wait about 45 seconds and retry once.
-11. **Review threads:** every review thread, including automated review comments, must be resolved before merge; the ruleset refuses the merge otherwise.
-12. **Local `pnpm check` gap:** a changed package `test` script or a new package passes local `pnpm check` and fails only in CI `product` and `runtime-macos`.
+## 7. Handoff and remaining execution-time decisions
 
-## 8. Pull request rules
+A card handoff states its concrete result, exact source/artifact identities,
+checks actually run, unresolved debts and next dependent action. Separate code
+ready, tests passed, package published, installed, active and live-qualified.
+No percentage is inferred from LOC, file count, a plan or an unobserved CI run.
 
-- One card per pull request, at most about 2000 changed lines (moves counted separately). Open it as a **draft**. For the cards in section 3 this brief authorizes: pushing the card branch, opening the draft pull request, editing its title and body, and marking it ready with `gh pr ready` after a clean review. Nothing else on GitHub: no comments on issues or other pull requests, no merge, no labels, no settings.
-- **Identity:** author and committer come from the repository's git config (local first, then global). Never pass `-c user.*`, never take an email from anywhere else. The merge guard refuses commits whose author or committer is not the owner.
-- **Commits:** conventional commits (`docs(decisions): ...`, `feat(surface): ...`, `fix(provider-access): ...`); reference an issue only when one exists (for example `Refs #189`); otherwise name the plan card in the body.
-- **Owner identity only:** commits and pull requests carry only the owner's identity: no `Co-Authored-By` or generated-by lines in commit messages, pull request titles or bodies, code comments, docs or branch names.
-- **Language and style on GitHub:** English, plain and friendly; no em-dashes, no fancy quotes; regular hyphens and quotes. Markdown lists and code blocks are fine. Write Agent Execution, Provider Access, Runtime Security, Engineering Foundation, Feature Module Standard, Consumer Module Standard and Engineering Quality Standard in full.
-- **Body:** what changed and why (link the plan card and the decisions), what stays enforcing (for any gate change), verification (commands and results, known local failures), risks, budget used.
-- **Merge:** only on an explicit owner command, through the owner merge guard in a checkout of `agent-teams-ai/.github`:
-
-  ```sh
-  node scripts/merge-owner-pr.mjs --repository agent-teams-ai/<repository> --pr <N> \
-    --expected-head <full head SHA> --subject '<conventional commit subject>' --body-file <file>
-  ```
-
-  The body file is the squash message body without the auto-generated review-bot block. Never merge any other way.
-
-## 9. Card instructions
-
-Each card's specification is in the plan; the notes below add execution details, done criteria and card-specific review items.
-
-### DOCS-1 parts (a) and (b), agent-runtime
-
-- Branch `docs/ordinary-decision-records`. Two records through `pnpm docs:new`:
-  - (a) Feature Module Standard owned deviation (decision 20) for `@agent-teams/ordinary-operations` and `@agent-teams/runtime-store-postgres`: scope, rationale (decision 12 and the Engineering Quality Standard library-first section from `.github` #328), owner, review trigger "agent-runtime adopts Feature Module Standard v2". Do not add the profile record: the governed-record schema needs exact checker diagnostics (`scripts/architecture/feature-module-profile.mjs:178-182`) that appear only with STORE-0 and ENGINE-1.
-  - (b) Successor to ADR-0090 line 91 (decision 37): the launch recipe type lives in Agent Execution application (`OrdinaryLaunchRecipe` in `application/ordinary-ports.ts`, delivered by #193) and the recipe stays next to the config verification in Agent Execution.
-- Register both (gotcha 7). ADR-0024 already exists (#222): use the next free numbers.
-- Done: records accepted and registered; `pnpm check:fast` and full `pnpm check` green; required checks green.
-- Review items: no accepted ADR byte changed; the deviation names one owner, one contract and a review trigger.
-- Budget 80-180 lines.
-
-### DOCS-1 part (c), agent-runtime
-
-- Branch `docs/provider-access-token-source`. One successor record to ADR-0090 section "Provider Access and Runtime Security" (lines 104-120: "explicitly selected read-only source" :106, "matching identity/token observations" :112, "preserves source read-only authority" :113, "No refresh creates a second attempt" :117-118) stating decisions 36, 46 and 47: Provider Access reads `tokens.access_token` from the custodied `auth.json` with the strict parser; the admitted helper sequence becomes `initialize`, `config/read`, `account/read`, `account/rateLimits/read`, `model/list`; the helper's Codex may write exactly the data of the custodied `auth.json` when it refreshes on its own, through Codex's own guarded-reload protocol, and nothing else in the source directory; Provider Access never writes the file and never sends a refresh request; the drift check compares account and file identity; deadline and abort close stdin first and wait a bounded grace; the accepted residual risks (the shared-login race of two Codex CLIs, and a refresh cut short if the grace runs out).
-- Register it (gotcha 7). Merge before ACCESS-AUTH-FILE and ACCESS-REFRESH.
-- Budget 40-120 lines.
-
-### ACCESS-AUTH-FILE and ACCESS-REFRESH, agent-runtime (after DOCS-1 part c)
-
-- Branch `fix/provider-access-auth-file`. Files: `packages/contexts/provider-access/src/features/contained-turn-access/adapters/outbound/ordinary-codex-auth-*.ts` and `packages/contexts/provider-access/tests/features/contained-turn-access/ordinary-codex-auth.test.ts` with its fake helper, which is extended to rewrite the source `auth.json` in place through the home symlink under the real sandbox profile. Keep the reader inside existing files (a new file needs a source-policy entrypoint until CI-CONTRACT-1).
-- Implement exactly plan section 5.3: the parser rules, the bounded byte scanner, the identity-based drift check, the `file-write-data` sandbox rule, the custody identity change for the auth file at every call site, no refresh request from Provider Access, the stdin-first shutdown with a bounded grace, and the `refresh_not_applied` outcome. Cite the upstream source lines you re-verified (section 1) in the pull request.
-- Local proof on darwin-arm64 with the pinned binary, a test-only profile that denies outbound network except a loopback fake token authority (`CODEX_REFRESH_TOKEN_URL_OVERRIDE` in tests only, no real credentials); attach its log to the pull request. A CI job with the real binary waits for CI-CONTRACT-1.
-- Stop and ask if: the parser would need to accept a shape beyond ChatGPT `tokens` mode and the parity form without `auth_mode`; the bounded scanner does not fit the budget; the `file-write-data` rule does not behave as the plan states; upstream changed the refresh window, the startup refresh, the guarded reload or `save`; the local proof cannot run without real credentials; review asks for the real-binary job in CI before CI-CONTRACT-1.
-- Done: every acceptance case of both cards passes; the method sequence has no `getAuthStatus`; full `check` green.
-- Review items: no `JSON.parse`, `toString`, `TextDecoder` or template string over the `refresh_token`, `id_token` or `OPENAI_API_KEY` ranges; the access token is decoded only where the existing code already does, plus the bounded read of the payload `exp` before spawning (ACCESS-REFRESH step 3); `OPENAI_API_KEY` value never read; refusal codes unchanged except the new `refresh_not_applied`; Provider Access never writes `auth.json`, never sends a refresh request and never calls a token endpoint; the helper can write only the data of `auth.json` in the source directory; deadline and abort close stdin before signalling; an account change between the reads refuses.
-- Budget 500-1100 lines for both.
-
-### EF-SURFACE, Engineering Foundation
-
-- Read Engineering Foundation `AGENTS.md` and `docs/architecture/executable-capabilities.md` first. This is a new Foundation-owned capability decided by the owner (decisions 24, 38), not an extraction: write it fresh, cite the decisions, copy no agent-runtime code. If the review applies the two-consumer extraction admission rule, stop and ask.
-- Shape (decision 45, decided by the coordinator under the owner's delegation; the owner can override): one package-level `tier` under a configurable key (agent-runtime preset: `agentTeamsArchitecture.tier`); a budget is the maximum number of export names per entrypoint for that tier, set in the consumer preset; the publication marker is the npm signal (`private` absent plus `publishConfig.access`).
-- Spec: plan section 5.2 EF-SURFACE (configurable tier key, names and kinds only, no build, `surface:update` and `surface:check`, boundary with `public-api-compatibility` documented).
-- Validation before release: modularity-host-TEST and a draft agent-runtime branch through Engineering Foundation local mode. The agent-runtime branch is not merged; GOV-1 adopts the release later.
-- Done: rejecting tests of the card pass; minor changeset; both validations reported in the pull request.
-- Budget 700-1300 lines.
-
-### STANDARD-1c and STANDARD-1d, Engineering Foundation
-
-- Same admission note as EF-SURFACE.
-- 1c: publication marker per decision 45; isolated single-root install check per plan section 5.2; validated like EF-SURFACE. Budget 300-600.
-- 1d: change `public-api-compatibility` (`application/rules.ts:47`) so an approved break of a 0.x package can be backed by a changeset with "Breaking" and "Migration" paragraphs that bumps minor; packages at 1.0 or later are out of scope and keep today's rule; the changeset directory is configurable (default `.changeset/`). Do not add a parallel check. Budget 250-500.
-- Review items: no product policy in the capability; configuration schema documented; rejecting tests for a 0.x break without a changeset, with a patch-level changeset, and for a 1.x break without an ADR.
-
-### EF-README, Engineering Foundation
-
-- Reword the README introduction from "for Agent Teams repositories" to neutral configurable mechanisms adopted through a small data preset, with Agent Teams conventions in the Engineering Quality Standard (decision 19). Text only. Budget 20-80.
-
-### CMS-REF, get-modular
-
-- Read get-modular `AGENTS.md` and the Consumer Module Standard maintenance rule. Amend `docs/architecture/common-assembly.md` through the get-modular successor process: "Feature Module Standard v1 or the successor pinned by the consumer profile" instead of "v1 ... remains the sole authority" (`:45-46`), and the sentence that a generated inventory with a committed, reviewed diff is review, not automatic legacy inventory expansion, without weakening `:634-635`. Update current guidance, examples and rejecting tests in the same pull request.
-- Do not touch the train, capability ids or consumer pins.
-- Timing: the get-modular standard already moved to the 0.4.0 revision (#164); amend the current text. Ask the owner to merge it before agent-runtime starts adopting get-modular 0.4.0 (so that adoption pins the amended revision once), and never while a get-modular release pull request is open.
-- Budget 20-80 lines.
-
-### STANDARD-1a, `agent-teams-ai/.github`
-
-- Add library conventions to `docs/engineering-quality-standard.md`: error `code` plus static `is()`; `signal` as the last parameter; discriminated outcomes; `close()` returning facts; zero or peer dependencies; no global singletons. Link the existing 0.x rule (`:90-96`) instead of repeating it. Text only. Budget 80-200.
-
-### FEATURE-STANDARD-2, `agent-teams-ai/.github`
-
-- `docs/architecture/feature-module-standard/v2.md` as a complete document with the six required markers (`tools/feature-module-standard/check.mjs:60, 79-88`), derived from v1 (blob `d0bfff2033faf544fe65268c1dcdfd524d093015`, SHA-256 `851653f96643cf0466b67ab22963661976b00de44840fa3144a48a8c054f95fa`) plus the `LIBRARY_FIRST` evidence row (accepted repository decision naming one owner and one contract; a real consumer and a disposable test project in the same delivery), the extended extraction formula (`EXTRACT = READY AND (BOUNDARY OR REUSE OR PUBLIC_PROVIDER_SURFACE OR DEPENDENCY_LIFECYCLE)`, v1 line 462, gains `OR LIBRARY_FIRST`) and the adjusted "hypothetical future consumer" sentence (a hypothetical consumer alone is still not evidence); registry entry.
-- Open the draft now; ask the owner to merge it only after CMS-REF merges (merging publishes an immutable version).
-- Budget 100-180 lines beyond the copied v1 text.
-
-### PUBLISH-NATIVE, agent-runtime (low priority)
-
-- A short design note on how `filesystem-custody` ships `native/rename-no-replace.c` (built by `scripts/build-native-helper.mjs` with a closed recipe for linux-x64 and darwin-arm64): prebuilt optional per-platform packages or a JavaScript fallback, and the CI build that produces them. Decision proposal only, no build change. Budget 150-300.
-
-### CI-CONTRACT-1 (the CI line, decision 49)
-
-- Spec: plan section 5.2, full scope. Start after #230 and #232 merge; agree the window with the owner; rebase daily.
-- Done: every rejecting test of the card passes; a simulated new package and a simulated source-policy root pass; required checks and CI `product` evidence green.
-
-### ISSUE-189-SYNC
-
-- Done on 2026-10-11 (decision 48). No further action.
-
-## 10. When to stop and ask the owner
-
-- A precondition of section 1 differs from this brief or the plan.
-- A card needs a design choice the card and the plan do not settle.
-- A check fails for a reason outside the card, or passing it would need disabling a gate the card does not name.
-- The change would touch any item in section 4.
-- The pull request would exceed about 2000 changed lines.
-- A secret path behaves differently from the facts in the plan.
-- Any data or schema change, any publication, any live provider run.
-- The owner merge guard refuses for a reason other than the transient refusal right after `gh pr ready`.
-
-## 11. Reporting
-
-After each pull request: link, exact head SHA, required check results, reviewer verdict and resolved findings, budget used, follow-ups for the plan. Keep the running log outside the repository.
+No new owner answer is needed for this plan. Existing requirements remain when
+those actions are actually reached: provider-required npm authentication,
+permission for the first real Codex bump TEST run, and a separately supported
+migration if real nonempty legacy data requires one. They do not block preparing
+code, offline comparison, review or the other slices. The owner approved the
+process-runtime repository / node-or-bun extension on October 19 (decision 58).
+The newer native-team handoff supersedes that runtime dependency: do not assign
+PROCESS-DUPLEX here or cancel the other repository's independent work. Agree
+NATIVE-CONTRACT/NATIVE-AUTH with the native owners and consume their actual
+client/artifacts. No repeat Rust/repository-choice approval is required; exact
+interface and Linux helper/profile evidence are delivery dependencies.

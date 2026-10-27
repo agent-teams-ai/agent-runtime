@@ -21,6 +21,9 @@ independent competing source of truth.
 
 Documents:
 
+- [Agent Runtime Greenfield Foundation Plan](agent-runtime-greenfield-foundation-plan.md)
+- [Agent Runtime Modular Research](agent-runtime-modular-research.md)
+- [Agent Runtime Foundation Decisions and Review](agent-runtime-foundation-decisions-and-review.md)
 - [Get Modular adoption](get-modular-adoption.md): planned passive setup scope,
   ADR-0015 authority, unresolved artifact/pin gates, and L0 transition contract.
 
@@ -55,7 +58,9 @@ Documents:
   Custody stays an optional profile defaulted off, with the Darwin isolate /
   privileged-helper work deferred outside current PR #69 merge.
 - [Rust custody migration follow-up](rust-custody-migration-follow-up.md):
-  deferred discussion, research boundary and migration TODO outside PR #69.
+  historical deferred research and the October 20 native-team handoff; follow
+  the current [runtime/native coordination boundary](agent-runtime-architecture-program-plan.md#native-team-coordination-contract-native-integration)
+  for new implementation, without reopening frozen PR #69 custody.
 - [Provider setup delivery roadmap](provider-setup-delivery-roadmap.md): legacy
   capability disposition and delivery order for Codex, Claude Code, and
   OpenCode setup.
@@ -68,6 +73,9 @@ Documents:
 - [Agent Runtime Architecture Program: Execution Brief](agent-runtime-architecture-program-execution-brief.md):
   preconditions, card instructions, review checklists and stop conditions for
   implementing the remaining cards of the architecture program.
+- [S1 Libraries](agent-runtime-architecture-program-s1-libraries.md): reusable JSONL/Codex mechanisms and the adapter to the native-owned keeper client.
+- [S2 Operations and Storage](agent-runtime-architecture-program-s2-operations-storage.md): state, persistence and the single cutover.
+- [S3-S5 Features and Host](agent-runtime-architecture-program-s3-s5-features-host.md): capability features, release selection and public operations.
 - [Legacy feature inventory](legacy-feature-inventory.json): commit-pinned,
   structured legacy/current/authority/implementation/qualification/backlog
   traceability. Its validator permits additions and uses explicit
