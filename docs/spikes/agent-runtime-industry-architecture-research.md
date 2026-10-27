@@ -12,6 +12,8 @@ summary: Primary-source industry lessons and historical failure cases informing 
 
 Дата источников и проверки статусов: **26 октября 2026 года**. Приложение к исследованию архитектурного фундамента `agent-teams-ai/agent-runtime`; связан с [целевым планом](../architecture/agent-runtime-greenfield-foundation-plan.md) и [решениями/review](../architecture/agent-runtime-foundation-decisions-and-review.md). Исследованный runtime baseline — `518f1449acf6dda793662783ec9d918d4007c563`; это не аудит уже реализованного нового runtime. Сравниваются **52 разных проекта, протокола и инфраструктурных компонента**, сгруппированных по назначению. Подпроекты одного продукта не раздувают счётчик: Ray Core/Serve, Cloudflare Agents/Durable Objects и Dagger/container-use учтены каждый одной строкой.
 
+Дополнение от **27.10.2026** хранится отдельно: [frameworks](agent-runtime-framework-research.md), [libraries](agent-runtime-library-research.md), [durability](agent-runtime-durability-research.md), [общий реестр уроков](agent-runtime-antipattern-register.md) и [синтез](../architecture/agent-runtime-modular-research.md). В частности, новый source snapshot учитывает уже существующий whole-harness API AI SDK и текущий статус AutoGen. Каталог ниже остаётся исследованием на указанную выше дату; его ширина не означает глубину полного аудита всех 52 проектов.
+
 ## Method
 
 ### Как читать доказательства

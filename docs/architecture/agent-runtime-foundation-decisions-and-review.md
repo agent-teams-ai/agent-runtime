@@ -14,6 +14,8 @@ summary: Selected technical defaults, evaluated product alternatives, review dis
 
 Исследованный baseline: `518f1449acf6dda793662783ec9d918d4007c563`, 26.10.2026, draft PR #235. Новый scope — целевая greenfield-система, а не только исправление текущего bounded ordinary-среза. Существующие нормативные owners и immutable decisions продолжают действовать.
 
+Дополнение от **27.10.2026**: [модульные библиотеки и D1–D4](agent-runtime-modular-research.md), [полный новый cross-review](../spikes/agent-runtime-modular-research-review.md). Все 21 вариант Q1–Q7 ниже включены в этот пересмотр вместе с 12 новыми альтернативами. Исходные scores/LOC и продуктовый authority сохраняются; validation предыдущей доставки ниже остаётся исторической записью своей ревизии.
+
 ## Ownership boundary
 
 Технические defaults ниже предлагаются владельцам соответствующих capability; продуктовые обещания выбирает владелец продукта. Native implementation/release/qualification принадлежат существующей native lane. Runtime не присваивает себе её keeper/init/client/journal и не добавляет второго custody owner. Отдельная reusable library Operations остаётся в semantic ownership Agent Execution.

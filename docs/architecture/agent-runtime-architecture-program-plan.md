@@ -22,6 +22,17 @@ then the one slice brief assigned to the executor:
 - [S2: operations and storage](agent-runtime-architecture-program-s2-operations-storage.md).
 - [S3-S5: features and Host](agent-runtime-architecture-program-s3-s5-features-host.md).
 
+## Modular research follow-through, 2026-10-27
+
+The [modular research synthesis](agent-runtime-modular-research.md) adds pinned
+framework/library/durability evidence, 24 reusable failure lessons, ten positive
+patterns and reviewed top-three alternatives. Its
+[review record](../spikes/agent-runtime-modular-research-review.md) retains both
+independent critique rounds; its
+[bounded spikes](../spikes/agent-runtime-modular-architecture-spikes.md) remain
+planned. This does not reopen accepted owners, pins, native custody or S1–S5;
+source observations do not establish runtime qualification.
+
 ## Greenfield follow-through, 2026-10-26
 
 The [greenfield foundation plan](agent-runtime-greenfield-foundation-plan.md)
@@ -193,8 +204,11 @@ frozen code or of all test/tooling files.
 The mandatory behaviors carried into each affected slice are:
 
 - Durable matching claim before workload start; an unknown claim never starts a
-  workload or gets an automatic readback/retry. Unknown acceptance is evidence,
-  not dispatch ownership or retry permission.
+  workload or permits an automatic mutation retry. Only the bounded, owner-specific
+  identity, settlement or terminal observations in the
+  [S2 uncertainty table](agent-runtime-architecture-program-s2-operations-storage.md#transaction-outcomes-and-readback-ownership)
+  are permitted; no readback grants dispatch ownership or retry permission.
+  Unknown acceptance remains evidence, not launch authority.
 - Exactly one `turn/start`; a possible write never becomes an automatic retry.
   Cancellation, expiry, output-drain and cleanup evidence remain distinct facts.
 - The operation row's columns match its payload and digest (G1). Transactions
