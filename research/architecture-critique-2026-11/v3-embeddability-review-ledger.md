@@ -34,8 +34,9 @@ summary: Review handoff, vision, source-of-truth crosswalk, findings and qualifi
 | Provider SPI уже принят ADR-0091 | Отдельный DriverFactory/Session contract, scoped interactive authority; PR #239/#242 — отдельная текущая работа, не считать merged; не создавать второй SPI/adapter framework |
 | Provider protocol, SDK, model, harness и execution environment — разные оси | Разделить parse/protocol/turn, provider capabilities, release/profile, runtime permissions; cross-harness continuation не обещать автоматически |
 | Output ≠ operation ≠ live summary ≠ memory/checkpoint | Durable cursor/replay с gap, ephemeral coalesced watch, authorized artifact references, provider checkpoint как opaque compatibility state; память продукта у consumer |
-| Fully local сегодня и возможный multi-tenant hosted/fleet | Локальный клиент не требует облака; безопасность localhost не подразумевается; v3 ordinary S2 выбирает Postgres, более широкий accepted foundation сохраняет отдельный SQLite/local direction, не обещать auto-interchangeability |
+| Fully local сегодня и возможный multi-tenant hosted/fleet | Локальный клиент не требует облака; localhost не означает authorization; V3 ordinary S2 выбирает PostgreSQL, но ранее принятый foundation упоминает SQLite для local. Позднее обсуждалась стратегия PostgreSQL также для desktop (bundled). **Это неполностью согласованная policy/ADR-граница:** не менять схемы/accepted bytes без отдельного scoped owner decision и qualification |
 | Критика по сути, не ради объёма | Несколько проходов, exact SHA, доказанный counterexample, альтернативы и cost; исправлять только обоснованные findings, тесты по риску, E2E на disposable средах, без новой инфраструктуры ради hypotheticals |
+| Toolchain, release discipline | TypeScript-first, обычные .ts files и квалификация TS >=7.0.2 по действующему owner pin; Rust допускается для доказанной native/OS ответственности; feature flags не вводятся без явного требования |
 
 **Do not add now:** universal AgentManager / RuntimeKernel / PluginHost, global event bus, shared-domain identity, generic CRUD repository, второй scheduler, новый RPC между обычными TS modules, speculative hot swap, универсальная Wasm ABI, новая production database/provider ради двух implementations. Future research on native in-process/Wasm must not claim TypeScript transpiles directly to portable Wasm.
 
@@ -99,8 +100,10 @@ summary: Review handoff, vision, source-of-truth crosswalk, findings and qualifi
 | E-10 | Можно получить новый generic Host/Plugin/Storage framework вместо закрытия одной real seam | **Rejected:** существующие owner ports, static Assembly and S1–S5 достаточны |
 | E-11 | Взятые из прошлых research critiques советы могут дублировать уже выбранные v3 packages | **Rejected duplicate delivery:** сохранять как ссылку/acceptance на owning card, не отдельную roadmap |
 | E-12 | ADR-0091 sessions и frozen ordinary/contained нельзя слить ради DRY | **Preserved:** отдельный owner feature/format, shared mechanisms только при доказанном совпадении семантики |
+| E-13 | Accepted foundation указывает SQLite local, V3/S2 выбирает PostgreSQL ordinary, позднее обсуждался PostgreSQL для desktop | **Open, owner successor required:** различить реально принятый local deployment/storage profile и новое предпочтение; не объявлять готовую совместимость, migration или смену принятого решения из research |
+| E-14 | В ревью-контексте не была явно указана связка TS 7.0.2/.ts-only и запрет случайных feature flags | **Accepted/fixed:** добавлено в vision; следовать фактическому pinned toolchain/adoption и scope, никаких побочных upgrades |
 
-**После изменений:** E-01–E-05 исправлены на уровне документа; E-06–E-12 имеют явные ограничения/владельцев. **Это self-review disposition, не independent-critic closure и не E2E.**
+**После изменений:** E-01–E-05, E-14 исправлены на уровне документа; E-06–E-12 имеют явные ограничения/владельцев, E-13 оставлен явным вопросом для владельца без изменения accepted ADR. **Это self-review disposition, не independent-critic closure и не E2E.**
 
 ## 7. Следующие реальные блокирующие действия
 
