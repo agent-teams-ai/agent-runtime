@@ -156,7 +156,7 @@ semantic feature owner, not become shared platform business policy. Reconcile
 the exact source and publication ownership or record a scoped accepted deviation
 before the first effectful cutover. This is a consistency review of the chosen
 S2 bundle, not authorization to add three new storage engines/packages.
-See [review E-19](../../../../research/architecture-critique-2026-11/v3-embeddability-review-ledger.md#10-e-19-fms-ownership-vs-s2-postgresql-packaging).
+See [review E-19](../../research/architecture-critique-2026-11/v3-embeddability-review-ledger.md#10-e-19-fms-ownership-vs-s2-postgresql-packaging).
 
 The private conformance package is test support, including its reusable fakes and oracle parts.
 Its tests mirror feature paths; it is never a public package or production dependency.
