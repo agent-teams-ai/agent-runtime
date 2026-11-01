@@ -102,8 +102,9 @@ summary: Review handoff, vision, source-of-truth crosswalk, findings and qualifi
 | E-12 | ADR-0091 sessions и frozen ordinary/contained нельзя слить ради DRY | **Preserved:** отдельный owner feature/format, shared mechanisms только при доказанном совпадении семантики |
 | E-13 | Accepted foundation указывает SQLite local, V3/S2 выбирает PostgreSQL ordinary, позднее обсуждался PostgreSQL для desktop | **Open, owner successor required:** различить реально принятый local deployment/storage profile и новое предпочтение; не объявлять готовую совместимость, migration или смену принятого решения из research |
 | E-14 | В ревью-контексте не была явно указана связка TS 7.0.2/.ts-only и запрет случайных feature flags | **Accepted/fixed:** добавлено в vision; следовать фактическому pinned toolchain/adoption и scope, никаких побочных upgrades |
+| E-15 | Library-first можно ошибочно прочесть как право выделить пакет с одним потребителем без readiness/экстракционного основания | **Accepted/fixed:** отделить стратегию early library design от FMS extraction gate; целевой FMS v1.1 требует READY и конкретный hard boundary/reuse/public provider/dependency lifecycle; применить принятую версию или scoped successor |
 
-**После изменений:** E-01–E-05, E-14 исправлены на уровне документа; E-06–E-12 имеют явные ограничения/владельцев, E-13 оставлен явным вопросом для владельца без изменения accepted ADR. **Это self-review disposition, не independent-critic closure и не E2E.**
+**После изменений:** E-01–E-05, E-14–E-15 исправлены на уровне документа; E-06–E-12 имеют явные ограничения/владельцев, E-13 оставлен явным вопросом для владельца без изменения accepted ADR. **Это self-review disposition, не independent-critic closure и не E2E.**
 
 ## 7. Следующие реальные блокирующие действия
 

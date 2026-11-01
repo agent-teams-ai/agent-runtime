@@ -206,7 +206,9 @@ Provider implementer не получает доступ к Runtime stores, priva
 - отдельная security/authority/failure responsibility требует явного owner;
 - конкретный следующий v3 card без неё неизбежно создаст промежуточный refactor.
 
-Иначе оставить точную локальную функцию/тип и задокументированный future seam. Публиковать новый package только при определённом public export, реальном consumer и packed conformance; **feature ≠ package ≠ module ≠ bounded context**. Никаких generic `RuntimeKernel`, `PluginManager`, `StorageManager`, `EventBus`, `AnyProvider`, `IRepository<T>`, multi-version adapters или глобального DI bag. Не копировать политики в protocol libs ради повторного использования.
+Иначе оставить точную локальную функцию/тип и задокументированный future seam. Публиковать новый package только при определённом public export, реальном consumer и packed conformance; **feature ≠ package ≠ module ≠ bounded context**.
+
+**FMS extraction check:** сам факт ожидаемого повторного использования не разрешает выделение любого нового package. Целевой FMS v1.1 требует READY (accepted owner, curated surface, contract tests, migration) **и** доказанное независимое reuse, hard boundary (включая отдельный public API/release), public provider surface или dependency lifecycle. Одна внутренняя реализация и желание иметь много пакетов недостаточны. Текущий Runtime пока применяет свой принятый FMS v1 profile; переход на v1.1 и возможная policy library-first проходят предусмотренный N2/FMS-LIBRARY-FIRST successor, а не эта исследовательская запись. Никаких generic `RuntimeKernel`, `PluginManager`, `StorageManager`, `EventBus`, `AnyProvider`, `IRepository<T>`, multi-version adapters или глобального DI bag. Не копировать политики в protocol libs ради повторного использования.
 
 ## 12. Review: независимые направления критики и исправления
 
