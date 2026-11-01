@@ -12,7 +12,7 @@ summary: Selected technical defaults, evaluated product alternatives, review dis
 
 Зафиксировать выбранное техническое направление, реальные продуктовые развилки, цену альтернатив и результаты пересмотра [greenfield foundation plan](agent-runtime-greenfield-foundation-plan.md). [Исследовательское приложение](../spikes/agent-runtime-industry-architecture-research.md) хранит первичные источники, причины чужих ошибок и ограничения выводов. Этот документ не принимает ADR, не квалифицирует runtime и не заменяет implementation inventory.
 
-Исследованный baseline: `518f1449acf6dda793662783ec9d918d4007c563`, 26.10.2026, draft PR #235. Новый scope — целевая greenfield-система, а не только исправление текущего bounded ordinary-среза. Существующие нормативные owners и immutable decisions продолжают действовать.
+Исследованный baseline: `518f1449acf6dda793662783ec9d918d4007c563`, 26.10.2026; исходный draft [PR #235](https://github.com/agent-teams-ai/agent-runtime/pull/235) закрыт без merge, а проверенный комплект документации смержен в `main` через [PR #243](https://github.com/agent-teams-ai/agent-runtime/pull/243) 27.10.2026. Новый scope — целевая greenfield-система, а не только исправление текущего bounded ordinary-среза. Существующие нормативные owners и immutable decisions продолжают действовать.
 
 Дополнение от **27.10.2026**: [модульные библиотеки и D1–D4](agent-runtime-modular-research.md), [полный новый cross-review](../spikes/agent-runtime-modular-research-review.md). Все 21 вариант Q1–Q7 ниже включены в этот пересмотр вместе с 12 новыми альтернативами. Исходные scores/LOC и продуктовый authority сохраняются; validation предыдущей доставки ниже остаётся исторической записью своей ревизии.
 
