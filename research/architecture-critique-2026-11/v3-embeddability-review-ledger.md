@@ -79,10 +79,10 @@ summary: Review handoff, vision, source-of-truth crosswalk, findings and qualifi
 ## 5. Независимая критика — фактический статус
 
 - Предыдущие six xhigh reviews и delta reviews относились к исходным документам #235/#243, **не к November addendum**. Их результаты сохранены в foundation review; они не переносимы как автоматический approve.
-- Для PR [#244](https://github.com/agent-teams-ai/agent-runtime/pull/244) автоматический review provider сообщил **incomplete, 0/3 files reviewed**; это не независимое содержательное заключение. Review service exhausted retries. Нет доказанных reviewer findings и нет права считать 0 замечаний полным прохождением.
+- Для PR [#244](https://github.com/agent-teams-ai/agent-runtime/pull/244) актуальный reviewer — **review-router-ai[bot]**. Workflow `reviewrouter-codex.yml` — старый автоматический маршрут *того же ReviewRouter* через Codex OAuth; его бот сообщил incomplete 0/3, затем 0/4 files reviewed. Повторный run [#41333747773 attempt 2](https://github.com/agent-teams-ai/agent-runtime/actions/runs/41333747773) завершился на `codex_oauth_control_plane_error:503:codex_rotating_oauth_unavailable`, **не по содержанию PR**. Новый `reviewrouter-review.yml` принимает `workflow_dispatch` с настоящим `review_request_id`, PR и exact SHA от ReviewRouter; придумывать ID или считать старую попытку новым review нельзя.
 - В этой сессии отдельные subagent/model reviews не доступны. Выполнены **внутренние**, а не независимые, проходы по пяти направлениям из §4. Нельзя писать «эксперты подтвердили» или «максимальный effort выполнен» без фактического model/run evidence.
-- Current-head required CI до этой редакции: product/docs/architecture checks mostly success, **commit-author-identity failure**, independent codex review failure. Изменение этого файла требует **нового exact-head** evidence.
-- GitHub connector формирует авторство **Илия <iliyazelenkog@gmail.com>**, требуемый identity gate — **777genius <iliyazelenkog@gmail.com>**. Нельзя обходить guard, менять policy или объявлять PR merge-ready. Для корректного commit требуется разрешённый Git route с явным author/committer; этот connector не поддерживает override.
+- Для HEAD `58d4baa1bdc903393e5c242f5494c4f64d5d5fb8` CI [#41333747127](https://github.com/agent-teams-ai/agent-runtime/actions/runs/41333747127) прошёл **success на attempt 2**: первоначальный macOS failure был вызван Corepack timeout при загрузке pnpm из npm. Docs/Node compatibility были green; owner identity и отдельный ReviewRouter OAuth workflow остались failed. Эта правка создаёт новый HEAD: прежние CI не подменяют проверок новых bytes.
+- GitHub connector пишет raw author/committer **Илия <iliyazelenkog@gmail.com>**, но актуальная [политика](https://github.com/agent-teams-ai/.github/blob/main/governance/commit-author-identity.json) требует exact **iliya <iliyazelenkog@gmail.com>** для Git author и committer; **777genius — GitHub login**, не требуемое raw Git-имя. `name_aliases: ["Илия"]` не удовлетворяет pinned exact-name guard для owner source commits. Нельзя обходить gate; необходим аутентифицированный Git write route с явным author и committer. GitHub connector не даёт author override.
 
 ## 6. Self-review: замечания, решение, статус
 
@@ -103,8 +103,11 @@ summary: Review handoff, vision, source-of-truth crosswalk, findings and qualifi
 | E-13 | Accepted foundation указывает SQLite local, V3/S2 выбирает PostgreSQL ordinary, позднее обсуждался PostgreSQL для desktop | **Open, owner successor required:** различить реально принятый local deployment/storage profile и новое предпочтение; не объявлять готовую совместимость, migration или смену принятого решения из research |
 | E-14 | В ревью-контексте не была явно указана связка TS 7.0.2/.ts-only и запрет случайных feature flags | **Accepted/fixed:** добавлено в vision; следовать фактическому pinned toolchain/adoption и scope, никаких побочных upgrades |
 | E-15 | Library-first можно ошибочно прочесть как право выделить пакет с одним потребителем без readiness/экстракционного основания | **Accepted/fixed:** отделить стратегию early library design от FMS extraction gate; целевой FMS v1.1 требует READY и конкретный hard boundary/reuse/public provider/dependency lifecycle; применить принятую версию или scoped successor |
+| E-16 | GitHub login `777genius` неверно приняли за canonical raw author name | **Fixed in handoff:** exact author/committer `iliya <iliyazelenkog@gmail.com>`; исправление самих Git commits всё ещё blocked |
+| E-17 | Красный macOS CI выглядел дефектом Runtime | **Verified external outage:** Corepack npm connect timeout; workflow #41333747127 attempt 2 прошёл без изменения кода |
+| E-18 | Старый автоматический Codex OAuth route приняли за отдельный устаревший reviewer | **Fixed in handoff:** актуальный `review-router-ai[bot]`; новый workflow_dispatch требует действительный upstream request ID; независимое ревью не завершено |
 
-**После изменений:** E-01–E-05, E-14–E-15 исправлены на уровне документа; E-06–E-12 имеют явные ограничения/владельцев, E-13 оставлен явным вопросом для владельца без изменения accepted ADR. **Это self-review disposition, не independent-critic closure и не E2E.**
+**После изменений:** E-01–E-05, E-14–E-18 уточнены/классифицированы на уровне документа; E-06–E-12 имеют явные ограничения/владельцев, E-13 оставлен явным вопросом для владельца без изменения accepted ADR. **Это self-review disposition, не independent-critic closure и не E2E.**
 
 ## 7. Следующие реальные блокирующие действия
 
@@ -115,3 +118,20 @@ summary: Review handoff, vision, source-of-truth crosswalk, findings and qualifi
 5. Не менять accepted ADR bytes, не мержить PR #239/#242 вместе с этой документационной задачей и не активировать providers/native/fleet только потому, что research записан.
 
 **Результат этой исследовательской доставки:** подробное видение и crosswalk не теряются; implementation S1–S5 и отдельные будущие capabilities остаются у существующих owners и проходят собственную квалификацию.
+## 8. Уточнение E-13: local storage — research, не новый выбор
+
+[Accepted Architecture Foundation](../../docs/architecture/architecture-foundation.md#persistence) до сих пор выбирает **SQLite local/desktop и PostgreSQL hosted**. [Greenfield Foundation](../../docs/architecture/agent-runtime-greenfield-foundation-plan.md) сохраняет эту развилку; scoped ordinary S2 при этом реализует **PostgreSQL**. Позже обсуждался bundled PostgreSQL на desktop. Из одной документации нельзя объявить bundled-PG уже принятым или автоматически заменить accepted local policy. Нужен scoped owner successor с миграцией/rollback и реальным профилем.
+
+| Альтернатива | Выигрыш | Что реально проверить |
+| --- | --- | --- |
+| Реальный bundled PostgreSQL server | Совпадающая с S2 модель PostgreSQL driver/transactions/locks и несколько клиентских подключений | OS/CPU binaries и signing, startup/shutdown, process/data-dir ownership, isolated local socket/auth, backups, upgrade/recovery, конкурирующие Host, отказ/восстановление после crash |
+| SQLite local adapter | Минимальный embedded footprint | Отдельные semantics for locking/DDL/CAS, migrations и real store-conformance; нельзя считать реализацию S2 PostgreSQL автоматически переносимой |
+| Electric-SQL PGlite WASM | PostgreSQL-based SQL в JS процессе без daemon | [Official README](https://github.com/electric-sql/pglite/blob/main/README.md#limitations) прямо указывает single-user/connection; [socket multiplexer](https://pglite.dev/docs/pglite-socket) не гарантирует все сценарии multi-connection. Не считать drop-in для S2 `PoolClient`, advisory locks и конкурентных Host без специального conformance |
+
+**Исследовательская рекомендация:** при отдельном согласованном выборе «PostgreSQL везде» первым проверять настоящий bundled PostgreSQL ради parity с S2/hosted. Не переключаться на PGlite только из-за похожего SQL. До owner decision/qualification ни local backend, ни data migration в PR #244 не добавлять.
+
+**Минимальный будущий E2E:** два реальных Host с конфликтующими CAS/claim и migration locks; commit-unknown, crash/restart БД, backup/restore и сохранение cleanup debt; реальный пакет desktop cold install/first start/restart и проверка, что чужие пути/процессы не удаляются. Unsupported profile честно отказывает.
+
+## 9. Итоговые границы текущего review
+
+Только документация и архитектурное исследование. Изменения provider/native/SQL/SDK/Wasm не активируются. Независимый review через новый request-driven workflow не подтверждён; старый OAuth rerun не считается заключением. Авторство исправляется **Git commit graph** с canonical `iliya` и required checks, а не смягчением политики. Scope S1–S5 не расширен.
