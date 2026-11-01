@@ -106,6 +106,7 @@ summary: Review handoff, vision, source-of-truth crosswalk, findings and qualifi
 | E-16 | GitHub login `777genius` неверно приняли за canonical raw author name | **Fixed in handoff:** exact author/committer `iliya <iliyazelenkog@gmail.com>`; исправление самих Git commits всё ещё blocked |
 | E-17 | Красный macOS CI выглядел дефектом Runtime | **Verified external outage:** Corepack npm connect timeout; workflow #41333747127 attempt 2 прошёл без изменения кода |
 | E-18 | Старый автоматический Codex OAuth route приняли за отдельный устаревший reviewer | **Fixed in handoff:** актуальный `review-router-ai[bot]`; новый workflow_dispatch требует действительный upstream request ID; независимое ревью не завершено |
+| E-19 | FMS v1 требует, чтобы feature-specific repositories/schemas/migrations принадлежали owning feature; S2 размещает AE/RS/PA SQL и миграции в отдельном `runtime-store-postgres` package | **Material, open for owner/architectural review:** сохранить выбранную S2 поставку только если явно доказано feature ownership через owned schema contributions/adapter mapping; иначе scoped FMS deviation/successor с rationale и tested boundaries. Не переносить бизнес-решения в store и не дробить пакеты без доказанной пользы |
 
 **После изменений:** E-01–E-05, E-14–E-18 уточнены/классифицированы на уровне документа; E-06–E-12 имеют явные ограничения/владельцев, E-13 оставлен явным вопросом для владельца без изменения accepted ADR. **Это self-review disposition, не independent-critic closure и не E2E.**
 
@@ -135,3 +136,18 @@ summary: Review handoff, vision, source-of-truth crosswalk, findings and qualifi
 ## 9. Итоговые границы текущего review
 
 Только документация и архитектурное исследование. Изменения provider/native/SQL/SDK/Wasm не активируются. Независимый review через новый request-driven workflow не подтверждён; старый OAuth rerun не считается заключением. Авторство исправляется **Git commit graph** с canonical `iliya` и required checks, а не смягчением политики. Scope S1–S5 не расширен.
+## 10. E-19: FMS ownership vs S2 PostgreSQL packaging
+
+**Источник обязательства:** принятый [FMS v1, Adapters](https://github.com/agent-teams-ai/.github/blob/main/docs/architecture/feature-module-standard/v1.md#adapters) прямо требует, чтобы feature-specific mappings, repositories, schemas, tables, indexes и migrations **оставались у owning feature**. Migration assembly может только упорядочивать owner-owned contributions, не менять содержимое. [FMS v1.1](https://github.com/agent-teams-ai/.github/blob/main/docs/architecture/feature-module-standard/v1.1.md#adapters) сохраняет эту норму. При этом scoped [S2](../../docs/architecture/agent-runtime-architecture-program-s2-operations-storage.md#package-graph-and-public-surfaces) предполагает один platform package `runtime-store-postgres` с `adapters/outbound/{operations,security,provider-access}` и `migrations/{execution,security,provider-access}`.
+
+**Почему это важно:** физически общий pg/Drizzle runtime и migration runner переиспользовать разумно, но если SQL schema, authoritative mapping и изменения форматов трех contexts принадлежат общей storage feature, owner boundaries становятся номинальными. Любое изменение Provider Access может потребовать выпуска единого store-бандла или стать недекларированным изменением чужого domain.
+
+**Допустимые варианты для source-backed review до S2-C/D cutover:**
+
+1. **Owned schema contributions:** semantic owners AE/RS/PA публикуют точные схемы/миграционные contributions из своих разрешённых adapter/composition surfaces; `runtime-store-postgres` оставляет общий pg transaction/migration mechanism и проверенную distribution bundle. Проверить отсутствие dependency cycles и нежелательной Drizzle runtime dependency в легковесных owner packages.
+2. **Explicit scoped deviation:** один SQL bundle остаётся в S2, но FMS/local adoption явно перечисляет принадлежащие каждому context таблицы/миграции, кто approves changes, API compatibility и почему exceptions нужны. Это требует принятого решения — не маскировать различие ссылками на global storage ownership.
+3. **Separate owner PG adapter packages:** сильнейшая физическая изоляция, но больше release/migration/packing costs; выбирать при реальном независимом lifecycle/public reuse, не ради package-count.
+
+**Предварительная рекомендация:** предпочесть №1, если он реализуем с выбранной dependency closure без новых циклов и без второго миграционного runner. №2 — только при явном одобрении архитектурной девиации. №3 — после подтверждённого independent consumer/release need. Во всех случаях сохранить S2 atomic claim/CAS/unknown commit и Provider Access existing shared `pa-m1` migration ownership. Этот research PR **не выбирает новый layout** и не меняет принятый S2 package graph.
+
+**Проверки для выбранного решения:** owner-specific migration source mapping, packed tarball with immutable migrations, a cross-context import violation fixture, migration hash/lock/concurrency cases, change of PA schema without modifying AE-owned content, no raw pool leaking into Host. До принятия successor пометить E-19 как unresolved material finding.
