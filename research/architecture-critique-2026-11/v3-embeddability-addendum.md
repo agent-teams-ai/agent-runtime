@@ -14,6 +14,8 @@ reviewed_main: agent-teams-ai/agent-runtime@4bdc93a43b58469f60ca10c0dca512824650
 
 **Исследовательское дополнение от 1 ноября 2026 к уже смерженному v3/greenfield foundation, а не новый ADR, новый план или разрешение расширить S1–S5.** Исходный PR [#235](https://github.com/agent-teams-ai/agent-runtime/pull/235) закрыт как superseded; его актуализированная версия уже смержена через [#243](https://github.com/agent-teams-ai/agent-runtime/pull/243). Данное исследование сохраняет конкретные SPI/packaging/embedding риски и acceptance scenarios, сверенные с `main` `4bdc93a43`. Большая часть стратегических решений уже есть в [greenfield foundation](../../docs/architecture/agent-runtime-greenfield-foundation-plan.md) и [modular research](../../docs/architecture/agent-runtime-modular-research.md); этот текст не дублирует их authority. Исторический baseline `518f1449a` относится к первоначальной записи; перед code cutover проверять актуальные source/pins.
 
+**Reviewer handoff, coverage и учёт замечаний:** [V3 Embeddability Review Ledger](v3-embeddability-review-ledger.md). Он фиксирует полное видение, существующие решения, дельту, self-review и статус независимых критиков. Статус предложений не меняет принятые ADR, FMS/CMS pins или S1–S5.
+
 ## 0. Что такое v2 и v3
 
 - **v2:** move-first — реорганизация существующего ordinary-кода, затем переписывание. Больше промежуточных миграций и дублирования.
@@ -24,7 +26,7 @@ reviewed_main: agent-teams-ai/agent-runtime@4bdc93a43b58469f60ca10c0dca512824650
 
 ## 1. Неизменяемые архитектурные ограничения
 
-1. **FMS v1.1 и текущие принятые ADR:** production module — жёсткая ownership/dependency-граница, feature/subfeature — cohesive capability с `contracts/domain/application/adapters/composition` только там, где слой содержателен. Тесты зеркалят вложенные feature paths. Извлечение feature в пакет не меняет её semantic owner. Внешние потребители видят curated exports; внутри feature нельзя deep-import другие features.
+1. **FMS v1 (текущий принятый scoped profile); FMS v1.1 — целевой, ещё не автоматически принятый N2 successor:** production module — жёсткая ownership/dependency-граница, feature/subfeature — cohesive capability с `contracts/domain/application/adapters/composition` только там, где слой содержателен. Тесты зеркалят вложенные feature paths. Извлечение feature в пакет не меняет её semantic owner. Внешние потребители видят curated exports; внутри feature нельзя deep-import другие features.
 2. **Четыре bounded contexts:** Agent Execution — операции/сессии/authority/recovery; Provider Access — подключения, credential custody, grant/route/broker; Runtime Security — авторизация и ограничения; Runtime Configuration — неизменяемая конфигурация и provenance. Orchestrator владеет задачами, командной работой, business priority, delivery и workflow. Ни одна общая техническая библиотека не получает эти полномочия.
 3. **Get Modular:** один static Core/Assembly composition root на выбранный Host-профиль, объявленные capabilities и точные revisions, typed required/optional/many bindings; per-run scopes и resources; Observation только для latest-state. Никакого дополнительного DI контейнера, глобального resolver/service locator, ambient registry или параллельного production root.
 4. **Clean Architecture/DIP:** domain/application imports — только свои внутренние роли и consumer-owned ports. Данные SDK, Protobuf/Connect, ORM, Node/native, provider DTO и Get Modular descriptors остаются во внешних слоях. Cross-context relationship — опубликованный контракт + ACL через допустимые адаптеры, а не импорт репозитория другого context.
@@ -92,7 +94,9 @@ reviewed_main: agent-teams-ai/agent-runtime@4bdc93a43b58469f60ca10c0dca512824650
 - Application/domain используют свои `application/ports`; внешние SDK/adapter DTO отображаются в них на разрешённом adapter/composition слое. Не импортировать `contracts/` из application ради DRY.
 - Нет requirement иметь network boundary между обычными внутренними TS-модулями. Embedded — прямые вызовы; отдельный transport — только на реальном process boundary.
 
-### Нормативный SDK-result contract (проектировать сейчас; wire — позже)
+### Предлагаемая семантика SDK-result (зафиксировать при соответствующем owner successor; wire — позже)
+
+Текущий публичный SDK/transport **не принят**: [ADR-0008](https://github.com/agent-teams-ai/agent-runtime/blob/main/docs/decisions/0008-private-embedded-runtime-access-entrypoint.md) сохраняет private embedded entrypoint и требует отдельного решения после реального внешнего потребителя. Ниже — критерии для этого решения, а не уже выпущенный SDK/Connect API.
 
 - **Command identity:** scoped command ID + canonical semantic fingerprint; тот же ID/смысл возвращает прежний признанный факт, изменённый смысл — conflict.
 - **Accepted != executed:** подтверждение API, подтверждение provider и физическая работа — разные факты. `potential_acceptance` сохраняет неизвестность и reconciliation; timeout/connection lost никогда не запускает новый effect автоматически.
@@ -106,7 +110,7 @@ reviewed_main: agent-teams-ai/agent-runtime@4bdc93a43b58469f60ca10c0dca512824650
 
 ## 5. Provider SPI: поддерживать реализации, а не всё подряд
 
-**Первый официальный внешний SPI — provider session/driver**, поскольку это уже реальная extension seam, а не придуманный будущий plugin host. Пользовательские provider adapters подключаются через проверенный static composition. Не вводить discovery, dynamic registry или hot replacement ради SPI.
+**Provider session/driver SPI уже выбран принятым ADR-0091**, где предусмотрены отдельная implementer-библиотека и typed subpath Agent Execution; новый SPI не изобретать. [PR #239](https://github.com/agent-teams-ai/agent-runtime/pull/239) интегрирует workspace provider library, [PR #242](https://github.com/agent-teams-ai/agent-runtime/pull/242) сохраняет историческую extraction-ветку; оба являются самостоятельной текущей работой, а не завершённой квалификацией. Дальнейшие сторонние provider adapters подключаются через проверенный static composition. Не вводить discovery, dynamic registry или hot replacement ради SPI.
 
 Контракт `DriverFactory/Session` уже имеет `submit`, `observe`, `interrupt`, interaction reply, checkpoint, readiness, close. Его нужно версионировать и протестировать именно по наблюдаемым гарантиям:
 
@@ -119,7 +123,7 @@ reviewed_main: agent-teams-ai/agent-runtime@4bdc93a43b58469f60ca10c0dca512824650
 | `respondToInteraction` | current generation, stale/duplicate/revoked refusal, no grant escalation |
 | `close` | logical close, cleanup confirmed/unknown, retained recovery reference при необходимости |
 
-**ABI риск:** текущий `OrdinaryTransport` опирается на module-private `WeakMap`. Это корректно как локальная internal bridge между двумя outer bindings **в одной копии модуля**, но недопустимо экспортировать его как взаимозаменяемую cross-package extension API. При извлечении — либо объединить владельца bridge в одном package/Host, либо передавать явный owned channel только среди доверенных адаптеров, с проверкой resource custody. Не использовать глобальный `Symbol.for`, общий singleton registry или обходной `any`, чтобы искусственно сделать две копии совместимыми. Не переименовывать internal sealed handles в Published Language.
+**Потенциальный ABI риск при извлечении, НЕ текущий подтверждённый дефект:** текущий `OrdinaryTransport` опирается на module-private `WeakMap`. Это корректно как локальная internal bridge между двумя outer bindings **в одной копии модуля**, но недопустимо экспортировать его как взаимозаменяемую cross-package extension API. При извлечении — либо объединить владельца bridge в одном package/Host, либо передавать явный owned channel только среди доверенных адаптеров, с проверкой resource custody. Не использовать глобальный `Symbol.for`, общий singleton registry или обходной `any`, чтобы искусственно сделать две копии совместимыми. Не переименовывать internal sealed handles в Published Language.
 
 Provider implementer не получает доступ к Runtime stores, private grants, native journal, runtime-host control, чужим tenants и raw credential sources. Когда адаптеру нужен vendor SDK, его зависимости принадлежат этому adapter package. Вынесение external/untrusted executable plugin — **другое** security/host/lifetime решение, не автоматическое расширение этого SPI.
 
@@ -191,7 +195,7 @@ Provider implementer не получает доступ к Runtime stores, priva
 | `PUBLISH-ROUTE` | per-package dependency closure and optional native/provider deps; external installer contract, no `workspace:*` tarball leaks |
 | `ACTIVE-SUPPORT`, `PUBLISH-NATIVE` | preserve scoped setup/custody contracts and exact native artifact resolution, no speculative general toolkit |
 
-**Follow-up outside current v3 implementation:** first external provider adapter implemented/installed by third party; public SPI package extraction only when required by that consumer; Connect/Protobuf + one other-language SDK after real consumer; C0–C3 capacity; cursor-based external output delivery; untrusted/dynamic plugin lifecycle; Wasm/component experiment. Каждому — собственный consumer, owner, delivered proof и accepted successor при изменении защищённого решения. Не называть их оставшимися невыполненными частями S1–S5.
+**Follow-up outside current v3 implementation:** сторонние provider adapters сверх уже выбранного ADR-0091 implementer path; public SPI package extraction only when required by that consumer; Connect/Protobuf + one other-language SDK after real consumer; C0–C3 capacity; cursor-based external output delivery; untrusted/dynamic plugin lifecycle; Wasm/component experiment. Каждому — собственный consumer, owner, delivered proof и accepted successor при изменении защищённого решения. Не называть их оставшимися невыполненными частями S1–S5.
 
 ## 11. Конкретные критерии отсутствия overengineering
 
@@ -229,7 +233,7 @@ Provider implementer не получает доступ к Runtime stores, priva
 ### Финальный integration review — проверка непротиворечивости
 
 - **Проверено на уровне документа:** каждое требование имеет конкретного semantic owner и карточку v3 либо explicit future trigger; не введены новая authority/DI/kernel/сервис; frozen contained и existing Provider Access materialization сохранены; native/Linux+Docker квалификация не объявлена готовой; не заморожены `.proto`/plugin/Wasm без реализации.
-- **Не выполнено этим документом:** независимый multi-model agent review; запуск CI, root conformance или реальный Docker E2E; изменения исходников/ADR. Эквивалентность существующих production contracts новой реализации подтверждается только при их фактической поставке, а не этим review. Следующий delivery должен проверять exact head, выделенные contract deltas и реальных consumer/adapters.
+- **Не выполнено этим документом:** независимый multi-model agent review; запуск CI, root conformance или реальный Docker E2E; изменения исходников/ADR. Эквивалентность существующих production contracts новой реализации подтверждается только при их фактической поставке, а не этим review. Следующий delivery должен проверять exact head, выделенные contract deltas и реальных consumer/adapters. Новое GitHub review на PR #244 было **incomplete (0/3 reviewed)**, поэтому независимая оценка именно этого addendum остаётся открытой; прежние внешние критики v3/#243 не заменяют review изменённых документов.
 
 ## Источники
 
