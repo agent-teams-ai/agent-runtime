@@ -34,7 +34,7 @@ summary: Review handoff, vision, source-of-truth crosswalk, findings and qualifi
 | Provider SPI уже принят ADR-0091 | Отдельный DriverFactory/Session contract, scoped interactive authority; PR #239/#242 — отдельная текущая работа, не считать merged; не создавать второй SPI/adapter framework |
 | Provider protocol, SDK, model, harness и execution environment — разные оси | Разделить parse/protocol/turn, provider capabilities, release/profile, runtime permissions; cross-harness continuation не обещать автоматически |
 | Output ≠ operation ≠ live summary ≠ memory/checkpoint | Durable cursor/replay с gap, ephemeral coalesced watch, authorized artifact references, provider checkpoint как opaque compatibility state; память продукта у consumer |
-| Fully local сегодня и возможный multi-tenant hosted/fleet | Локальный клиент не требует облака; localhost не означает authorization; V3 ordinary S2 выбирает PostgreSQL, но ранее принятый foundation упоминает SQLite для local. Позднее обсуждалась стратегия PostgreSQL также для desktop (bundled). **Это неполностью согласованная policy/ADR-граница:** не менять схемы/accepted bytes без отдельного scoped owner decision и qualification |
+| Fully local сегодня и возможный multi-tenant hosted/fleet | Локальный клиент не требует облака; localhost не означает authorization. **Выбор нативного PostgreSQL для local и hosted уже принят продуктом** в Orchestrator ADR-0114 (22.10.2026), Fully Local V1 — ADR-0115. Старый accepted foundation в Agent Runtime ещё содержит SQLite для local: это несовпадение документации/локального adoption, не повод вновь выбирать движок. AR нужен scoped successor и verified handoff от Local Supervisor; исходные immutable ADR не править |
 | Критика по сути, не ради объёма | Несколько проходов, exact SHA, доказанный counterexample, альтернативы и cost; исправлять только обоснованные findings, тесты по риску, E2E на disposable средах, без новой инфраструктуры ради hypotheticals |
 | Toolchain, release discipline | TypeScript-first, обычные .ts files и квалификация TS >=7.0.2 по действующему owner pin; Rust допускается для доказанной native/OS ответственности; feature flags не вводятся без явного требования |
 
@@ -100,7 +100,7 @@ summary: Review handoff, vision, source-of-truth crosswalk, findings and qualifi
 | E-10 | Можно получить новый generic Host/Plugin/Storage framework вместо закрытия одной real seam | **Rejected:** существующие owner ports, static Assembly and S1–S5 достаточны |
 | E-11 | Взятые из прошлых research critiques советы могут дублировать уже выбранные v3 packages | **Rejected duplicate delivery:** сохранять как ссылку/acceptance на owning card, не отдельную roadmap |
 | E-12 | ADR-0091 sessions и frozen ordinary/contained нельзя слить ради DRY | **Preserved:** отдельный owner feature/format, shared mechanisms только при доказанном совпадении семантики |
-| E-13 | Accepted foundation указывает SQLite local, V3/S2 выбирает PostgreSQL ordinary, позднее обсуждался PostgreSQL для desktop | **Open, owner successor required:** различить реально принятый local deployment/storage profile и новое предпочтение; не объявлять готовую совместимость, migration или смену принятого решения из research |
+| E-13 | Исследование Agent Runtime ошибочно считало выбор SQLite vs PG открытым, не проверив Orchestrator ADR-0114/0115 (accepted 22.10.2026) | **Product choice already accepted: native PostgreSQL for local and hosted.** Open только scoped AR foundation/adoption reconciliation и Local Supervisor→AR runtime handoff; не менять immutable AR source и не объявлять native package квалифицированным |
 | E-14 | В ревью-контексте не была явно указана связка TS 7.0.2/.ts-only и запрет случайных feature flags | **Accepted/fixed:** добавлено в vision; следовать фактическому pinned toolchain/adoption и scope, никаких побочных upgrades |
 | E-15 | Library-first можно ошибочно прочесть как право выделить пакет с одним потребителем без readiness/экстракционного основания | **Accepted/fixed:** отделить стратегию early library design от FMS extraction gate; целевой FMS v1.1 требует READY и конкретный hard boundary/reuse/public provider/dependency lifecycle; применить принятую версию или scoped successor |
 | E-16 | GitHub login `777genius` неверно приняли за canonical raw author name | **Fixed in handoff:** exact author/committer `iliya <iliyazelenkog@gmail.com>`; исправление самих Git commits всё ещё blocked |
@@ -108,7 +108,7 @@ summary: Review handoff, vision, source-of-truth crosswalk, findings and qualifi
 | E-18 | Старый автоматический Codex OAuth route приняли за отдельный устаревший reviewer | **Fixed in handoff:** актуальный `review-router-ai[bot]`; новый workflow_dispatch требует действительный upstream request ID; независимое ревью не завершено |
 | E-19 | FMS v1 требует, чтобы feature-specific repositories/schemas/migrations принадлежали owning feature; S2 размещает AE/RS/PA SQL и миграции в отдельном `runtime-store-postgres` package | **Material, open for owner/architectural review:** сохранить выбранную S2 поставку только если явно доказано feature ownership через owned schema contributions/adapter mapping; иначе scoped FMS deviation/successor с rationale и tested boundaries. Не переносить бизнес-решения в store и не дробить пакеты без доказанной пользы |
 
-**После изменений:** E-01–E-05, E-14–E-18 уточнены/классифицированы на уровне документа; E-06–E-12 имеют явные ограничения/владельцев, E-13 оставлен явным вопросом для владельца без изменения accepted ADR. **Это self-review disposition, не independent-critic closure и не E2E.**
+**После изменений:** E-01–E-05, E-14–E-18 уточнены/классифицированы на уровне документа; E-06–E-12 имеют явные ограничения/владельцев, E-13 исправлен: движок уже выбран, отдельно открыт лишь Runtime scoped adoption/Host integration без изменения accepted ADR. **Это self-review disposition, не independent-critic closure и не E2E.**
 
 ## 7. Следующие реальные блокирующие действия
 
@@ -119,19 +119,25 @@ summary: Review handoff, vision, source-of-truth crosswalk, findings and qualifi
 5. Не менять accepted ADR bytes, не мержить PR #239/#242 вместе с этой документационной задачей и не активировать providers/native/fleet только потому, что research записан.
 
 **Результат этой исследовательской доставки:** подробное видение и crosswalk не теряются; implementation S1–S5 и отдельные будущие capabilities остаются у существующих owners и проходят собственную квалификацию.
-## 8. Уточнение E-13: local storage — research, не новый выбор
+## 8. E-13: локальная БД УЖЕ выбрана — вопрос теперь о встраивании
 
-[Accepted Architecture Foundation](../../docs/architecture/architecture-foundation.md#persistence) до сих пор выбирает **SQLite local/desktop и PostgreSQL hosted**. [Greenfield Foundation](../../docs/architecture/agent-runtime-greenfield-foundation-plan.md) сохраняет эту развилку; scoped ordinary S2 при этом реализует **PostgreSQL**. Позже обсуждался bundled PostgreSQL на desktop. Из одной документации нельзя объявить bundled-PG уже принятым или автоматически заменить accepted local policy. Нужен scoped owner successor с миграцией/rollback и реальным профилем.
+**Принятая продуктовая authority:** [Orchestrator ADR-0114](https://github.com/agent-teams-ai/agent-teams-orchestrator/blob/main/docs/decisions/0114-canonical-backend-stack-and-distributed-role-adoption.md), accepted **2026-10-22**, выбрал **native PostgreSQL для local и hosted** и `embedded-postgres` за Local Supervisor adapter; [ADR-0115](https://github.com/agent-teams-ai/agent-teams-orchestrator/blob/main/docs/decisions/0115-canonical-fully-local-v1-adoption.md) требует Fully Local в V1. [Orchestrator persistence boundary](https://github.com/agent-teams-ai/agent-teams-orchestrator/blob/main/docs/architecture/persistence-boundary.md) оставляет feature-owned SQL/migrations и один PostgreSQL data root на Local Target. Его процессный lifecycle принадлежит Supervisor, а не AR/десктопу.
 
-| Альтернатива | Выигрыш | Что реально проверить |
-| --- | --- | --- |
-| Реальный bundled PostgreSQL server | Совпадающая с S2 модель PostgreSQL driver/transactions/locks и несколько клиентских подключений | OS/CPU binaries и signing, startup/shutdown, process/data-dir ownership, isolated local socket/auth, backups, upgrade/recovery, конкурирующие Host, отказ/восстановление после crash |
-| SQLite local adapter | Минимальный embedded footprint | Отдельные semantics for locking/DDL/CAS, migrations и real store-conformance; нельзя считать реализацию S2 PostgreSQL автоматически переносимой |
-| Electric-SQL PGlite WASM | PostgreSQL-based SQL в JS процессе без daemon | [Official README](https://github.com/electric-sql/pglite/blob/main/README.md#limitations) прямо указывает single-user/connection; [socket multiplexer](https://pglite.dev/docs/pglite-socket) не гарантирует все сценарии multi-connection. Не считать drop-in для S2 `PoolClient`, advisory locks и конкурентных Host без специального conformance |
+[Более ранний accepted Agent Runtime Foundation](../../docs/architecture/architecture-foundation.md#persistence) всё ещё говорит SQLite local/desktop. Это **локальный adoption/doc conflict**, а не отсутствие решения владельца по движку. Нельзя молча переписать accepted AR документ: требуется scoped successor/согласование между владельцами. [Issue #246](https://github.com/agent-teams-ai/agent-runtime/issues/246) теперь отражает именно это.
 
-**Исследовательская рекомендация:** при отдельном согласованном выборе «PostgreSQL везде» первым проверять настоящий bundled PostgreSQL ради parity с S2/hosted. Не переключаться на PGlite только из-за похожего SQL. До owner decision/qualification ни local backend, ни data migration в PR #244 не добавлять.
+**Три реальные альтернативы для интеграции выбранного PostgreSQL** (incremental P production/integration и T тесты LOC; без внешних native PG binaries, signing и полной Desktop release qualification; 1 опытный инженер):
 
-**Минимальный будущий E2E:** два реальных Host с конфликтующими CAS/claim и migration locks; commit-unknown, crash/restart БД, backup/restore и сохранение cleanup debt; реальный пакет desktop cold install/first start/restart и проверка, что чужие пути/процессы не удаляются. Unsupported profile честно отказывает.
+| Вариант | Интеграция | P / T LOC | Engineer-days | У / Н / С |
+| --- | --- | --- | --- | --- |
+| **A. Verified Local Supervisor→AR handoff** | Supervisor управляет DB и data root; AR role получает проверенный scope-bound endpoint и создаёт свои pg ports; Host не запускает DB/не делает DDL в конструкторе | **250–700 / 500–1 500** | **5–10** | **9 / 9 / 4** |
+| B. Отдельная reusable Local PostgreSQL integration library | Те же owners, отдельно распространяемый адаптер с самостоятельным consumer/release contract | 500–1 200 / 900–2 200 | 8–17 | 7 / 9 / 6 |
+| C. Защищённый локальный DB proxy между AR и PG | Новый отдельный IPC/wire process обеспечивает remote DB access для AR с дополнительными auth/failure границами | 900–2 400 / 1 700–4 000 | 15–30 | 5 / 8 / 8 |
+
+**Предварительно A**, не новое owner decision по базе. B оправдан только самостоятельным реальным потребителем; C — доказанной отдельной trust boundary. LOC/time confidence до exact inventory **4/10**. У/Н выше лучше, С выше хуже; надёжность — только для выбранного declared scope.
+
+**Сохранённые отклонённые варианты:** SQLite потребует отдельный adapter/semantics и противоречит принятой product deployment strategy; PGlite WASM — не drop-in PostgreSQL при concurrent `pg` clients и extension-protocol/lock semantics. [Официальные ограничения pglite-socket](https://pglite.dev/docs/pglite-socket) отмечают single-connection multiplexer и неполное покрытие всех use cases. Они могут остаться сравнительным опытом, но **не являются тремя равнозначными кандидатами локальной БД**.
+
+**Минимальная будущая квалификация:** offline packaged Windows/macOS/Linux (по поддерживаемому profile), cold start/restart signed native PostgreSQL, две AR Host scopes с реальными конфликтующими SQL transactions, migration/unknown COMMIT, доступ к чужому data root запрещён, backup/restore, cleanup debt, protected credentials и отсутствие повторного dispatch после unknown ACK. Native package qualification — отдельный обязательный gate, не результат данного docs-only PR.
 
 ## 9. Итоговые границы текущего review
 

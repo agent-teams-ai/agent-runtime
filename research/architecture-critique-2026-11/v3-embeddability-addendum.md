@@ -145,7 +145,7 @@ Provider implementer не получает доступ к Runtime stores, priva
 - Control-путь cancel/renew/reclaim сохраняет bounded capacity даже при заполненном обычном ingress.
 - Неподтверждённый stop/cleanup не освобождает slot, quota или хранилище. Quarantine/debt сохраняются после Host loss.
 - Размещение (`one process per agent`, `many sessions per process`, local worker, remote worker) — profile/backend choice, а не API identity. Не обещать мультиплексинг без permission/cancellation/output/credential isolation.
-- Postgres vs future local storage и связанная репликация — отдельный deployment/storage ADR; целевая библиотечная независимость не делает transactional guarantees автоматически одинаковыми.
+- Local native PostgreSQL уже принят продуктом в Orchestrator ADR-0114/0115; Agent Runtime старый accepted SQLite/local Foundation требует scoped successor/adoption. Local Supervisor owns bundled PG process, AR owns свою схему/ports/operations; никакой PGlite/SQLite fallback или новая репликация не выбираются этим review.
 
 ## 8. Identity/compatibility, которые нельзя сливать
 
