@@ -8,6 +8,17 @@ summary: Primary-source industry lessons and historical failure cases informing 
 
 # Agent Runtime Industry Architecture Research
 
+<!-- shared-research-route:start -->
+**Shared research route, 2026-11-04:** the [maintained central study](https://github.com/agent-teams-ai/engineering-research/blob/12c40892e805944719d6fbec14d2c26874803b2c/docs/studies/agent-runtime-industry-architecture-research.md)
+is published in [Engineering Research draft PR #1](https://github.com/agent-teams-ai/engineering-research/pull/1). The
+[import provenance manifest](https://github.com/agent-teams-ai/engineering-research/blob/12c40892e805944719d6fbec14d2c26874803b2c/data/import-provenance.json) records the
+original source identity, hash and unchanged snapshot. This local report retains
+its original metadata, dates, body, lesson IDs and heading anchors. Runtime
+applicability, decisions and qualification remain owned here; central publication
+is not a new upstream review or adoption. Use the [shared research index](https://github.com/agent-teams-ai/engineering-research/blob/docs/shared-research-2026-11-04/docs/README.md)
+for maintained discovery; cite the pinned study for this reviewed version.
+<!-- shared-research-route:end -->
+
 ## Observed target
 
 Дата источников и проверки статусов: **26 октября 2026 года**. Приложение к исследованию архитектурного фундамента `agent-teams-ai/agent-runtime`; связан с [целевым планом](../architecture/agent-runtime-greenfield-foundation-plan.md) и [решениями/review](../architecture/agent-runtime-foundation-decisions-and-review.md). Исследованный runtime baseline — `518f1449acf6dda793662783ec9d918d4007c563`; это не аудит уже реализованного нового runtime. Сравниваются **52 разных проекта, протокола и инфраструктурных компонента**, сгруппированных по назначению. Подпроекты одного продукта не раздувают счётчик: Ray Core/Serve, Cloudflare Agents/Durable Objects и Dagger/container-use учтены каждый одной строкой.

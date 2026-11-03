@@ -20,11 +20,14 @@ remain separate. Assume each approved design is implemented correctly when
 comparing its intended guarantees. Completion of ordinary execution does not
 qualify thousands of simultaneously active agents.
 
-The planned shared evidence source is `agent-teams-ai/engineering-research`,
-`docs/competitors/paperclip.md`. Publication is pending. Shared competitor facts,
-comparisons and research methods belong there; this document owns only proposed
-Runtime applicability and routes to existing acceptance owners. It neither
-reports a completed migration nor substitutes for a published source.
+The shared [Paperclip source dossier](https://github.com/agent-teams-ai/engineering-research/blob/12c40892e805944719d6fbec14d2c26874803b2c/docs/competitors/paperclip.md)
+is published in [Engineering Research draft PR #1](https://github.com/agent-teams-ai/engineering-research/pull/1) at commit
+`12c40892e805944719d6fbec14d2c26874803b2c`. Its [evaluation method](https://github.com/agent-teams-ai/engineering-research/blob/12c40892e805944719d6fbec14d2c26874803b2c/docs/methodology/evaluation-methodology.md)
+and [decision cards](https://github.com/agent-teams-ai/engineering-research/blob/12c40892e805944719d6fbec14d2c26874803b2c/docs/lessons/preimplementation-decisions.md)
+retain shared evidence and proposed alternatives. The [shared research index](https://github.com/agent-teams-ai/engineering-research/blob/docs/shared-research-2026-11-04/docs/README.md)
+is the maintained discovery route. This document owns only proposed Runtime
+applicability and routes to existing acceptance owners. Central publication is
+still a draft; it does not accept product policy or qualify a deployment.
 
 The source review inspected Paperclip at
 [`61e8d5c7eb097664958e00c30ccd88bb51359043`](https://github.com/paperclipai/paperclip/tree/61e8d5c7eb097664958e00c30ccd88bb51359043).
@@ -85,8 +88,10 @@ owner contracts remain the relevant reuse mechanisms.
 
 ## Research custody and delivery scope
 
-Keep the five current reusable reports byte-for-byte until the central
-publication and its provenance manifest are verified:
+The five local reports retain their complete historical bodies and heading
+anchors, with notices linking to their published central studies. The
+[central import provenance manifest](https://github.com/agent-teams-ai/engineering-research/blob/12c40892e805944719d6fbec14d2c26874803b2c/data/import-provenance.json)
+records each original source hash and unchanged raw snapshot:
 [industry](agent-runtime-industry-architecture-research.md),
 [frameworks](agent-runtime-framework-research.md),
 [libraries](agent-runtime-library-research.md),
@@ -96,8 +101,10 @@ The [modular synthesis](../architecture/agent-runtime-modular-research.md),
 [experiments](agent-runtime-modular-architecture-spikes.md) and
 [review record](agent-runtime-modular-research-review.md) retain Runtime ownership.
 Historical source pins, review identities and qualified evidence are not rewritten
-as a new campaign. Future migration must preserve old IDs, used anchors and
-immutable provenance links before replacing any maintained local evidence route.
+as a new campaign. These reciprocal routes preserve the original local metadata,
+IDs and every original heading anchor. Future shortening requires a verified
+inbound-reference inventory and retained redirects or anchors; no source body is
+removed by this change.
 
 This delivery adds documentation only: zero production implementation lines.
 Future estimates belong to the reviewed seam inventory. Capacity work is counted
