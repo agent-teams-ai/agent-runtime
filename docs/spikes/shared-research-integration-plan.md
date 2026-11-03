@@ -13,26 +13,102 @@ related:
 
 ## Target tuple
 
-Proposed qualification mapping dated 2026-11-03. Ordinary runtime v3 S1-S5
-remains separate from the [capacity C0-C3 delivery](../architecture/capacity-admission-delivery-plan.md).
-The planned shared source is `agent-teams-ai/engineering-research`,
-`docs/competitors/paperclip.md`; publication is pending.
+Proposed qualification mapping dated 2026-11-03. Ordinary runtime v3
+[S1-S5](../architecture/agent-runtime-architecture-program-plan.md) and the
+[capacity C0-C3 delivery](../architecture/capacity-admission-delivery-plan.md)
+remain separate. Assume each approved design is implemented correctly when
+comparing its intended guarantees. Completion of ordinary execution does not
+qualify thousands of simultaneously active agents.
+
+The planned shared evidence source is `agent-teams-ai/engineering-research`,
+`docs/competitors/paperclip.md`. Publication is pending. Shared competitor facts,
+comparisons and research methods belong there; this document owns only proposed
+Runtime applicability and routes to existing acceptance owners. It neither
+reports a completed migration nor substitutes for a published source.
+
+The source review inspected Paperclip at
+[`61e8d5c7eb097664958e00c30ccd88bb51359043`](https://github.com/paperclipai/paperclip/tree/61e8d5c7eb097664958e00c30ccd88bb51359043).
+No Paperclip tests, live providers or active-worker benchmark were executed in
+this documentation change. The review retains Paperclip's durable identities,
+uncertain-outcome handling, control reserve, cleanup fences and bounded viewer
+delivery as counterevidence against blanket scalability criticism.
 
 ## Required evidence
 
-Extend existing owner-local acceptance with long-history receipt cost,
-single-large-tenant contention, bounded admission, stop under saturation and
-honest physical-cleanup observations. Reuse the current capacity plan and
-native-team boundary; this proposal creates no second scheduler or port.
+Use these rows to refine existing task acceptance. They introduce no parallel
+release gate, new port, scheduler, storage authority or production package.
+If the current owner already covers a row, record that coverage once.
+
+| Priority and question | Existing owner or delivery | Proposed acceptance refinement |
+| --- | --- | --- |
+| Before implementation: what is an active agent? | C0 workload and resource inventory | Record simultaneous executions, active sessions, pending count and bytes, tenants, pools, hosts, provider connections, output rate/size, retention and cleanup debt. Compare one large tenant with the same population spread across tenants. |
+| Before implementation: which mutation is shared? | C0/C1 capacity transactions and current S2 persistence | Inventory every shared counter and lock writer. Measure admission, usage receipt and settlement work separately; do not serialize unrelated per-receipt writes behind a tenant aggregate by accident. Usage pricing and product budget decisions stay with their consumer. |
+| Before implementation: what does the feed acknowledge? | Existing S2 operations/store and feed contract | Preserve its declared sequence/gap semantics. Benchmark append and replay against increasing retained history; measure database work as well as response bytes. Use incremental cursor work only where the selected contract needs it, with gap and conflicting-replay tests. Do not add a gap-tolerant protocol merely because another system has one. |
+| During delivery: does eligible work progress? | C1/C2 bounded admission and persisted fairness | Reuse pending count/byte limits, finite claim batches and the existing grant-opportunity bound. Add blocked-prefix, mixed-vector and constant higher-preference arrivals to the actual allocator tests. Product dependency eligibility remains an authorized consumer input. |
+| During delivery: can several pools preserve one global allowance? | C0 scope definition, C1 atomic admission and C2 allocation | Name the single authority for each global, tenant and provider allowance. Independent pools must not each spend the whole shared allowance. If subdivision is selected, prove grant conservation, expiry, unknown outcomes and safe reclaim. Do not add a global scheduler without this concrete need. |
+| During delivery: can safety work proceed under pressure? | C2 control reserve and native-team integration | Bound count, bytes, database connections and other material resources used by cancellation and renewal. Saturate ordinary traffic, pause storage during stop, lose the receipt and keep a descendant alive. Preserve cutoff and honest pending/unknown state. |
+| Before qualification: is reclaimed capacity safe? | C2/C3 and existing physical-custody owner | Keep capacity charged until physical fencing/containment or an enforcement-backed quarantine permits reuse. A lease expiry, task result, cancellation acknowledgement and physical cleanup are distinct observations. |
+| Before qualification: does the complete profile work? | C3 existing worker/soak qualification | Run the smallest useful fully local, self-hosted and managed profiles with their actual worker/process topology. Exercise overlapping controllers beyond rollout windows, notification loss, reconnect, recovery and bounded cleanup. Publish only the measured envelope. |
+
+The [Stage K evidence](stage-k-capacity-fairness-results.md) is a bounded model
+and PostgreSQL experiment. It is useful evidence for admission/fairness/reclaim;
+it is not an active-worker fleet qualification. Inspect its exact scope before
+adding a redundant model test. Runtime supplies technical receipt and execution
+truth; Orchestrator and Platform own authorized views, business continuation
+and commercial policy.
 
 ## Negative gates
 
-Reject unsupported fleet claims from source inspection, model-only tests,
-module count or ordinary S1-S5 completion. Preserve original research bytes
-and historical evidence until a published central destination is verified.
+The following are rejecting scenarios within existing acceptance, not a new
+set of repository tooling gates:
+
+- An ambiguous grant, commit or provider outcome must not authorize duplicate
+  dispatch or erase the original identity guard.
+- A blocked queue prefix must not indefinitely hide eligible work. State the
+  finite progress assumptions; permanently occupied capacity cannot support an
+  unconditional wall-clock guarantee.
+- A full telemetry or output queue must not consume the declared safety reserve.
+  An exhausted reserve must produce an honest failure/recovery state.
+- Cancel versus grant and lease loss versus reclaim must retain the existing
+  owner-local atomicity and physical-custody obligations.
+- A source-cursor optimization must preserve exact replay, conflict rejection,
+  terminal ordering and durable acknowledgement. A maximum sequence alone is
+  insufficient for a contract that admits gaps.
+- Provider-pool limits and per-worker caps must not silently replace global or
+  tenant accounting. Cross-pool movement must not duplicate admission.
+
+Keep the native-team coordination boundary in the
+[architecture program](../architecture/agent-runtime-architecture-program-plan.md).
+Do not add another supervisor, native journal, custody receipt or TypeScript
+process manager to satisfy these scenarios. Get Modular composition and current
+owner contracts remain the relevant reuse mechanisms.
+
+## Research custody and delivery scope
+
+Keep the five current reusable reports byte-for-byte until the central
+publication and its provenance manifest are verified:
+[industry](agent-runtime-industry-architecture-research.md),
+[frameworks](agent-runtime-framework-research.md),
+[libraries](agent-runtime-library-research.md),
+[durability](agent-runtime-durability-research.md) and
+[lessons](agent-runtime-antipattern-register.md).
+The [modular synthesis](../architecture/agent-runtime-modular-research.md),
+[experiments](agent-runtime-modular-architecture-spikes.md) and
+[review record](agent-runtime-modular-research-review.md) retain Runtime ownership.
+Historical source pins, review identities and qualified evidence are not rewritten
+as a new campaign. Future migration must preserve old IDs, used anchors and
+immutable provenance links before replacing any maintained local evidence route.
+
+This delivery adds documentation only: zero production implementation lines.
+Future estimates belong to the reviewed seam inventory. Capacity work is counted
+inside C0-C3; existing S1-S5/feed/native work is not charged a second time as a
+research integration delta. Count production integration, tests, configuration
+and platform/release work separately before accepting an implementation estimate.
 
 ## Promotion rule
 
-[The architecture program](../architecture/agent-runtime-architecture-program-plan.md)
-and existing accepted decisions own implementation. This proposal alone
-qualifies no profile and accepts no new contract.
+Accepted ADRs, exact adoption profiles and the existing readiness/qualification
+process own promotion. This proposal qualifies no profile and accepts no new
+contract. Central research cannot change those owners by publication. Resolve a
+real semantic conflict through the owning successor process; retain independent
+ordinary-runtime delivery while the separate fleet envelope is qualified.
