@@ -79,7 +79,7 @@ export async function verifyInteractiveSessionStore(pool: InteractivePostgresPoo
     const expected = new Set(["generation>0", "revision>=0"]);
     if (checks.rows.length !== expected.size || checks.rows.some(row =>
       row.validated !== true || typeof row.expression !== "string"
-      || !expected.delete(row.expression.replace(/[\\s()]/gu, ""))) || expected.size !== 0) {
+      || !expected.delete(row.expression.replace(/[\s()]/gu, ""))) || expected.size !== 0) {
       throw new TypeError("interactive_schema_checks_invalid");
     }
   } finally {client.release();}
