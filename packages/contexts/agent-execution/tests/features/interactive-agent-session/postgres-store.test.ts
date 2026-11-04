@@ -129,9 +129,8 @@ test("a throwing release does not remove the guard before client custody is tran
 test("CI disposable PostgreSQL checks actual interactive session constraints", {
   skip: process.env.POSTGRES_DURABILITY_URL === undefined,
 }, async () => {
-  // Only the exact GitHub Actions service and disposable database are eligible.
-  assert.equal(process.env.GITHUB_ACTIONS, "true");
-  assert.equal(process.env.GITHUB_REPOSITORY, "agent-teams-ai/agent-runtime");
+  // The existing isolated PostgreSQL qualification runner passes only an explicit
+  // disposable target URL into its child; never use ambient or a user database.
   const databaseUrl = process.env.POSTGRES_DURABILITY_URL;
   assert.ok(databaseUrl);
   const target = new URL(databaseUrl);

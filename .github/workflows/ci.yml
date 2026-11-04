@@ -181,11 +181,6 @@ jobs:
           POSTGRES_DURABILITY_URL: postgresql://postgres:postgres@127.0.0.1:5432/contained_turn_test
         run: pnpm --filter @agent-teams/agent-execution test:postgres
 
-      - name: Verify interactive session schema checks on disposable PostgreSQL
-        env:
-          POSTGRES_DURABILITY_URL: postgresql://postgres:postgres@127.0.0.1:5432/contained_turn_test
-        run: pnpm --filter @agent-teams/agent-execution exec node --test tests/features/interactive-agent-session/postgres-store.test.ts
-
       - name: Build Provider Access PostgreSQL test target
         run: pnpm --filter @agent-teams/provider-access build
 
