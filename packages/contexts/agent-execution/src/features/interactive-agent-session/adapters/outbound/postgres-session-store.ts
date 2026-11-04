@@ -72,6 +72,16 @@ export async function verifyInteractiveSessionStore(pool: InteractivePostgresPoo
     if (columns.rows.length !== expected.length || columns.rows.some((row, index) => row.name !== expected[index]![0] || row.type !== expected[index]![1] || row.required !== true)) {throw new TypeError("interactive_schema_columns_invalid");}
     const primary = await client.query(query(`SELECT pg_get_constraintdef(oid) AS definition FROM pg_constraint WHERE conrelid=to_regclass('interactive_session_v1') AND contype='p'`));
     if (primary.rows.length !== 1 || primary.rows[0]!.definition !== "PRIMARY KEY (tenant_id, project_id, session_id)") {throw new TypeError("interactive_schema_primary_key_invalid");}
+    // An identically shaped preexisting table may still permit invalid session
+    // generations/revisions. Verification must not silently adopt that schema.
+    const checks = await client.query(query(`SELECT pg_get_expr(conbin, conrelid) AS expression, pg_get_constraintdef(oid) AS definition, convalidated AS validated
+      FROM pg_constraint WHERE conrelid=to_regclass('interactive_session_v1') AND contype='c'`));
+    const expectedChecks = new Set(["generation>0", "revision>=0"]);
+    if (checks.rows.length !== expectedChecks.size || checks.rows.some(row =>
+      row.validated !== true || typeof row.expression !== "string" || typeof row.definition !== "string" || row.definition.includes("NOT ENFORCED")
+      || !expectedChecks.delete(row.expression.replace(/[\s()]/gu, ""))) || expectedChecks.size !== 0) {
+      throw new TypeError("interactive_schema_checks_invalid");
+    }
   } finally {client.release();}
 }
 export class PostgresInteractiveSessionStore implements InteractiveSessionStore {
