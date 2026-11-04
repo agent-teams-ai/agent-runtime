@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
+import {randomUUID} from "node:crypto";
 import test from "node:test";
+import {Pool} from "pg";
 import {migrateInteractiveSessionStore, verifyInteractiveSessionStore, PostgresInteractiveSessionStore, type InteractivePostgresClient} from "../../../dist/features/interactive-agent-session/adapters/outbound/postgres-session-store.js";
 import {fixture, open, ref} from "./support.ts";
 
@@ -122,4 +124,55 @@ test("a throwing release does not remove the guard before client custody is tran
   const client = observable({query: async () => ({rows: [], rowCount: 0}), release: () => {throw new Error("TEST release failed");}}, listeners);
   await assert.rejects(migrateInteractiveSessionStore({connect: async () => client}), /TEST release failed/u);
   assert.equal(listeners.size, 1); assert.doesNotThrow(() => {for (const listener of listeners) {listener(new Error("TEST late failure"));}});
+});
+
+test("CI disposable PostgreSQL checks actual interactive session constraints", {
+  skip: process.env.POSTGRES_DURABILITY_URL === undefined,
+}, async () => {
+  // Only the exact GitHub Actions service and disposable database are eligible.
+  assert.equal(process.env.GITHUB_ACTIONS, "true");
+  assert.equal(process.env.GITHUB_REPOSITORY, "agent-teams-ai/agent-runtime");
+  const databaseUrl = process.env.POSTGRES_DURABILITY_URL;
+  assert.ok(databaseUrl);
+  const target = new URL(databaseUrl);
+  assert.equal(target.protocol, "postgresql:");
+  assert.equal(target.hostname, "127.0.0.1");
+  assert.equal(target.port, "5432");
+  assert.equal(target.pathname, "/contained_turn_test");
+
+  const admin = new Pool({connectionString: databaseUrl});
+  const schema = `test_interactive_schema_${randomUUID().replaceAll("-", "")}`;
+  let created = false;
+  try {
+    const observed = await admin.query("SELECT current_database() AS name");
+    assert.equal(observed.rows[0]?.name, "contained_turn_test");
+    await admin.query(`CREATE SCHEMA ${schema}`);
+    created = true;
+    const pool = new Pool({connectionString: databaseUrl, options: `-c search_path=${schema}`});
+    try {
+      await assert.rejects(verifyInteractiveSessionStore(pool), /interactive_schema_columns_invalid/u);
+      await migrateInteractiveSessionStore(pool);
+      await verifyInteractiveSessionStore(pool);
+      await pool.query("ALTER TABLE interactive_session_v1 DROP CONSTRAINT interactive_session_v1_generation_check");
+      await assert.rejects(verifyInteractiveSessionStore(pool), /interactive_schema_checks_invalid/u);
+      await pool.query("ALTER TABLE interactive_session_v1 ADD CONSTRAINT interactive_session_v1_generation_check CHECK (generation >= 0)");
+      await assert.rejects(verifyInteractiveSessionStore(pool), /interactive_schema_checks_invalid/u);
+      await pool.query("ALTER TABLE interactive_session_v1 DROP CONSTRAINT interactive_session_v1_generation_check");
+      await pool.query("ALTER TABLE interactive_session_v1 ADD CONSTRAINT interactive_session_v1_generation_check CHECK (generation > 0)");
+      await pool.query("ALTER TABLE interactive_session_v1 DROP CONSTRAINT interactive_session_v1_revision_check");
+      await pool.query("ALTER TABLE interactive_session_v1 ADD CONSTRAINT interactive_session_v1_revision_check CHECK (revision >= 0) NOT VALID");
+      await assert.rejects(verifyInteractiveSessionStore(pool), /interactive_schema_checks_invalid/u);
+      await pool.query("ALTER TABLE interactive_session_v1 VALIDATE CONSTRAINT interactive_session_v1_revision_check");
+      await verifyInteractiveSessionStore(pool);
+      await pool.query("ALTER TABLE interactive_session_v1 DROP CONSTRAINT interactive_session_v1_generation_check");
+      await pool.query("ALTER TABLE interactive_session_v1 ADD CONSTRAINT interactive_session_v1_generation_check CHECK (generation > 0) NOT ENFORCED");
+      await assert.rejects(verifyInteractiveSessionStore(pool), /interactive_schema_checks_invalid/u);
+      await pool.query("ALTER TABLE interactive_session_v1 DROP CONSTRAINT interactive_session_v1_generation_check");
+      await pool.query("ALTER TABLE interactive_session_v1 ADD CONSTRAINT interactive_session_v1_generation_check CHECK (generation > 0)");
+      await verifyInteractiveSessionStore(pool);
+    } finally {await pool.end();}
+  } finally {
+    try {if (created) {await admin.query(`DROP SCHEMA ${schema} CASCADE`);}}
+    finally {await admin.end();}
+  }
 });
