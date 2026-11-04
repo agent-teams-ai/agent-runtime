@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {migrateInteractiveSessionStore, PostgresInteractiveSessionStore, type InteractivePostgresClient} from "../../../dist/features/interactive-agent-session/adapters/outbound/postgres-session-store.js";
+import {migrateInteractiveSessionStore, verifyInteractiveSessionStore, PostgresInteractiveSessionStore, type InteractivePostgresClient} from "../../../dist/features/interactive-agent-session/adapters/outbound/postgres-session-store.js";
 import {fixture, open, ref} from "./support.ts";
 
 type ErrorListener = (error: Error) => void;
@@ -21,6 +21,33 @@ test("construction does not migrate; migration is explicit and borrows its pool"
   assert.equal(calls.length, 0);
   await migrateInteractiveSessionStore(pool);
   assert.match(calls[0]!, /CREATE TABLE IF NOT EXISTS interactive_session_v1/u); assert.equal(releases, 1);
+});
+
+test("existing schema missing, weakened or unvalidated CHECK constraints is held before adoption", async () => {
+  const columns = ["tenant_id", "project_id", "session_id", "generation", "revision", "state"]
+    .map((name, index) => ({name, type: index === 3 || index === 4 ? "bigint" : index === 5 ? "jsonb" : "text", required: true}));
+  const healthy = [{expression: "(generation > 0)", validated: true}, {expression: "(revision >= 0)", validated: true}];
+  const cases = [
+    [],
+    [healthy[0]!],
+    [{...healthy[0]!, expression: "(generation >= 0)"}, healthy[1]!],
+    [{...healthy[0]!, validated: false}, healthy[1]!],
+    [healthy[0]!, healthy[0]!],
+    [...healthy, {expression: "(revision < 10)", validated: true}],
+  ];
+  for (const checks of cases) {
+    const calls: string[] = []; let releases = 0;
+    const client = observable({query: async config => {
+      calls.push(config.text);
+      const rows = config.text.includes("FROM pg_attribute") ? columns
+        : config.text.includes("contype='p'") ? [{definition: "PRIMARY KEY (tenant_id, project_id, session_id)"}]
+        : config.text.includes("contype='c'") ? checks : [];
+      return {rows, rowCount: rows.length};
+    }, release: () => {releases++;}});
+    await assert.rejects(verifyInteractiveSessionStore({connect: async () => client}), /interactive_schema_checks_invalid/u);
+    assert.equal(calls.length, 3, "verification is read-only and bounded");
+    assert.equal(releases, 1);
+  }
 });
 
 test("lost COMMIT response returns unknown without readback or retry and discards uncertain connection", async () => {
