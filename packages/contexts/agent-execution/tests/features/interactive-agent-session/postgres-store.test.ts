@@ -26,12 +26,13 @@ test("construction does not migrate; migration is explicit and borrows its pool"
 test("existing schema missing, weakened or unvalidated CHECK constraints is held before adoption", async () => {
   const columns = ["tenant_id", "project_id", "session_id", "generation", "revision", "state"]
     .map((name, index) => ({name, type: index === 3 || index === 4 ? "bigint" : index === 5 ? "jsonb" : "text", required: true}));
-  const healthy = [{expression: "(generation > 0)", validated: true}, {expression: "(revision >= 0)", validated: true}];
+  const healthy = [{expression: "(generation > 0)", definition: "CHECK ((generation > 0))", validated: true}, {expression: "(revision >= 0)", definition: "CHECK ((revision >= 0))", validated: true}];
   const cases = [
     [],
     [healthy[0]!],
     [{...healthy[0]!, expression: "(generation >= 0)"}, healthy[1]!],
     [{...healthy[0]!, validated: false}, healthy[1]!],
+    [{...healthy[0]!, definition: "CHECK ((generation > 0)) NOT ENFORCED"}, healthy[1]!],
     [healthy[0]!, healthy[0]!],
     [...healthy, {expression: "(revision < 10)", validated: true}],
   ];

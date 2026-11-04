@@ -35,6 +35,11 @@ test("owned PostgreSQL restart preserves admission and unknown dispatch; no prov
     await assert.rejects(verifyInteractiveSessionStore(pool), /interactive_schema_checks_invalid/u);
     await pool.query("ALTER TABLE interactive_session_v1 DROP CONSTRAINT interactive_session_v1_generation_check");
     await pool.query("ALTER TABLE interactive_session_v1 ADD CONSTRAINT interactive_session_v1_generation_check CHECK (generation > 0)");
+    await pool.query("ALTER TABLE interactive_session_v1 DROP CONSTRAINT interactive_session_v1_generation_check");
+    await pool.query("ALTER TABLE interactive_session_v1 ADD CONSTRAINT interactive_session_v1_generation_check CHECK (generation > 0) NOT ENFORCED");
+    await assert.rejects(verifyInteractiveSessionStore(pool), /interactive_schema_checks_invalid/u);
+    await pool.query("ALTER TABLE interactive_session_v1 DROP CONSTRAINT interactive_session_v1_generation_check");
+    await pool.query("ALTER TABLE interactive_session_v1 ADD CONSTRAINT interactive_session_v1_generation_check CHECK (generation > 0)");
     await pool.query("ALTER TABLE interactive_session_v1 DROP CONSTRAINT interactive_session_v1_revision_check");
     await pool.query("ALTER TABLE interactive_session_v1 ADD CONSTRAINT interactive_session_v1_revision_check CHECK (revision >= 0) NOT VALID");
     await assert.rejects(verifyInteractiveSessionStore(pool), /interactive_schema_checks_invalid/u);

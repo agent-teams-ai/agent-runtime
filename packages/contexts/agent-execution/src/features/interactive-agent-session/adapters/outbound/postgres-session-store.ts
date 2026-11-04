@@ -74,11 +74,11 @@ export async function verifyInteractiveSessionStore(pool: InteractivePostgresPoo
     if (primary.rows.length !== 1 || primary.rows[0]!.definition !== "PRIMARY KEY (tenant_id, project_id, session_id)") {throw new TypeError("interactive_schema_primary_key_invalid");}
     // An identically shaped preexisting table may still permit invalid session
     // generations/revisions. Verification must not silently adopt that schema.
-    const checks = await client.query(query(`SELECT pg_get_expr(conbin, conrelid) AS expression, convalidated AS validated
+    const checks = await client.query(query(`SELECT pg_get_expr(conbin, conrelid) AS expression, pg_get_constraintdef(oid) AS definition, convalidated AS validated
       FROM pg_constraint WHERE conrelid=to_regclass('interactive_session_v1') AND contype='c'`));
     const expected = new Set(["generation>0", "revision>=0"]);
     if (checks.rows.length !== expected.size || checks.rows.some(row =>
-      row.validated !== true || typeof row.expression !== "string"
+      row.validated !== true || typeof row.expression !== "string" || typeof row.definition !== "string" || row.definition.includes("NOT ENFORCED")
       || !expected.delete(row.expression.replace(/[\s()]/gu, ""))) || expected.size !== 0) {
       throw new TypeError("interactive_schema_checks_invalid");
     }
