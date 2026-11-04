@@ -5,84 +5,30 @@ import { resolve } from "node:path";
 import test from "node:test";
 
 const repositoryRoot = resolve(import.meta.dirname, "../../..");
-const runtimeRef = "75cbecab131d74021677fcd1fb21962994d306b8";
-const checkoutRef = "d23441a48e516b6c34aea4fa41551a30e30af803";
-const setupNodeRef = "249970729cb0ef3589644e2896645e5dc5ba9c38";
-const expectedWorkflowSha256 =
-  "336a904791d2e84164b44b2342aa5acc6d63cff36aac71cbce80a8c6fc8b8843";
-const workflow = await readFile(
-  resolve(repositoryRoot, ".github/workflows/reviewrouter-interaction.yml"),
-  "utf8",
-);
+const workflow = await readFile(resolve(repositoryRoot, ".github/workflows/reviewrouter-review.yml"), "utf8");
 
-test("ReviewRouter interaction remains the exact audited canonical workflow", () => {
-  assert.equal(
-    createHash("sha256").update(workflow).digest("hex"),
-    expectedWorkflowSha256,
-  );
-});
-
-test("ReviewRouter interaction remains pinned and least privilege", () => {
-  assert.match(workflow, /pull_request_review_comment:\n    types: \[created, edited\]/);
-  assert.match(workflow, /issue_comment:\n    types: \[created, edited\]/);
-  assert.match(workflow, /  workflow_dispatch:\n/);
+// The caller ABI is stable; server admission independently verifies the exact
+// executable producer. Do not restore retired client-side OAuth maintenance.
+test("ReviewRouter uses the canonical managed caller", () => {
+  assert.equal(createHash("sha256").update(workflow).digest("hex"), "d30c359c172a2d2e6ad8af7b5557894ae8d601f5f4957a87153aa93810966cc4");
+  assert.match(workflow, /uses: 777genius\/review-router\/\.github\/workflows\/reviewrouter-runtime\.yml@workflow-v1/);
   assert.match(workflow, /^permissions: \{\}$/m);
-  assert.ok(
-    workflow.includes(
-      "    if: ${{ github.event_name == 'workflow_dispatch' || ((github.event_name != 'issue_comment' || github.event.issue.pull_request) && github.event.comment.user.type != 'Bot') }}",
-    ),
-  );
-  assert.match(workflow, /^    runs-on: ubuntu-24\.04$/m);
-  assert.match(
-    workflow,
-    new RegExp(`^      RR_RUNTIME_REF: "${runtimeRef}"$`, "m"),
-  );
-  assert.match(workflow, /^      REVIEWROUTER_API_URL: "https:\/\/api\.reviewrouter\.site"$/m);
-  assert.match(workflow, /^      REVIEWROUTER_OIDC_AUDIENCE: "reviewrouter"$/m);
-  assert.match(workflow, /^      REVIEWROUTER_RUNTIME_CONFIG_MODE: "oidc"$/m);
-  assert.match(workflow, /^      REVIEWROUTER_COMMENT_TOKEN_MODE: "app-oidc"$/m);
-  assert.match(
-    workflow,
-    /^      CODEX_AUTH_JSON_PRESENT: \$\{\{ secrets\.REVIEWROUTER_CODEX_AUTH_JSON != '' && '1' \|\| '0' \}\}$/m,
-  );
-  assert.match(
-    workflow,
-    new RegExp(`^        uses: actions/checkout@${checkoutRef}$`, "m"),
-  );
-  assert.match(workflow, /^          repository: 777genius\/review-router$/m);
-  assert.match(workflow, /^          ref: \$\{\{ env\.RR_RUNTIME_REF \}\}$/m);
-  assert.match(workflow, /^          persist-credentials: false$/m);
-  assert.match(
-    workflow,
-    new RegExp(`^        uses: actions/setup-node@${setupNodeRef}$`, "m"),
-  );
-  assert.match(workflow, /^        run: npm install -g @openai\/codex@0\.144\.0$/m);
-  assert.match(
-    workflow,
-    /^        if: \$\{\{ steps\.preflight\.outputs\.needs_discussion == 'true' && env\.CODEX_AUTH_JSON_PRESENT == '1' \}\}$/m,
-  );
-  assert.match(
-    workflow,
-    /^          CODEX_AUTH_JSON: \$\{\{ secrets\.REVIEWROUTER_CODEX_AUTH_JSON \}\}$/m,
-  );
-  assert.match(workflow, /^          GITHUB_TOKEN: \$\{\{ github\.token \}\}$/m);
-
-  assert.match(
-    workflow,
-    /    permissions:\n      contents: read\n      issues: read\n      pull-requests: read\n      id-token: write/,
-  );
+  assert.match(workflow, /    permissions:\n      contents: read\n      pull-requests: read\n      id-token: write/);
   assert.doesNotMatch(workflow, /(?:actions|contents|issues|pull-requests): write/);
-  assert.doesNotMatch(workflow, /OPENAI_API_KEY|secrets\.CODEX_AUTH_JSON/);
+  assert.doesNotMatch(workflow, /schedule:|CODEX_AUTH_JSON|secrets:|npm install/);
 });
 
-test("ReviewRouter interaction executes only its pinned checked-out runtime", () => {
-  assert.doesNotMatch(
-    workflow,
-    /uses: 777genius\/review-router\/\.github\/workflows\//,
-  );
-  assert.equal(
-    workflow.match(/run: node \.reviewrouter-runtime\/dist\/index\.js/g)?.length,
-    2,
-  );
-  assert.doesNotMatch(workflow, /npm install(?! -g @openai\/codex@0\.144\.0)/);
+test("ReviewRouter dispatch is bound to the server request and reviewed head", () => {
+  for (const name of ["review_request_id", "pr_number", "review_head_sha"]) {
+    assert.ok(workflow.includes(`${name}: { required: true, type: string }`));
+    assert.ok(workflow.includes(`${name}: ${"${{"} inputs.${name} }}`));
+  }
+  assert.ok(workflow.includes("group: reviewrouter-request-${{ github.repository_id }}-${{ inputs.review_request_id }}"));
+  assert.match(workflow, /cancel-in-progress: false/);
+});
+
+test("retired OAuth review and interaction workflows stay absent", async () => {
+  for (const name of ["reviewrouter-codex.yml", "reviewrouter-interaction.yml"]) {
+    await assert.rejects(readFile(resolve(repositoryRoot, ".github/workflows", name)), { code: "ENOENT" });
+  }
 });
