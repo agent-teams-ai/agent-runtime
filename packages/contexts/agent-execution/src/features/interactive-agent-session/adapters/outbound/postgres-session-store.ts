@@ -76,10 +76,10 @@ export async function verifyInteractiveSessionStore(pool: InteractivePostgresPoo
     // generations/revisions. Verification must not silently adopt that schema.
     const checks = await client.query(query(`SELECT pg_get_expr(conbin, conrelid) AS expression, pg_get_constraintdef(oid) AS definition, convalidated AS validated
       FROM pg_constraint WHERE conrelid=to_regclass('interactive_session_v1') AND contype='c'`));
-    const expected = new Set(["generation>0", "revision>=0"]);
-    if (checks.rows.length !== expected.size || checks.rows.some(row =>
+    const expectedChecks = new Set(["generation>0", "revision>=0"]);
+    if (checks.rows.length !== expectedChecks.size || checks.rows.some(row =>
       row.validated !== true || typeof row.expression !== "string" || typeof row.definition !== "string" || row.definition.includes("NOT ENFORCED")
-      || !expected.delete(row.expression.replace(/[\s()]/gu, ""))) || expected.size !== 0) {
+      || !expectedChecks.delete(row.expression.replace(/[\s()]/gu, ""))) || expectedChecks.size !== 0) {
       throw new TypeError("interactive_schema_checks_invalid");
     }
   } finally {client.release();}
