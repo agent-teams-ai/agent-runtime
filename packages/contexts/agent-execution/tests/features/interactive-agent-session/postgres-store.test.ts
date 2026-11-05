@@ -225,6 +225,39 @@ test("CI disposable PostgreSQL checks actual interactive session constraints", {
       await pool.query("ALTER TABLE interactive_session_v1 DROP CONSTRAINT interactive_session_v1_generation_check");
       await pool.query("ALTER TABLE interactive_session_v1 ADD CONSTRAINT interactive_session_v1_generation_check CHECK (generation > 0)");
       await verifyInteractiveSessionStore(pool);
+
+      // Run the ambiguous-ack oracle against the actual disposable PostgreSQL
+      // transaction. The wrapper drops only the response *after* COMMIT has
+      // completed on the server; it never retries or creates another writer.
+      const candidate = await record();
+      let inserts = 0; let commits = 0; let releases = 0;
+      const lostCommitAckPool = {connect: async (): Promise<InteractivePostgresClient> => {
+        const physical = await pool.connect();
+        return {
+          query: async config => {
+            if (config.text.startsWith("INSERT")) {inserts++;}
+            const result = await physical.query(config);
+            if (config.text === "COMMIT") {
+              commits++;
+              throw new Error("TEST acknowledged PostgreSQL COMMIT but lost client response");
+            }
+            return result;
+          },
+          release: discard => {releases++; physical.release(discard);},
+          on: (event, listener) => {physical.on(event, listener);},
+          removeListener: (event, listener) => {physical.removeListener(event, listener);},
+        };
+      }};
+      assert.equal(await new PostgresInteractiveSessionStore(lostCommitAckPool).create(candidate), "unknown");
+      assert.equal(inserts, 1, "one physical insertion, no replay on ambiguous receipt");
+      assert.equal(commits, 1, "exactly one durable COMMIT");
+      assert.equal(releases, 1, "one owned connection release");
+      const physicalCount = await pool.query("SELECT COUNT(*)::int AS total FROM interactive_session_v1");
+      assert.equal(physicalCount.rows[0]?.total, 1, "the unknown receipt may hide a durable side effect");
+      const recovered = await new PostgresInteractiveSessionStore(pool).read(ref);
+      assert.equal(recovered?.sessionId, candidate.sessionId, "fresh physical read sees the original owner state");
+      assert.equal(recovered?.generation, candidate.generation);
+      assert.equal(recovered?.revision, candidate.revision);
     } finally {await pool.end();}
   } finally {
     try {if (created) {await admin.query(`DROP SCHEMA ${schema} CASCADE`);}}
