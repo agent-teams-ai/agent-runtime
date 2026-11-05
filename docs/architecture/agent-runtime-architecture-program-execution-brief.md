@@ -15,6 +15,9 @@ Version 3, updated 2026-10-20. Execute one card from the
 [S3-S5](agent-runtime-architecture-program-s3-s5-features-host.md) contract.
 This brief replaces the October 11 move-first instructions. It does not authorize
 live provider runs, alter accepted ADR bytes or claim the program implemented.
+The [embedding and SPI research addendum](../../research/architecture-critique-2026-11/v3-embeddability-addendum.md)
+is review input only. Its future remote SDK, provider extension and scale tests
+are not current slice prerequisites without a scoped owner decision.
 
 ## 1. Assignment contract
 

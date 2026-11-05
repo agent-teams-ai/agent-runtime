@@ -149,6 +149,15 @@ The store package implements that structural shape without depending on Embedded
 The adapter is a supported concrete Postgres choice; the core's storage agnosticism is a dependency rule.
 It does not claim databases are interchangeable or require speculative stores.
 
+**FMS ownership check before S2-C/D activation:** the selected single Postgres
+package bundles owner-specific schema/migration bytes. The accepted FMS v1
+requires feature-specific tables, mappings and migrations to remain with their
+semantic feature owner, not become shared platform business policy. Reconcile
+the exact source and publication ownership or record a scoped accepted deviation
+before the first effectful cutover. This is a consistency review of the chosen
+S2 bundle, not authorization to add three new storage engines/packages.
+See [review E-19](../../research/architecture-critique-2026-11/v3-embeddability-review-ledger.md#10-e-19-fms-ownership-vs-s2-postgresql-packaging).
+
 The private conformance package is test support, including its reusable fakes and oracle parts.
 Its tests mirror feature paths; it is never a public package or production dependency.
 Current local workspace checking assumes every package under reviewed containers is a production module.
