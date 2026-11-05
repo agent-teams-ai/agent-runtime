@@ -42,6 +42,9 @@ function ownClient(client: InteractivePostgresClient): OwnedClient {
       // release has not proved transfer, so retain the nonthrowing error guard.
       client.release(discard === true || health.failed);
       client.removeListener("error", onError);
+      // A synchronous socket fault during release must not confirm a read or
+      // SQL write. Custody has already transferred; never release twice.
+      if (health.failed) {throw new Error("interactive_store_connection_failed");}
     },
   };
 }
@@ -90,20 +93,30 @@ export class PostgresInteractiveSessionStore implements InteractiveSessionStore 
 
   async #write(body: (client: OwnedClient) => Promise<StoreWrite>): Promise<StoreWrite> {
     const client = await acquire(this.#pool);
-    let committing = false; let discard = false;
+    let committing = false; let discard = false; let outcome: StoreWrite = "unknown";
+    let originalFailure: unknown; let failedBeforeCommit = false;
     try {
       await client.query(query("BEGIN"));
       await client.query(query("SET LOCAL statement_timeout = '5000ms'"));
       await client.query(query("SET LOCAL lock_timeout = '3000ms'"));
-      const result = await body(client);
+      outcome = await body(client);
       committing = true;
       await client.query(query("COMMIT"));
-      return result;
     } catch (error) {
-      if (committing) {discard = true; return "unknown";}
-      try {await client.query(query("ROLLBACK"));} catch {discard = true;}
-      throw error;
-    } finally {client.release(discard);}
+      if (committing) {discard = true; outcome = "unknown";}
+      else {
+        failedBeforeCommit = true; originalFailure = error;
+        try {await client.query(query("ROLLBACK"));} catch {discard = true;}
+      }
+    }
+    try {client.release(discard);} catch (releaseError) {
+      // A release-time failure after the COMMIT boundary cannot authorize
+      // retry, even if the preceding query returned a successful receipt.
+      if (committing) {return "unknown";}
+      if (!failedBeforeCommit) {throw releaseError;}
+    }
+    if (failedBeforeCommit) {throw originalFailure;}
+    return outcome;
   }
   create(record: SessionRecord): Promise<StoreWrite> {
     validateRecord(record);
