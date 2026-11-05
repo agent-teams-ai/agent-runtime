@@ -119,6 +119,62 @@ test("checked-out failure during COMMIT remains unknown without replay and clean
   assert.deepEqual(releases, [true]); assert.equal(listeners.size, 0);
 });
 
+for (const phase of ["read", "migration"] as const) {
+  test(`socket fault during release fails closed after a successful ${phase} query`, async () => {
+    const listeners = new Set<ErrorListener>(); let releases = 0;
+    const client = observable({query: async () => ({rows: [], rowCount: 0}), release: () => {
+      releases++;
+      for (const listener of listeners) {listener(new Error("TEST release socket fault"));}
+    }}, listeners);
+    const pool = {connect: async () => client};
+    const action = phase === "read" ? new PostgresInteractiveSessionStore(pool).read(ref) : migrateInteractiveSessionStore(pool);
+    await assert.rejects(action, /interactive_store_connection_failed/u);
+    assert.equal(releases, 1, "custody must transfer once");
+    assert.equal(listeners.size, 0, "the adapter's listener is removed after transfer");
+  });
+}
+
+test("release-time socket fault after COMMIT yields unknown and never replays the write", async () => {
+  const listeners = new Set<ErrorListener>(); const queries: string[] = []; let releases = 0;
+  const client = observable({query: async config => {
+    queries.push(config.text); return {rows: [], rowCount: 1};
+  }, release: () => {
+    releases++;
+    for (const listener of listeners) {listener(new Error("TEST late COMMIT socket fault"));}
+  }}, listeners);
+  const store = new PostgresInteractiveSessionStore({connect: async () => client});
+  assert.equal(await store.create(await record()), "unknown");
+  assert.equal(queries.filter(sql => sql.startsWith("INSERT")).length, 1);
+  assert.equal(queries.filter(sql => sql === "COMMIT").length, 1);
+  assert.equal(releases, 1); assert.equal(listeners.size, 0);
+});
+
+test("throwing release after COMMIT preserves unknown and the error guard", async () => {
+  const listeners = new Set<ErrorListener>(); const queries: string[] = []; let releases = 0;
+  const client = observable({query: async config => {
+    queries.push(config.text); return {rows: [], rowCount: 1};
+  }, release: () => {releases++; throw new Error("TEST ownership transfer unproved");}}, listeners);
+  const store = new PostgresInteractiveSessionStore({connect: async () => client});
+  assert.equal(await store.create(await record()), "unknown");
+  assert.equal(queries.filter(sql => sql === "COMMIT").length, 1);
+  assert.equal(releases, 1); assert.equal(listeners.size, 1, "guard stays when transfer is unproved");
+});
+
+test("failed write preserves its original error when release also throws before COMMIT", async () => {
+  const original = new Error("TEST insert rejected");
+  const listeners = new Set<ErrorListener>(); const queries: string[] = [];
+  const client = observable({query: async config => {
+    queries.push(config.text);
+    if (config.text.startsWith("INSERT")) {throw original;}
+    return {rows: [], rowCount: 1};
+  }, release: () => {throw new Error("TEST release failed");}}, listeners);
+  const store = new PostgresInteractiveSessionStore({connect: async () => client});
+  await assert.rejects(store.create(await record()), error => error === original);
+  assert.equal(queries.filter(sql => sql === "ROLLBACK").length, 1);
+  assert.equal(queries.filter(sql => sql === "COMMIT").length, 0);
+  assert.equal(listeners.size, 1, "guard stays when transfer is unproved");
+});
+
 test("a throwing release does not remove the guard before client custody is transferred", async () => {
   const listeners = new Set<ErrorListener>();
   const client = observable({query: async () => ({rows: [], rowCount: 0}), release: () => {throw new Error("TEST release failed");}}, listeners);
