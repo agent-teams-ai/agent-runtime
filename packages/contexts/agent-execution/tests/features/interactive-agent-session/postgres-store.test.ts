@@ -119,6 +119,62 @@ test("checked-out failure during COMMIT remains unknown without replay and clean
   assert.deepEqual(releases, [true]); assert.equal(listeners.size, 0);
 });
 
+for (const phase of ["read", "migration"] as const) {
+  test(`socket fault during release fails closed after a successful ${phase} query`, async () => {
+    const listeners = new Set<ErrorListener>(); let releases = 0;
+    const client = observable({query: async () => ({rows: [], rowCount: 0}), release: () => {
+      releases++;
+      for (const listener of listeners) {listener(new Error("TEST release socket fault"));}
+    }}, listeners);
+    const pool = {connect: async () => client};
+    const action = phase === "read" ? new PostgresInteractiveSessionStore(pool).read(ref) : migrateInteractiveSessionStore(pool);
+    await assert.rejects(action, /interactive_store_connection_failed/u);
+    assert.equal(releases, 1, "custody must transfer once");
+    assert.equal(listeners.size, 0, "the adapter's listener is removed after transfer");
+  });
+}
+
+test("release-time socket fault after COMMIT yields unknown and never replays the write", async () => {
+  const listeners = new Set<ErrorListener>(); const queries: string[] = []; let releases = 0;
+  const client = observable({query: async config => {
+    queries.push(config.text); return {rows: [], rowCount: 1};
+  }, release: () => {
+    releases++;
+    for (const listener of listeners) {listener(new Error("TEST late COMMIT socket fault"));}
+  }}, listeners);
+  const store = new PostgresInteractiveSessionStore({connect: async () => client});
+  assert.equal(await store.create(await record()), "unknown");
+  assert.equal(queries.filter(sql => sql.startsWith("INSERT")).length, 1);
+  assert.equal(queries.filter(sql => sql === "COMMIT").length, 1);
+  assert.equal(releases, 1); assert.equal(listeners.size, 0);
+});
+
+test("throwing release after COMMIT preserves unknown and the error guard", async () => {
+  const listeners = new Set<ErrorListener>(); const queries: string[] = []; let releases = 0;
+  const client = observable({query: async config => {
+    queries.push(config.text); return {rows: [], rowCount: 1};
+  }, release: () => {releases++; throw new Error("TEST ownership transfer unproved");}}, listeners);
+  const store = new PostgresInteractiveSessionStore({connect: async () => client});
+  assert.equal(await store.create(await record()), "unknown");
+  assert.equal(queries.filter(sql => sql === "COMMIT").length, 1);
+  assert.equal(releases, 1); assert.equal(listeners.size, 1, "guard stays when transfer is unproved");
+});
+
+test("failed write preserves its original error when release also throws before COMMIT", async () => {
+  const original = new Error("TEST insert rejected");
+  const listeners = new Set<ErrorListener>(); const queries: string[] = [];
+  const client = observable({query: async config => {
+    queries.push(config.text);
+    if (config.text.startsWith("INSERT")) {throw original;}
+    return {rows: [], rowCount: 1};
+  }, release: () => {throw new Error("TEST release failed");}}, listeners);
+  const store = new PostgresInteractiveSessionStore({connect: async () => client});
+  await assert.rejects(store.create(await record()), error => error === original);
+  assert.equal(queries.filter(sql => sql === "ROLLBACK").length, 1);
+  assert.equal(queries.filter(sql => sql === "COMMIT").length, 0);
+  assert.equal(listeners.size, 1, "guard stays when transfer is unproved");
+});
+
 test("a throwing release does not remove the guard before client custody is transferred", async () => {
   const listeners = new Set<ErrorListener>();
   const client = observable({query: async () => ({rows: [], rowCount: 0}), release: () => {throw new Error("TEST release failed");}}, listeners);
@@ -169,6 +225,39 @@ test("CI disposable PostgreSQL checks actual interactive session constraints", {
       await pool.query("ALTER TABLE interactive_session_v1 DROP CONSTRAINT interactive_session_v1_generation_check");
       await pool.query("ALTER TABLE interactive_session_v1 ADD CONSTRAINT interactive_session_v1_generation_check CHECK (generation > 0)");
       await verifyInteractiveSessionStore(pool);
+
+      // Run the ambiguous-ack oracle against the actual disposable PostgreSQL
+      // transaction. The wrapper drops only the response *after* COMMIT has
+      // completed on the server; it never retries or creates another writer.
+      const candidate = await record();
+      let inserts = 0; let commits = 0; let releases = 0;
+      const lostCommitAckPool = {connect: async (): Promise<InteractivePostgresClient> => {
+        const physical = await pool.connect();
+        return {
+          query: async config => {
+            if (config.text.startsWith("INSERT")) {inserts++;}
+            const result = await physical.query(config);
+            if (config.text === "COMMIT") {
+              commits++;
+              throw new Error("TEST acknowledged PostgreSQL COMMIT but lost client response");
+            }
+            return result;
+          },
+          release: discard => {releases++; physical.release(discard);},
+          on: (event, listener) => {physical.on(event, listener);},
+          removeListener: (event, listener) => {physical.removeListener(event, listener);},
+        };
+      }};
+      assert.equal(await new PostgresInteractiveSessionStore(lostCommitAckPool).create(candidate), "unknown");
+      assert.equal(inserts, 1, "one physical insertion, no replay on ambiguous receipt");
+      assert.equal(commits, 1, "exactly one durable COMMIT");
+      assert.equal(releases, 1, "one owned connection release");
+      const physicalCount = await pool.query("SELECT COUNT(*)::int AS total FROM interactive_session_v1");
+      assert.equal(physicalCount.rows[0]?.total, 1, "the unknown receipt may hide a durable side effect");
+      const recovered = await new PostgresInteractiveSessionStore(pool).read(ref);
+      assert.equal(recovered?.sessionId, candidate.sessionId, "fresh physical read sees the original owner state");
+      assert.equal(recovered?.generation, candidate.generation);
+      assert.equal(recovered?.revision, candidate.revision);
     } finally {await pool.end();}
   } finally {
     try {if (created) {await admin.query(`DROP SCHEMA ${schema} CASCADE`);}}
