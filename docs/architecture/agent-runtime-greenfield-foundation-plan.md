@@ -61,6 +61,14 @@ summary: Research-backed greenfield vision, library boundaries, execution guaran
 
 Каждый capacity claim указывает, что именно посчитано: например, 10 000 dormant sessions, 10 000 принятых queued operations или 10 000 одновременно работающих изолированных процессов. У одного агента может не быть resident process; один квалифицированный runtime может обслуживать несколько последовательных операций. Совместное размещение tenant/session/credential generations допускается только выбранным квалифицированным профилем, а не ради красивой плотности.
 
+Для интеграции Agent Teams действует продуктовая
+[цель масштаба исполнения](https://github.com/agent-teams-ai/agent-teams-orchestrator/blob/main/docs/architecture/deployment-profiles.md#concurrent-execution-target).
+AR владеет доказательствами фактического технического исполнения, provider/resource
+admission, custody, cancellation и capacity. Эта ссылка не расширяет первый
+ограниченный v3-срез, не выбирает storage или hosting stack для всех consumers и
+не квалифицирует fleet по моделируемому трафику Orchestrator. Владельцем доставки
+capacity остаётся [план C0–C3](capacity-admission-delivery-plan.md).
+
 ## Ownership boundary
 
 ## 3. Карта ответственности
