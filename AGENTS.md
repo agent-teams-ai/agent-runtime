@@ -5,6 +5,8 @@ own teams, tasks, business workflows, or other orchestrator domain semantics.
 
 Start here:
 
+- [Proposed shared research integration](docs/spikes/shared-research-integration-plan.md)
+
 - Repository overview: [README.md](README.md)
 - Canonical architecture reading order: [docs/README.md](docs/README.md)
 - Contained-turn vs subscription-runtime (named anti-patterns `SR-AP-1` … `SR-AP-11`):

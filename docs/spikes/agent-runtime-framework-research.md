@@ -8,6 +8,17 @@ summary: Pinned SDK research and limits for OpenAI Agents, Google ADK and Micros
 
 # Agent Runtime Framework Research
 
+<!-- shared-research-route:start -->
+**Shared research route, 2026-11-04:** the [maintained central study](https://github.com/agent-teams-ai/engineering-research/blob/12c40892e805944719d6fbec14d2c26874803b2c/docs/studies/agent-runtime-framework-research.md)
+is published in [Engineering Research draft PR #1](https://github.com/agent-teams-ai/engineering-research/pull/1). The
+[import provenance manifest](https://github.com/agent-teams-ai/engineering-research/blob/12c40892e805944719d6fbec14d2c26874803b2c/data/import-provenance.json) records the
+original source identity, hash and unchanged snapshot. This local report retains
+its original metadata, dates, body, lesson IDs and heading anchors. Runtime
+applicability, decisions and qualification remain owned here; central publication
+is not a new upstream review or adoption. Use the [shared research index](https://github.com/agent-teams-ai/engineering-research/blob/docs/shared-research-2026-11-04/docs/README.md)
+for maintained discovery; cite the pinned study for this reviewed version.
+<!-- shared-research-route:end -->
+
 ## Observed target
 
 Primary-source research dated 2026-10-27, baseline `c59fe8364071530d09b48eda47d41620f3f59c25`; exact upstream source identities and limits are recorded below. Related synthesis: [Agent Runtime Modular Research](../architecture/agent-runtime-modular-research.md).
