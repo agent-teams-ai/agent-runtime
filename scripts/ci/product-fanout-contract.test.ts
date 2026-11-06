@@ -548,23 +548,36 @@ test('explicit Mac decoder retains eight original suites and rejects Linux subst
   assertJobResults({ 'macos-product': { result: 'success' } }, 'darwin-arm64');
   assert.throws(() => assertJobResults({ packages: { result: 'success' }, root: { result: 'success' } }, 'darwin-arm64'));
 });
-test('real Mac workflows close required context, matrix, current-slot retry, permissions and revision custody', async t => {
+test('Mac workflow requires one image, all eight shards and separate current receipts', async t => {
   const workflow = parse(await readFile(new URL('../../.github/workflows/ci-darwin-packages.yml', import.meta.url), 'utf8'));
   const runtime = parse(await readFile(new URL('../../.github/workflows/ci.yml', import.meta.url), 'utf8'));
   const reference = parse(await readFile(new URL('../../.github/workflows/ci-darwin-reference.yml', import.meta.url), 'utf8'));
   const revision = "${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}";
   assertDarwinWorkflow(workflow); assertDarwinCaller(runtime.jobs, revision); assertDarwinReference(reference);
-  const matrices: Array<(w: typeof workflow) => void> = [
-    w => w.jobs.packages.strategy.matrix.shard.pop(), w => { w.jobs.packages['runs-on'] = 'ubuntu-24.04'; },
-    w => { w.jobs.packages.strategy['fail-fast'] = true; }, w => { w.jobs.packages.strategy['max-parallel'] = 9; },
-    w => { w.permissions.contents = 'write'; }, w => { w.on.workflow_call.inputs.runner = {type:'string'}; },
-    w => { w.jobs.packages.env.EXECUTION_TARGET = 'linux-x64'; }, w => { w.jobs.packages.steps[0].with['fetch-depth'] = 1; },
-    w => { w.jobs.packages.steps.splice(2, 1); }, w => { w.jobs.packages.steps.at(-1).with.overwrite = false; },
-    w => { w.jobs.packages.steps.at(-1).if = '${{ always() }}'; }, w => { w.jobs.packages.steps.at(-2).if = '${{ success() }}'; },
-    w => { w.jobs.packages.env.CI_EVIDENCE_DIR = '${{ runner.temp }}/ci-darwin-shard'; },
+  const mutations: Array<(w: typeof workflow) => void> = [
+    w => { w.jobs.packages['runs-on'] = 'ubuntu-24.04'; },
+    w => { w.jobs.packages['timeout-minutes'] = 15; },
+    w => { w.jobs.packages.strategy = { matrix: { shard: ['agent-execution-1'] } }; },
+    w => { w.permissions.contents = 'write'; },
+    w => { w.on.workflow_call.inputs.runner = { type: 'string' }; },
+    w => { w.jobs.packages.env.EXECUTION_TARGET = 'linux-x64'; },
+    w => { w.jobs.packages.env.PACKAGE_SHARD = 'agent-execution-1'; },
+    w => { w.jobs.packages.steps[0].with['fetch-depth'] = 1; },
+    w => { w.jobs.packages.steps.splice(2, 1); },
+    w => { w.jobs.packages.steps.at(-1).with.overwrite = false; },
+    w => { w.jobs.packages.steps.at(-1).if = '${{ always() }}'; },
+    w => { w.jobs.packages.steps.at(-2).if = '${{ success() }}'; },
+    w => { w.jobs.packages.env.CI_EVIDENCE_DIR = '${{ runner.temp }}/ci-darwin-shards'; },
     w => { w.jobs.packages.steps.splice(7, 1); },
+    w => { w.jobs.packages.steps.splice(-1, 1); }, // no silent omission of the last current unit
+    w => { const step = w.jobs.packages.steps.find((s: { name?: string }) => s.name?.startsWith('Execute all eight'));
+      step.run = step.run.replace('agent-execution-3 ', ''); },
+    w => { const step = w.jobs.packages.steps.find((s: { name?: string }) => s.name?.startsWith('Execute all eight'));
+      step.run = step.run.replace('CI_EVIDENCE_DIR="$CI_EVIDENCE_DIR/$shard"', 'CI_EVIDENCE_DIR="$CI_EVIDENCE_DIR"'); },
   ];
-  for (const [i, mutate] of matrices.entries()) { await t.test(`matrix/retry ${i}`, () => { const changed = structuredClone(workflow); mutate(changed); assert.throws(() => assertDarwinWorkflow(changed)); }); }
+  for (const [i, mutate] of mutations.entries()) { await t.test(`single-host/retry ${i}`, () => {
+    const changed = structuredClone(workflow); mutate(changed); assert.throws(() => assertDarwinWorkflow(changed));
+  }); }
   const callers: Array<(w: typeof runtime) => void> = [
     w => { delete w.jobs['macos-product']; }, w => { delete w.jobs['runtime-macos']; },
     w => { w.jobs['runtime-macos'].name = 'Mac'; }, w => { w.jobs['runtime-macos'].uses = './.github/workflows/ci-darwin-packages.yml'; },
@@ -595,7 +608,7 @@ test('Linux and Mac evidence bindings publish actual disposable paths through th
     ['ci-product.yml', 'root', { CI_EVIDENCE_DIR: 'ci-product-root' }],
     ['ci-product.yml', 'aggregate', { CI_PACKAGE_REPORT_DIR: 'ci-product-reports/packages', CI_ROOT_REPORT_DIR: 'ci-product-reports/root' }],
     ['ci-product-shard.yml', 'shard', { CI_EVIDENCE_DIR: 'ci-product-shard' }],
-    ['ci-darwin-packages.yml', 'packages', { CI_EVIDENCE_DIR: 'ci-darwin-shard' }],
+    ['ci-darwin-packages.yml', 'packages', { CI_EVIDENCE_DIR: 'ci-darwin-shards' }],
     ['ci.yml', 'runtime-macos', { CI_PACKAGE_REPORT_DIR: 'ci-darwin-reports/packages' }],
     ['ci-darwin-reference.yml', 'reference', { CI_EVIDENCE_DIR: 'ci-darwin-reference' }],
   ];
