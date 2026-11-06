@@ -145,7 +145,8 @@ export function assertShardWorkflow(value: unknown): void {
   ]);
 }
 
-const darwinEvidenceBinding = "set -euo pipefail\nprintf 'CI_EVIDENCE_DIR=%s/ci-darwin-shard\\n' \"$RUNNER_TEMP\" >> \"$GITHUB_ENV\"\n";
+const darwinEvidenceBinding = "set -euo pipefail\nmkdir -p \"$RUNNER_TEMP/ci-darwin-shards\"\nprintf 'CI_EVIDENCE_DIR=%s/ci-darwin-shards\\n' \"$RUNNER_TEMP\" >> \"$GITHUB_ENV\"\n";
+const darwinBatchExecution = "set -euo pipefail\nfailed=0\nfor shard in agent-execution-1 agent-execution-2 agent-execution-3 provider-access runtime-configuration runtime-security embedded-runtime filesystem-custody; do\n  if ! PACKAGE_SHARD=\"$shard\" CI_EVIDENCE_DIR=\"$CI_EVIDENCE_DIR/$shard\" node scripts/ci/package-execution.ts; then\n    failed=1\n  fi\ndone\nexit \"$failed\"\n";
 const darwinAggregateEvidenceBinding = "set -euo pipefail\nprintf 'CI_PACKAGE_REPORT_DIR=%s/ci-darwin-reports/packages\\n' \"$RUNNER_TEMP\" >> \"$GITHUB_ENV\"\n";
 const darwinReferenceEvidenceBinding = "set -euo pipefail\nprintf 'CI_EVIDENCE_DIR=%s/ci-darwin-reference\\n' \"$RUNNER_TEMP\" >> \"$GITHUB_ENV\"\n";
 const gitOwner = { GIT_AUTHOR_NAME: 'iliya', GIT_AUTHOR_EMAIL: 'iliyazelenkog@gmail.com',
@@ -171,14 +172,19 @@ export function assertDarwinWorkflow(value: unknown): void {
   assert.deepEqual(workflow.on, { workflow_call: { inputs: { revision: { required: true, type: 'string' } } } });
   const jobs = object(workflow.jobs); assert.deepEqual(Object.keys(jobs), ['packages']);
   const job = object(jobs.packages);
-  assert.deepEqual(Object.keys(job).toSorted(), ['env', 'runs-on', 'steps', 'strategy', 'timeout-minutes']);
-  assert.equal(job['runs-on'], 'macos-15'); assert.equal(job['timeout-minutes'], 15);
-  assert.deepEqual(job.strategy, { 'fail-fast': false, 'max-parallel': 8, matrix: { shard: [...shardIds] } });
-  assert.deepEqual(job.env, { ...gitOwner, EXPECTED_REVISION: '${{ inputs.revision }}', EXECUTION_TARGET: 'darwin-arm64',
-    PACKAGE_SHARD: '${{ matrix.shard }}' });
-  assert.deepEqual(strippedSteps(job.steps), [ ...custodySteps('${{ inputs.revision }}', 'node scripts/ci/gate.ts revision'),
-    { shell: 'bash', run: darwinEvidenceBinding }, { run: 'node scripts/ci/package-execution.ts' },
-    ...archiveSteps('full-ci-darwin-package-${{ matrix.shard }}', '${{ runner.temp }}/ci-darwin-shard/') ]);
+  assert.deepEqual(Object.keys(job).toSorted(), ['env', 'runs-on', 'steps', 'timeout-minutes']);
+  assert.equal(job['runs-on'], 'macos-15'); assert.equal(job['timeout-minutes'], 45);
+  // All eight selections stay distinct, but compiler/SDK/image must come from
+  // one physical hosted runner. The separate hosted matrix had mixed images.
+  assert.deepEqual(job.env, { ...gitOwner, EXPECTED_REVISION: '${{ inputs.revision }}',
+    EXECUTION_TARGET: 'darwin-arm64' });
+  assert.deepEqual(strippedSteps(job.steps), [
+    ...custodySteps('${{ inputs.revision }}', 'node scripts/ci/gate.ts revision'),
+    { shell: 'bash', run: darwinEvidenceBinding },
+    { shell: 'bash', run: darwinBatchExecution },
+    ...shardIds.flatMap(shard => archiveSteps(`full-ci-darwin-package-${shard}`,
+      `${{ runner.temp }}/ci-darwin-shards/${shard}/`)),
+  ]);
 }
 export function assertDarwinCaller(jobsValue: unknown, revision: string): void {
   const jobs = object(jobsValue);
