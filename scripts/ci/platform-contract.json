@@ -9,6 +9,6 @@
   "scripts/ci/node-runtime-compatibility.test.mjs": "f147c12d8b46a297b879c4a4c1731affac03a3a73fe7fc6c8536464725b9c3ed",
   "macos-product": "9560a3636efbb93c3d5313b0958cfd2eb1c364a837e2339f697a60c9c3b08e17",
   "scripts/ci/platform-contract.predecessor.json": "6e3189a658313373e0bbfd7fe332826fc5c55ea57a9c83f8d4701fc1e5c0973c",
-  ".github/workflows/ci-darwin-packages.yml": "5ccba08ff9ad7007bf47be5a8fddf43bd105089545d0d9c7d73d570a16b71340",
+  ".github/workflows/ci-darwin-packages.yml": "c0da4fd25ac9ef1dc59f1ad0f8ed6910f7a4413a6f8f6371d56b8e286a1f88a8",
   ".github/workflows/ci-darwin-reference.yml": "5089e4d7edf5fd85dc027073c3499af9573ee16d1409ef096b5ff2020e3b63b0"
 }
