@@ -183,7 +183,7 @@ export function assertDarwinWorkflow(value: unknown): void {
     { shell: 'bash', run: darwinEvidenceBinding },
     { shell: 'bash', run: darwinBatchExecution },
     ...shardIds.flatMap(shard => archiveSteps(`full-ci-darwin-package-${shard}`,
-      `${{ runner.temp }}/ci-darwin-shards/${shard}/`)),
+      `\${{ runner.temp }}/ci-darwin-shards/${shard}/`)),
   ]);
 }
 export function assertDarwinCaller(jobsValue: unknown, revision: string): void {
