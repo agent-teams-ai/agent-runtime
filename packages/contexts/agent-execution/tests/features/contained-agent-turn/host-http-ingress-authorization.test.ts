@@ -42,7 +42,8 @@ test("broker owner inspection rejects accessors and proxies without invoking the
     ["evidence", "digest"], ["evidence", "record"]] as const) {
     const f = createEgressFixture();
     let getterCalls = 0;
-    const owner = {};
+    const owner = name === "evidence" && method === "record"
+      ? {digest: f.ports.evidence.digest} : {};
     Object.defineProperty(owner, method, {enumerable: true, get() {
       getterCalls += 1;
       throw new Error("untrusted owner accessor ran");
