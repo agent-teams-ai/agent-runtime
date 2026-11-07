@@ -109,7 +109,7 @@ test("broker owner inspection accepts concrete prototype methods", () => {
   noProviderEffects(f);
 });
 
-test("broker owner binding never reads a supplied function's bind accessor", () => {
+test("broker owner admission rejects function bind accessors without invoking them", () => {
   for (const [name, method] of [["ids", "fresh"], ["resolver", "resolve"],
     ["evidence", "digest"], ["evidence", "record"]] as const) {
     const f = createEgressFixture();
@@ -125,10 +125,8 @@ test("broker owner binding never reads a supplied function's bind accessor", () 
       throw new Error("untrusted function bind accessor ran");
     }});
     const deps = {...f.ports, [name]: owner} as never;
-    const raw = createHostHttpEgressSession(deps);
-    raw.close();
-    const authenticated = openAuthenticatedHostHttpEgressSession(deps);
-    authenticated.close();
+    assert.throws(() => createHostHttpEgressSession(deps), /Host HTTP staged session rejected/u);
+    assert.throws(() => openAuthenticatedHostHttpEgressSession(deps), /Host HTTP staged session rejected/u);
     assert.equal(getterCalls, 0, method);
     noProviderEffects(f);
   }
