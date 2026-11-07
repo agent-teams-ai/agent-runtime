@@ -21,6 +21,7 @@ export type PreparedHostHttpAuthenticatedSession = Readonly<{
 }>;
 
 const rejected = (): TypeError => new TypeError("Host HTTP staged session rejected");
+
 const identityFields = ["operationId", "attemptId", "custodyId", "hostBootId", "liveProcessSessionIdentity"] as const;
 
 // Read only inert own data. In particular, identity validation cannot invoke a
@@ -36,6 +37,41 @@ const snapshotData = (value: unknown): Readonly<Record<string, unknown>> => {
     if (descriptor === undefined || !("value" in descriptor) || descriptor.enumerable !== true) {throw rejected();}
     return [key, descriptor.value];
   })));
+};
+
+/** Owner port methods may be defined on class prototypes, but accessors and
+ * proxies must not execute during admission. Inspect descriptors, never getters. */
+const inertMethod = (owner: unknown, method: string): boolean => {
+  if ((typeof owner !== "object" && typeof owner !== "function") || owner === null || utilTypes.isProxy(owner)) {
+    return false;
+  }
+  let current: object | null = owner;
+  while (current !== null && current !== Object.prototype && current !== Function.prototype) {
+    if (utilTypes.isProxy(current)) {return false;}
+    const descriptor = Object.getOwnPropertyDescriptor(current, method);
+    if (descriptor !== undefined) {return "value" in descriptor && typeof descriptor.value === "function"
+      && !utilTypes.isProxy(descriptor.value);}
+    const parent: unknown = Object.getPrototypeOf(current);
+    if (parent !== null && typeof parent !== "object" && typeof parent !== "function") {return false;}
+    current = parent;
+  }
+  return false;
+};
+
+/** A structural method bag is not a qualified owner. Refuse missing/unsafe
+ * ports and pin their callable identities before native ingress. Otherwise a
+ * mutable dependency bag could replace a checked method after admission. */
+const snapshotBrokerOwners = (dependencies: HostHttpEgressSessionDependencies): Pick<
+  HostHttpEgressSessionDependencies, "ids" | "resolver" | "evidence"> => {
+  const owners = snapshotData(dependencies);
+  if (!inertMethod(owners.ids, "fresh") || !inertMethod(owners.resolver, "resolve")
+    || !inertMethod(owners.evidence, "digest") || !inertMethod(owners.evidence, "record")) {throw rejected();}
+  const {ids, resolver, evidence} = dependencies;
+  return Object.freeze({
+    ids: Object.freeze({fresh: ids.fresh.bind(ids)}),
+    resolver: Object.freeze({resolve: resolver.resolve.bind(resolver)}),
+    evidence: Object.freeze({digest: evidence.digest.bind(evidence), record: evidence.record.bind(evidence)}),
+  });
 };
 
 const snapshotIdentity = (value: unknown): HostHttpSessionIdentity => {
@@ -65,12 +101,14 @@ const createSession = (dependencies: HostHttpEgressSessionDependencies,
   execute(operation: HttpEgressOperation): Promise<HttpEgressReceipt>;
   close(): void;
 }> => {
-  const guard = createHostHttpAdmissionGuard({operationId: dependencies.identity.operationId,
-    attemptId: dependencies.identity.attemptId, custodyId: dependencies.identity.custodyId,
-    hostGeneration: dependencies.identity.hostBootId,
-    liveProcessSessionIdentity: dependencies.identity.liveProcessSessionIdentity});
+  const fixed = snapshotDependencies(dependencies);
+  const owners = snapshotBrokerOwners(fixed);
+  const guard = createHostHttpAdmissionGuard({operationId: fixed.identity.operationId,
+    attemptId: fixed.identity.attemptId, custodyId: fixed.identity.custodyId,
+    hostGeneration: fixed.identity.hostBootId,
+    liveProcessSessionIdentity: fixed.identity.liveProcessSessionIdentity});
   try {
-    const broker = createStrictHttpEgressBroker(Object.freeze({...dependencies, guard}), authenticateIngress);
+    const broker = createStrictHttpEgressBroker(Object.freeze({...fixed, ...owners, guard}), authenticateIngress);
     return Object.freeze({execute: broker.execute, close: guard.close});
   } catch (error) {guard.close(); throw error;}
 };
