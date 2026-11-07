@@ -37,6 +37,59 @@ test("missing broker-session owners fail during construction before any native i
 });
 
 
+test("broker owner inspection rejects accessors and proxies without invoking them", () => {
+  for (const [name, method] of [["ids", "fresh"], ["resolver", "resolve"],
+    ["evidence", "digest"], ["evidence", "record"]] as const) {
+    const f = createEgressFixture();
+    let getterCalls = 0;
+    const owner = {};
+    Object.defineProperty(owner, method, {enumerable: true, get() {
+      getterCalls += 1;
+      throw new Error("untrusted owner accessor ran");
+    }});
+    const dependencies = {...f.ports, [name]: owner} as never;
+    assert.throws(() => createHostHttpEgressSession(dependencies), /Host HTTP staged session rejected/u);
+    assert.throws(() => openAuthenticatedHostHttpEgressSession(dependencies), /Host HTTP staged session rejected/u);
+    assert.equal(getterCalls, 0);
+    noProviderEffects(f);
+  }
+  const f = createEgressFixture();
+  let proxyReads = 0;
+  const proxy = new Proxy({fresh: () => f.ports.ids.fresh()}, {get() {
+    proxyReads += 1;
+    throw new Error("untrusted owner proxy ran");
+  }});
+  assert.throws(() => createHostHttpEgressSession({...f.ports, ids: proxy}),
+    /Host HTTP staged session rejected/u);
+  assert.throws(() => openAuthenticatedHostHttpEgressSession({...f.ports, ids: proxy}),
+    /Host HTTP staged session rejected/u);
+  assert.equal(proxyReads, 0);
+  noProviderEffects(f);
+});
+
+test("raw broker session rejects a top-level identity getter before calling it", () => {
+  const f = createEgressFixture();
+  let reads = 0;
+  const dependencies = {...f.ports};
+  Object.defineProperty(dependencies, "identity", {enumerable: true, get() {
+    reads += 1;
+    throw new Error("untrusted identity getter ran");
+  }});
+  assert.throws(() => createHostHttpEgressSession(dependencies), /Host HTTP staged session rejected/u);
+  assert.equal(reads, 0);
+  noProviderEffects(f);
+});
+
+test("broker owner inspection accepts concrete prototype methods", () => {
+  const f = createEgressFixture();
+  class BoundaryIds {
+    fresh() {return f.ports.ids.fresh();}
+  }
+  const session = openAuthenticatedHostHttpEgressSession({...f.ports, ids: new BoundaryIds()});
+  session.close();
+  noProviderEffects(f);
+});
+
 test("authenticated ingress strips only its local bearer and retains raw byte accounting", async t => {
   const f = createEgressFixture(); const session = openAuthenticatedHostHttpEgressSession({...f.ports,
     materializer: {render: async () => [{name: "authorization", valueBytes: bytes(`Bearer ${SECRET_MARKER}`)}]},
