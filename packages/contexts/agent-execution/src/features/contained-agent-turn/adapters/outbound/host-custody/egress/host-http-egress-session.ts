@@ -25,10 +25,13 @@ const rejected = (): TypeError => new TypeError("Host HTTP staged session reject
 /** Required private owners must exist before a native ingress token or request
  * can be handled. Presence is not a route or production-Host qualification. */
 const assertBrokerOwners = (dependencies: HostHttpEgressSessionDependencies): void => {
-  if (typeof dependencies.ids?.fresh !== "function"
-    || typeof dependencies.resolver?.resolve !== "function"
-    || typeof dependencies.evidence?.digest !== "function"
-    || typeof dependencies.evidence?.record !== "function") {throw rejected();}
+  // Inspect the incoming runtime bag as partial: TypeScript declarations do not
+  // prove that the actual composition supplied each mandatory owner.
+  const owners: Partial<HostHttpEgressSessionDependencies> = dependencies;
+  if (typeof owners.ids?.fresh !== "function"
+    || typeof owners.resolver?.resolve !== "function"
+    || typeof owners.evidence?.digest !== "function"
+    || typeof owners.evidence?.record !== "function") {throw rejected();}
 };
 const identityFields = ["operationId", "attemptId", "custodyId", "hostBootId", "liveProcessSessionIdentity"] as const;
 
