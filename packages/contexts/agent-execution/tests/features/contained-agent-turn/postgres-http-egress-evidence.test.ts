@@ -183,6 +183,8 @@ test("real PostgreSQL race, ambiguous COMMIT and fresh-pool reload", {skip: !url
     const schemas = await pool.query("SELECT 1 FROM pg_namespace WHERE nspname = 'host_http_egress'");
     assert.equal(schemas.rows.length, 0);
     const owner = new PostgresHttpEgressEvidence(pool, scope);
+    let capturedBrokerReceipt: {selector: {operationId: string; attemptId: string; requestId: string}; receipt: unknown}
+      | undefined;
     assert.equal(await owner.record(receipt()), "unknown", "no automatic initialization");
     await initializePostgresHttpEgressEvidence(pool);
     await initializePostgresHttpEgressEvidence(pool);
@@ -214,6 +216,7 @@ test("real PostgreSQL race, ambiguous COMMIT and fresh-pool reload", {skip: !url
       const selector = {operationId: executed.operationId, attemptId: executed.attemptId,
         requestId: executed.requestId};
       assert.deepEqual(await owner.read(selector), {kind: "found", receipt: executed});
+      capturedBrokerReceipt = {selector, receipt: executed};
       // These are real PostgreSQL reads through independently scoped owners,
       // not just synthetic map-key checks. No foreign scope can read the receipt.
       for (const dimension of ["tenantId", "projectId", "deploymentId"] as const) {
@@ -249,6 +252,15 @@ test("real PostgreSQL race, ambiguous COMMIT and fresh-pool reload", {skip: !url
     const fresh = new PgPool(config);
     try {
       const reloaded = new PostgresHttpEgressEvidence(fresh, scope);
+      assert.ok(capturedBrokerReceipt);
+      // Read the actual authenticated broker receipt through a new SQL pool;
+      // its durability and tenant/project/deployment custody cannot rely on a live client.
+      assert.deepEqual(await reloaded.read(capturedBrokerReceipt.selector),
+        {kind: "found", receipt: capturedBrokerReceipt.receipt});
+      for (const dimension of ["tenantId", "projectId", "deploymentId"] as const) {
+        const foreign = new PostgresHttpEgressEvidence(fresh, {...scope, [dimension]: "foreign"});
+        assert.deepEqual(await foreign.read(capturedBrokerReceipt.selector), {kind: "missing"}, dimension);
+      }
       assert.equal(await reloaded.record(ambiguous), "recorded");
       assert.equal(await reloaded.record({...ambiguous, anomalyCode: "evidence_ack_lost"}), "conflict");
       const stored = await fresh.query("SELECT canonical_receipt FROM host_http_egress.receipt WHERE request_id='ambiguous'");
