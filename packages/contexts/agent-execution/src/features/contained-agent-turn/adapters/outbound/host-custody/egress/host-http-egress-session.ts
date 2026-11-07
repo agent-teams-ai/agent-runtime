@@ -67,10 +67,14 @@ const snapshotBrokerOwners = (dependencies: HostHttpEgressSessionDependencies): 
   if (!inertMethod(owners.ids, "fresh") || !inertMethod(owners.resolver, "resolve")
     || !inertMethod(owners.evidence, "digest") || !inertMethod(owners.evidence, "record")) {throw rejected();}
   const {ids, resolver, evidence} = dependencies;
+  // Never read a user-supplied callable's .bind property: it can be an accessor.
+  const bindChecked = <F extends (...args: never[]) => unknown>(fn: F, receiver: object): F =>
+    Reflect.apply(Function.prototype.bind, fn, [receiver]) as F;
   return Object.freeze({
-    ids: Object.freeze({fresh: ids.fresh.bind(ids)}),
-    resolver: Object.freeze({resolve: resolver.resolve.bind(resolver)}),
-    evidence: Object.freeze({digest: evidence.digest.bind(evidence), record: evidence.record.bind(evidence)}),
+    ids: Object.freeze({fresh: bindChecked(ids.fresh, ids)}),
+    resolver: Object.freeze({resolve: bindChecked(resolver.resolve, resolver)}),
+    evidence: Object.freeze({digest: bindChecked(evidence.digest, evidence),
+      record: bindChecked(evidence.record, evidence)}),
   });
 };
 

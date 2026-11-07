@@ -109,6 +109,31 @@ test("broker owner inspection accepts concrete prototype methods", () => {
   noProviderEffects(f);
 });
 
+test("broker owner binding never reads a supplied function's bind accessor", () => {
+  for (const [name, method] of [["ids", "fresh"], ["resolver", "resolve"],
+    ["evidence", "digest"], ["evidence", "record"]] as const) {
+    const f = createEgressFixture();
+    let getterCalls = 0;
+    const owner = {
+      fresh: () => f.ports.ids.fresh(),
+      resolve: (host: string) => f.ports.resolver.resolve(host),
+      digest: (parts: readonly Uint8Array[]) => f.ports.evidence.digest(parts),
+      record: (receipt: Parameters<typeof f.ports.evidence.record>[0]) => f.ports.evidence.record(receipt),
+    };
+    Object.defineProperty(owner[method], "bind", {get() {
+      getterCalls += 1;
+      throw new Error("untrusted function bind accessor ran");
+    }});
+    const deps = {...f.ports, [name]: owner} as never;
+    const raw = createHostHttpEgressSession(deps);
+    raw.close();
+    const authenticated = openAuthenticatedHostHttpEgressSession(deps);
+    authenticated.close();
+    assert.equal(getterCalls, 0, method);
+    noProviderEffects(f);
+  }
+});
+
 test("mutating checked broker owner methods after binding cannot replace their callable authority", async t => {
   const f = createEgressFixture();
   const ids = {fresh: () => f.ports.ids.fresh()};
