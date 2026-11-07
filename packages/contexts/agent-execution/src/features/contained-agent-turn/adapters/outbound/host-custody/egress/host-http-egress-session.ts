@@ -31,7 +31,7 @@ const assertBrokerOwners = (dependencies: HostHttpEgressSessionDependencies): vo
   if (typeof owners.ids?.fresh !== "function"
     || typeof owners.resolver?.resolve !== "function"
     || typeof owners.evidence?.digest !== "function"
-    || typeof owners.evidence?.record !== "function") {throw rejected();}
+    || typeof owners.evidence.record !== "function") {throw rejected();}
 };
 const identityFields = ["operationId", "attemptId", "custodyId", "hostBootId", "liveProcessSessionIdentity"] as const;
 
