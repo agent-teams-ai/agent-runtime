@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createHostHttpEgressSession, openAuthenticatedHostHttpEgressSession } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/host-http-egress-session.js";
 import { issueHostHttpIngressAuthorization } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/host-http-ingress-authorization.js";
+import { NodeHttpEgressBoundaryIds } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/node-http-egress-boundary-ids.js";
 import { bytes, chunks, createEgressFixture, SECRET_MARKER } from "./http-egress-test-fixture.ts";
 import { cases, nativeFixture } from "./native-http-request-profile-fixture.ts";
 import type { EgressFixture } from "./http-egress-test-fixture.ts";
@@ -99,14 +100,16 @@ test("raw broker session rejects a top-level identity getter before calling it",
   noProviderEffects(f);
 });
 
-test("broker owner inspection accepts concrete prototype methods", () => {
+test("broker owner binding preserves the real Host IDs adapter private receiver", async t => {
   const f = createEgressFixture();
-  class BoundaryIds {
-    fresh() {return f.ports.ids.fresh();}
-  }
-  const session = openAuthenticatedHostHttpEgressSession({...f.ports, ids: new BoundaryIds()});
-  session.close();
-  noProviderEffects(f);
+  const ids = new NodeHttpEgressBoundaryIds(() => "12345678-1234-4123-8123-123456789abc");
+  const session = openAuthenticatedHostHttpEgressSession({...f.ports, ids});
+  t.after(session.close);
+  const token = session.nativeBearerToken();
+  const receipt = await session.execute(operation(f, wire(`Authorization: Bearer ${token}\\r\\n`)));
+  assert.equal(receipt.outcome, "completed");
+  assert.equal(f.observations.dispatches, 1);
+  assert.equal(f.observations.finalAuthorizationInputs.length, 1);
 });
 
 test("broker owner admission rejects function bind accessors without invoking them", () => {
