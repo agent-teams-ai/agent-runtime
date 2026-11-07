@@ -22,17 +22,6 @@ export type PreparedHostHttpAuthenticatedSession = Readonly<{
 
 const rejected = (): TypeError => new TypeError("Host HTTP staged session rejected");
 
-/** Required private owners must exist before a native ingress token or request
- * can be handled. Presence is not a route or production-Host qualification. */
-const assertBrokerOwners = (dependencies: HostHttpEgressSessionDependencies): void => {
-  // Inspect the incoming runtime bag as partial: TypeScript declarations do not
-  // prove that the actual composition supplied each mandatory owner.
-  const owners: Partial<HostHttpEgressSessionDependencies> = dependencies;
-  if (typeof owners.ids?.fresh !== "function"
-    || typeof owners.resolver?.resolve !== "function"
-    || typeof owners.evidence?.digest !== "function"
-    || typeof owners.evidence.record !== "function") {throw rejected();}
-};
 const identityFields = ["operationId", "attemptId", "custodyId", "hostBootId", "liveProcessSessionIdentity"] as const;
 
 // Read only inert own data. In particular, identity validation cannot invoke a
@@ -48,6 +37,30 @@ const snapshotData = (value: unknown): Readonly<Record<string, unknown>> => {
     if (descriptor === undefined || !("value" in descriptor) || descriptor.enumerable !== true) {throw rejected();}
     return [key, descriptor.value];
   })));
+};
+
+/** Owner port methods may be defined on class prototypes, but accessors and
+ * proxies must not execute during admission. Inspect descriptors, never getters. */
+const inertMethod = (owner: unknown, method: string): boolean => {
+  if ((typeof owner !== "object" && typeof owner !== "function") || owner === null || utilTypes.isProxy(owner)) {
+    return false;
+  }
+  let current: object | null = owner;
+  while (current !== null && current !== Object.prototype && current !== Function.prototype) {
+    if (utilTypes.isProxy(current)) {return false;}
+    const descriptor = Object.getOwnPropertyDescriptor(current, method);
+    if (descriptor !== undefined) {return "value" in descriptor && typeof descriptor.value === "function";}
+    current = Object.getPrototypeOf(current);
+  }
+  return false;
+};
+
+/** A structural method bag is not a qualified owner. This check only refuses
+ * missing/unsafe ports before native ingress, without invoking their methods. */
+const assertBrokerOwners = (dependencies: HostHttpEgressSessionDependencies): void => {
+  const owners = snapshotData(dependencies);
+  if (!inertMethod(owners.ids, "fresh") || !inertMethod(owners.resolver, "resolve")
+    || !inertMethod(owners.evidence, "digest") || !inertMethod(owners.evidence, "record")) {throw rejected();}
 };
 
 const snapshotIdentity = (value: unknown): HostHttpSessionIdentity => {
@@ -77,13 +90,14 @@ const createSession = (dependencies: HostHttpEgressSessionDependencies,
   execute(operation: HttpEgressOperation): Promise<HttpEgressReceipt>;
   close(): void;
 }> => {
-  assertBrokerOwners(dependencies);
-  const guard = createHostHttpAdmissionGuard({operationId: dependencies.identity.operationId,
-    attemptId: dependencies.identity.attemptId, custodyId: dependencies.identity.custodyId,
-    hostGeneration: dependencies.identity.hostBootId,
-    liveProcessSessionIdentity: dependencies.identity.liveProcessSessionIdentity});
+  const fixed = snapshotDependencies(dependencies);
+  assertBrokerOwners(fixed);
+  const guard = createHostHttpAdmissionGuard({operationId: fixed.identity.operationId,
+    attemptId: fixed.identity.attemptId, custodyId: fixed.identity.custodyId,
+    hostGeneration: fixed.identity.hostBootId,
+    liveProcessSessionIdentity: fixed.identity.liveProcessSessionIdentity});
   try {
-    const broker = createStrictHttpEgressBroker(Object.freeze({...dependencies, guard}), authenticateIngress);
+    const broker = createStrictHttpEgressBroker(Object.freeze({...fixed, guard}), authenticateIngress);
     return Object.freeze({execute: broker.execute, close: guard.close});
   } catch (error) {guard.close(); throw error;}
 };
