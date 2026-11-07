@@ -33,8 +33,8 @@ test("an omitted broker owner cannot invoke an inherited prototype getter", () =
     assert.throws(() => openAuthenticatedHostHttpEgressSession(missing), /Host HTTP staged session rejected/u);
     assert.equal(getterCalls, 0);
   } finally {
-    if (previous) Object.defineProperty(prototype, "ids", previous);
-    else Reflect.deleteProperty(prototype, "ids");
+    if (previous) {Object.defineProperty(prototype, "ids", previous);}
+    else {Reflect.deleteProperty(prototype, "ids");}
   }
   noProviderEffects(f);
 });

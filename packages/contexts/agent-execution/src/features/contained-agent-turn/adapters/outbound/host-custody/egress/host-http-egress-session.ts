@@ -40,7 +40,8 @@ const snapshotData = (value: unknown): Readonly<Record<string, unknown>> => {
     return [key, descriptor.value];
   }));
   // An absent owner must never resolve through a polluted Object.prototype.
-  return Object.freeze(Object.setPrototypeOf(own, null));
+  Object.setPrototypeOf(own, null);
+  return Object.freeze(own);
 };
 
 /** A checked method may shadow Function.prototype.bind with an accessor.
