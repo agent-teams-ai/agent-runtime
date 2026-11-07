@@ -106,7 +106,7 @@ test("broker owner binding preserves the real Host IDs adapter private receiver"
   const session = openAuthenticatedHostHttpEgressSession({...f.ports, ids});
   t.after(session.close);
   const token = session.nativeBearerToken();
-  const receipt = await session.execute(operation(f, wire(`Authorization: Bearer ${token}\\r\\n`)));
+  const receipt = await session.execute(operation(f, wire(`Authorization: Bearer ${token}\r\n`)));
   assert.equal(receipt.outcome, "completed");
   assert.equal(f.observations.dispatches, 1);
   assert.equal(f.observations.finalAuthorizationInputs.length, 1);
