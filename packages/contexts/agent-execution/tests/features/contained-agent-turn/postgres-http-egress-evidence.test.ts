@@ -211,8 +211,15 @@ test("real PostgreSQL race, ambiguous COMMIT and fresh-pool reload", {skip: !url
       assert.equal(executed.outcome, "completed");
       assert.equal(fixture.observations.dispatches, 1);
       assert.equal(dnsCancelled, 1);
-      assert.deepEqual(await owner.read({operationId: executed.operationId, attemptId: executed.attemptId,
-        requestId: executed.requestId}), {kind: "found", receipt: executed});
+      const selector = {operationId: executed.operationId, attemptId: executed.attemptId,
+        requestId: executed.requestId};
+      assert.deepEqual(await owner.read(selector), {kind: "found", receipt: executed});
+      // These are real PostgreSQL reads through independently scoped owners,
+      // not just synthetic map-key checks. No foreign scope can read the receipt.
+      for (const dimension of ["tenantId", "projectId", "deploymentId"] as const) {
+        const foreign = new PostgresHttpEgressEvidence(pool, {...scope, [dimension]: "foreign"});
+        assert.deepEqual(await foreign.read(selector), {kind: "missing"}, dimension);
+      }
     } finally {session.close();}
     assert.deepEqual(await Promise.all(Array.from({length: 6}, () => owner.record(receipt()))), Array(6).fill("recorded"));
     const longScope = {tenantId: longId(), projectId: longId(), deploymentId: longId()};
