@@ -132,7 +132,7 @@ test("broker owner admission rejects function bind accessors without invoking th
   }
 });
 
-test("checked broker binding is not redirected by later Function.prototype.bind changes", () => {
+test("replaced Function.prototype.bind fails closed before any broker ingress", () => {
   const f = createEgressFixture();
   const ids = {fresh: () => f.ports.ids.fresh()};
   const nativeBind = Function.prototype.bind;
@@ -151,8 +151,8 @@ test("checked broker binding is not redirected by later Function.prototype.bind 
         return Reflect.apply(nativeBind, this, args);
       },
     });
-    const session = openAuthenticatedHostHttpEgressSession({...f.ports, ids});
-    session.close();
+    assert.throws(() => openAuthenticatedHostHttpEgressSession({...f.ports, ids}),
+      /Host HTTP staged session rejected/u);
   } finally {
     Object.defineProperty(functionPrototype, "bind", descriptor);
   }

@@ -21,11 +21,8 @@ export type PreparedHostHttpAuthenticatedSession = Readonly<{
 }>;
 
 const rejected = (): TypeError => new TypeError("Host HTTP staged session rejected");
-// A later mutation of Function.prototype.bind must never redirect a checked port.
-const nativeBind = Function.prototype.bind;
-const bindPort = <Args extends unknown[], Result>(method: (...args: Args) => Result, owner: object):
-  ((...args: Args) => Result) =>
-  Reflect.apply(nativeBind, method, [owner]) as (...args: Args) => Result;
+// A later replacement of Function.prototype.bind must fail closed before native ingress.
+const initialBindDescriptor = Object.getOwnPropertyDescriptor(Function.prototype, "bind");
 
 const identityFields = ["operationId", "attemptId", "custodyId", "hostBootId", "liveProcessSessionIdentity"] as const;
 
@@ -85,12 +82,17 @@ const snapshotBrokerOwners = (dependencies: HostHttpEgressSessionDependencies): 
   const owners = snapshotData(dependencies);
   if (!inertMethod(owners.ids, "fresh") || !inertMethod(owners.resolver, "resolve")
     || !inertMethod(owners.evidence, "digest") || !inertMethod(owners.evidence, "record")) {throw rejected();}
+  // All four methods passed inert descriptor inspection; also reject a global bind replacement.
+  // This is fail-closed rather than calling a possibly patched Function.prototype method.
+  if (initialBindDescriptor === undefined || typeof initialBindDescriptor.value !== "function"
+    || Object.getOwnPropertyDescriptor(Function.prototype, "bind")?.value !== initialBindDescriptor.value) {
+    throw rejected();
+  }
   const {ids, resolver, evidence} = dependencies;
-  // The descriptor gate rejects shadowed bind; use the captured intrinsic, not a mutable global.
   return Object.freeze({
-    ids: Object.freeze({fresh: bindPort(ids.fresh, ids)}),
-    resolver: Object.freeze({resolve: bindPort(resolver.resolve, resolver)}),
-    evidence: Object.freeze({digest: bindPort(evidence.digest, evidence), record: bindPort(evidence.record, evidence)}),
+    ids: Object.freeze({fresh: ids.fresh.bind(ids)}),
+    resolver: Object.freeze({resolve: resolver.resolve.bind(resolver)}),
+    evidence: Object.freeze({digest: evidence.digest.bind(evidence), record: evidence.record.bind(evidence)}),
   });
 };
 
