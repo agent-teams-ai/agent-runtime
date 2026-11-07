@@ -132,6 +132,32 @@ test("broker owner admission rejects function bind accessors without invoking th
   }
 });
 
+test("checked broker binding is not redirected by later Function.prototype.bind changes", () => {
+  const f = createEgressFixture();
+  const ids = {fresh: () => f.ports.ids.fresh()};
+  const nativeBind = Function.prototype.bind;
+  const descriptor = Object.getOwnPropertyDescriptor(Function.prototype, "bind");
+  assert.ok(descriptor);
+  let intercepted = 0;
+  try {
+    Object.defineProperty(Function.prototype, "bind", {...descriptor,
+      value: function(this: (...args: never[]) => unknown, ...args: unknown[]) {
+        if (this === ids.fresh) {
+          intercepted += 1;
+          throw new Error("untrusted global bind invoked");
+        }
+        return Reflect.apply(nativeBind, this, args);
+      },
+    });
+    const session = openAuthenticatedHostHttpEgressSession({...f.ports, ids});
+    session.close();
+  } finally {
+    Object.defineProperty(Function.prototype, "bind", descriptor);
+  }
+  assert.equal(intercepted, 0);
+  noProviderEffects(f);
+});
+
 test("mutating checked broker owner methods after binding cannot replace their callable authority", async t => {
   const f = createEgressFixture();
   const ids = {fresh: () => f.ports.ids.fresh()};
