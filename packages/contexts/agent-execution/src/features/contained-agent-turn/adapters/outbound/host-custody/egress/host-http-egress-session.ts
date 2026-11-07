@@ -21,6 +21,9 @@ export type PreparedHostHttpAuthenticatedSession = Readonly<{
 }>;
 
 const rejected = (): TypeError => new TypeError("Host HTTP staged session rejected");
+// A later replacement of Function.prototype.bind must fail closed before native ingress.
+const initialBindDescriptor = Object.getOwnPropertyDescriptor(Function.prototype, "bind");
+
 const identityFields = ["operationId", "attemptId", "custodyId", "hostBootId", "liveProcessSessionIdentity"] as const;
 
 // Read only inert own data. In particular, identity validation cannot invoke a
@@ -30,12 +33,70 @@ const snapshotData = (value: unknown): Readonly<Record<string, unknown>> => {
   const prototype: unknown = Object.getPrototypeOf(value);
   if (prototype !== Object.prototype && prototype !== null) {throw rejected();}
   const descriptors = Object.getOwnPropertyDescriptors(value);
-  return Object.freeze(Object.fromEntries(Reflect.ownKeys(descriptors).map(key => {
+  const own = Object.fromEntries(Reflect.ownKeys(descriptors).map(key => {
     if (typeof key !== "string") {throw rejected();}
     const descriptor = descriptors[key];
     if (descriptor === undefined || !("value" in descriptor) || descriptor.enumerable !== true) {throw rejected();}
     return [key, descriptor.value];
-  })));
+  }));
+  // An absent owner must never resolve through a polluted Object.prototype.
+  Object.setPrototypeOf(own, null);
+  return Object.freeze(own);
+};
+
+/** A checked method may shadow Function.prototype.bind with an accessor.
+ * Refuse the shadow without reading it; ordinary class/async functions inherit
+ * the native bind through their prototype chain. */ 
+const hasIntrinsicBind = (value: unknown): boolean => {
+  if (typeof value !== "function" || utilTypes.isProxy(value)) {return false;}
+  let current: object | null = value;
+  while (current !== null && current !== Function.prototype) {
+    if (utilTypes.isProxy(current) || Object.getOwnPropertyDescriptor(current, "bind") !== undefined) {return false;}
+    const parent: unknown = Object.getPrototypeOf(current);
+    if (parent !== null && typeof parent !== "object" && typeof parent !== "function") {return false;}
+    current = parent;
+  }
+  return current === Function.prototype;
+};
+
+/** Owner port methods may be defined on class prototypes, but accessors and
+ * proxies must not execute during admission. Inspect descriptors, never getters. */
+const inertMethod = (owner: unknown, method: string): boolean => {
+  if ((typeof owner !== "object" && typeof owner !== "function") || owner === null || utilTypes.isProxy(owner)) {
+    return false;
+  }
+  let current: object | null = owner;
+  while (current !== null && current !== Object.prototype && current !== Function.prototype) {
+    if (utilTypes.isProxy(current)) {return false;}
+    const descriptor = Object.getOwnPropertyDescriptor(current, method);
+    if (descriptor !== undefined) {return "value" in descriptor && hasIntrinsicBind(descriptor.value);}
+    const parent: unknown = Object.getPrototypeOf(current);
+    if (parent !== null && typeof parent !== "object" && typeof parent !== "function") {return false;}
+    current = parent;
+  }
+  return false;
+};
+
+/** A structural method bag is not a qualified owner. Refuse missing/unsafe
+ * ports and pin their callable identities before native ingress. Otherwise a
+ * mutable dependency bag could replace a checked method after admission. */
+const snapshotBrokerOwners = (dependencies: HostHttpEgressSessionDependencies): Pick<
+  HostHttpEgressSessionDependencies, "ids" | "resolver" | "evidence"> => {
+  const owners = snapshotData(dependencies);
+  if (!inertMethod(owners.ids, "fresh") || !inertMethod(owners.resolver, "resolve")
+    || !inertMethod(owners.evidence, "digest") || !inertMethod(owners.evidence, "record")) {throw rejected();}
+  // All four methods passed inert descriptor inspection; also reject a global bind replacement.
+  // This is fail-closed rather than calling a possibly patched Function.prototype method.
+  if (initialBindDescriptor === undefined || typeof initialBindDescriptor.value !== "function"
+    || Object.getOwnPropertyDescriptor(Function.prototype, "bind")?.value !== initialBindDescriptor.value) {
+    throw rejected();
+  }
+  const {ids, resolver, evidence} = dependencies;
+  return Object.freeze({
+    ids: Object.freeze({fresh: ids.fresh.bind(ids)}),
+    resolver: Object.freeze({resolve: resolver.resolve.bind(resolver)}),
+    evidence: Object.freeze({digest: evidence.digest.bind(evidence), record: evidence.record.bind(evidence)}),
+  });
 };
 
 const snapshotIdentity = (value: unknown): HostHttpSessionIdentity => {
@@ -65,12 +126,14 @@ const createSession = (dependencies: HostHttpEgressSessionDependencies,
   execute(operation: HttpEgressOperation): Promise<HttpEgressReceipt>;
   close(): void;
 }> => {
-  const guard = createHostHttpAdmissionGuard({operationId: dependencies.identity.operationId,
-    attemptId: dependencies.identity.attemptId, custodyId: dependencies.identity.custodyId,
-    hostGeneration: dependencies.identity.hostBootId,
-    liveProcessSessionIdentity: dependencies.identity.liveProcessSessionIdentity});
+  const fixed = snapshotDependencies(dependencies);
+  const owners = snapshotBrokerOwners(fixed);
+  const guard = createHostHttpAdmissionGuard({operationId: fixed.identity.operationId,
+    attemptId: fixed.identity.attemptId, custodyId: fixed.identity.custodyId,
+    hostGeneration: fixed.identity.hostBootId,
+    liveProcessSessionIdentity: fixed.identity.liveProcessSessionIdentity});
   try {
-    const broker = createStrictHttpEgressBroker(Object.freeze({...dependencies, guard}), authenticateIngress);
+    const broker = createStrictHttpEgressBroker(Object.freeze({...fixed, ...owners, guard}), authenticateIngress);
     return Object.freeze({execute: broker.execute, close: guard.close});
   } catch (error) {guard.close(); throw error;}
 };
