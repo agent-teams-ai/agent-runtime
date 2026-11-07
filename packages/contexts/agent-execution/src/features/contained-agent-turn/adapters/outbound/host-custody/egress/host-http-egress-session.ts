@@ -47,7 +47,9 @@ const hasIntrinsicBind = (value: unknown): boolean => {
   let current: object | null = value;
   while (current !== null && current !== Function.prototype) {
     if (utilTypes.isProxy(current) || Object.getOwnPropertyDescriptor(current, "bind") !== undefined) {return false;}
-    current = Object.getPrototypeOf(current);
+    const parent: unknown = Object.getPrototypeOf(current);
+    if (parent !== null && typeof parent !== "object" && typeof parent !== "function") {return false;}
+    current = parent;
   }
   return current === Function.prototype;
 };
