@@ -33,12 +33,14 @@ const snapshotData = (value: unknown): Readonly<Record<string, unknown>> => {
   const prototype: unknown = Object.getPrototypeOf(value);
   if (prototype !== Object.prototype && prototype !== null) {throw rejected();}
   const descriptors = Object.getOwnPropertyDescriptors(value);
-  return Object.freeze(Object.fromEntries(Reflect.ownKeys(descriptors).map(key => {
+  const own = Object.fromEntries(Reflect.ownKeys(descriptors).map(key => {
     if (typeof key !== "string") {throw rejected();}
     const descriptor = descriptors[key];
     if (descriptor === undefined || !("value" in descriptor) || descriptor.enumerable !== true) {throw rejected();}
     return [key, descriptor.value];
-  })));
+  }));
+  // An absent owner must never resolve through a polluted Object.prototype.
+  return Object.freeze(Object.setPrototypeOf(own, null));
 };
 
 /** A checked method may shadow Function.prototype.bind with an accessor.

@@ -18,6 +18,27 @@ const noProviderEffects = (f: EgressFixture) => {
   assert.equal(f.observations.dispatches, 0);
 };
 
+test("an omitted broker owner cannot invoke an inherited prototype getter", () => {
+  const f = createEgressFixture();
+  const missing = Object.fromEntries(Object.entries(f.ports).filter(([name]) => name !== "ids")) as never;
+  const prototype: object = Object.getPrototypeOf({});
+  const previous = Object.getOwnPropertyDescriptor(prototype, "ids");
+  let getterCalls = 0;
+  try {
+    Object.defineProperty(prototype, "ids", { configurable: true, get() {
+      getterCalls++;
+      throw new Error("inherited owner accessor invoked");
+    } });
+    assert.throws(() => createHostHttpEgressSession(missing), /Host HTTP staged session rejected/u);
+    assert.throws(() => openAuthenticatedHostHttpEgressSession(missing), /Host HTTP staged session rejected/u);
+    assert.equal(getterCalls, 0);
+  } finally {
+    if (previous) Object.defineProperty(prototype, "ids", previous);
+    else Reflect.deleteProperty(prototype, "ids");
+  }
+  noProviderEffects(f);
+});
+
 test("missing broker-session owners fail during construction before any native ingress", () => {
   for (const name of ["ids", "resolver", "evidence"] as const) {
     const f = createEgressFixture();
