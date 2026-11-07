@@ -136,11 +136,13 @@ test("checked broker binding is not redirected by later Function.prototype.bind 
   const f = createEgressFixture();
   const ids = {fresh: () => f.ports.ids.fresh()};
   const nativeBind = Function.prototype.bind;
-  const descriptor = Object.getOwnPropertyDescriptor(Function.prototype, "bind");
+  const functionPrototype: object = Object.getPrototypeOf(ids.fresh);
+  assert.equal(functionPrototype, Function.prototype);
+  const descriptor = Object.getOwnPropertyDescriptor(functionPrototype, "bind");
   assert.ok(descriptor);
   let intercepted = 0;
   try {
-    Object.defineProperty(Function.prototype, "bind", {...descriptor,
+    Object.defineProperty(functionPrototype, "bind", {...descriptor,
       value: function(this: (...args: never[]) => unknown, ...args: unknown[]) {
         if (this === ids.fresh) {
           intercepted += 1;
@@ -152,7 +154,7 @@ test("checked broker binding is not redirected by later Function.prototype.bind 
     const session = openAuthenticatedHostHttpEgressSession({...f.ports, ids});
     session.close();
   } finally {
-    Object.defineProperty(Function.prototype, "bind", descriptor);
+    Object.defineProperty(functionPrototype, "bind", descriptor);
   }
   assert.equal(intercepted, 0);
   noProviderEffects(f);
