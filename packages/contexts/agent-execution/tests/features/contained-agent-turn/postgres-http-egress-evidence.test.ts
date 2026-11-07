@@ -6,7 +6,10 @@ import {PostgresHttpEgressEvidence, initializePostgresHttpEgressEvidence} from "
 import {HTTP_EVIDENCE_FENCE} from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/postgres-http-egress-evidence-transactions.js";
 import {initialHttpEgressState} from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/http-egress-settlement.js";
 import {createStrictHttpEgressBroker} from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/strict-http-egress-broker.js";
-import {createEgressFixture} from "./http-egress-test-fixture.ts";
+import {openAuthenticatedHostHttpEgressSession} from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/host-http-egress-session.js";
+import {NodeHttpEgressBoundaryIds} from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/node-http-egress-boundary-ids.js";
+import {NodeHttpEgressTrustedResolver} from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/node-http-egress-trusted-resolver.js";
+import {chunks, createEgressFixture} from "./http-egress-test-fixture.ts";
 
 const canonical = (value: unknown) => JSON.stringify(Object.fromEntries(Object.entries(value as object).toSorted(
   ([left], [right]) => left < right ? -1 : left > right ? 1 : 0)));
@@ -183,6 +186,34 @@ test("real PostgreSQL race, ambiguous COMMIT and fresh-pool reload", {skip: !url
     assert.equal(await owner.record(receipt()), "unknown", "no automatic initialization");
     await initializePostgresHttpEgressEvidence(pool);
     await initializePostgresHttpEgressEvidence(pool);
+    // Disposable private Host HTTP composition: all three real owned port
+    // implementations, authenticated ingress and a PostgreSQL receipt readback.
+    // DNS answers and provider transport remain deterministic TEST boundaries.
+    const fixture = createEgressFixture();
+    let dnsCancelled = 0;
+    const ids = new NodeHttpEgressBoundaryIds(() => "12345678-1234-4123-8123-123456789abc");
+    const resolver = new NodeHttpEgressTrustedResolver(
+      {resolverIdentity: "pg-test-dns", resolverEpoch: "pg-test-epoch", timeoutMs: 100},
+      fixture.ports.clock, () => ({
+        resolve4: async host => {
+          assert.equal(host, "provider.example");
+          return ["93.184.216.34"];
+        },
+        resolve6: async () => {throw Object.assign(new Error("no AAAA"), {code: "ENODATA"});},
+        cancel: () => {dnsCancelled += 1;},
+      }));
+    const session = openAuthenticatedHostHttpEgressSession({...fixture.ports, ids, resolver, evidence: owner});
+    try {
+      const token = session.nativeBearerToken();
+      const wire = `POST /invoke HTTP/1.1\r\nHost: broker.invalid\r\nContent-Type: application/json\r\nContent-Length: 2\r\nAuthorization: Bearer ${token}\r\n\r\n{}`;
+      const executed = await session.execute({...fixture.operation,
+        connection: {...fixture.operation.connection, request: chunks([wire])}});
+      assert.equal(executed.outcome, "completed");
+      assert.equal(fixture.observations.dispatches, 1);
+      assert.equal(dnsCancelled, 1);
+      assert.deepEqual(await owner.read({operationId: executed.operationId, attemptId: executed.attemptId,
+        requestId: executed.requestId}), {kind: "found", receipt: executed});
+    } finally {session.close();}
     assert.deepEqual(await Promise.all(Array.from({length: 6}, () => owner.record(receipt()))), Array(6).fill("recorded"));
     const longScope = {tenantId: longId(), projectId: longId(), deploymentId: longId()};
     const longReceipt = {...receipt(), operationId: longId(), attemptId: longId(), requestId: longId()};
