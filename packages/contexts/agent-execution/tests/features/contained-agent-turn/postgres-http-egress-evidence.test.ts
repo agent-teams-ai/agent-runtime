@@ -283,6 +283,18 @@ test("real PostgreSQL race, ambiguous COMMIT and fresh-pool reload", {skip: !url
       }
       assert.equal(await reloaded.record(ambiguous), "recorded");
       assert.equal(await reloaded.record({...ambiguous, anomalyCode: "evidence_ack_lost"}), "conflict");
+      // A damaged retained winner is UNKNOWN on real SQL readback, never
+      // missing/success or eligible for automatic write-side repair.
+      const damaged = {...receipt(), requestId: "damaged-retained"};
+      assert.equal(await reloaded.record(damaged), "recorded");
+      await fresh.query("UPDATE host_http_egress.receipt SET canonical_receipt=$1 WHERE request_id=$2",
+        ["{truncated", damaged.requestId]);
+      assert.deepEqual(await reloaded.read({operationId: damaged.operationId, attemptId: damaged.attemptId,
+        requestId: damaged.requestId}), {kind: "unknown"});
+      assert.equal(await reloaded.record(damaged), "unknown", "never overwrite retained evidence");
+      const damagedRows = await fresh.query("SELECT canonical_receipt FROM host_http_egress.receipt WHERE request_id=$1",
+        [damaged.requestId]);
+      assert.deepEqual(damagedRows.rows.map(row => row.canonical_receipt), ["{truncated"]);
       const stored = await fresh.query("SELECT canonical_receipt FROM host_http_egress.receipt WHERE request_id='ambiguous'");
       assert.deepEqual(JSON.parse(stored.rows[0].canonical_receipt), ambiguous);
       const before = await fresh.query("SELECT * FROM host_http_egress.receipt ORDER BY receipt_key");
