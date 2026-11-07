@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { openAuthenticatedHostHttpEgressSession } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/host-http-egress-session.js";
+import { createHostHttpEgressSession, openAuthenticatedHostHttpEgressSession } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/host-http-egress-session.js";
 import { issueHostHttpIngressAuthorization } from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/host-http-ingress-authorization.js";
 import { bytes, chunks, createEgressFixture, SECRET_MARKER } from "./http-egress-test-fixture.ts";
 import { cases, nativeFixture } from "./native-http-request-profile-fixture.ts";
@@ -16,6 +16,26 @@ const noProviderEffects = (f: EgressFixture) => {
   assert.equal(f.observations.opens, 0);
   assert.equal(f.observations.dispatches, 0);
 };
+
+test("missing broker-session owners fail during construction before any native ingress", () => {
+  for (const name of ["ids", "resolver", "evidence"] as const) {
+    const f = createEgressFixture();
+    const missing = {...f.ports, [name]: undefined} as never;
+    assert.throws(() => openAuthenticatedHostHttpEgressSession(missing), /Host HTTP staged session rejected/u, name);
+    assert.throws(() => createHostHttpEgressSession(missing), /Host HTTP staged session rejected/u, name);
+    noProviderEffects(f);
+  }
+  for (const name of ["ids", "resolver", "evidence-record"] as const) {
+    const f = createEgressFixture();
+    const incomplete = name === "ids" ? {...f.ports, ids: {}}
+      : name === "resolver" ? {...f.ports, resolver: {}}
+      : {...f.ports, evidence: {digest: f.ports.evidence.digest}};
+    assert.throws(() => openAuthenticatedHostHttpEgressSession(incomplete as never),
+      /Host HTTP staged session rejected/u, name);
+    noProviderEffects(f);
+  }
+});
+
 
 test("authenticated ingress strips only its local bearer and retains raw byte accounting", async t => {
   const f = createEgressFixture(); const session = openAuthenticatedHostHttpEgressSession({...f.ports,
