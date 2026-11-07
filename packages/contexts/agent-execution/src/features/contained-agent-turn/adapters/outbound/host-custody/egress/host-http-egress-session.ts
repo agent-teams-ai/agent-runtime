@@ -50,7 +50,9 @@ const inertMethod = (owner: unknown, method: string): boolean => {
     if (utilTypes.isProxy(current)) {return false;}
     const descriptor = Object.getOwnPropertyDescriptor(current, method);
     if (descriptor !== undefined) {return "value" in descriptor && typeof descriptor.value === "function";}
-    current = Object.getPrototypeOf(current);
+    const parent: unknown = Object.getPrototypeOf(current);
+    if (parent !== null && typeof parent !== "object" && typeof parent !== "function") {return false;}
+    current = parent;
   }
   return false;
 };
