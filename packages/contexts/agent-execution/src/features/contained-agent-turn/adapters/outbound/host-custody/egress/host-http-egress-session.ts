@@ -21,6 +21,15 @@ export type PreparedHostHttpAuthenticatedSession = Readonly<{
 }>;
 
 const rejected = (): TypeError => new TypeError("Host HTTP staged session rejected");
+
+/** Required private owners must exist before a native ingress token or request
+ * can be handled. Presence is not a route or production-Host qualification. */
+const assertBrokerOwners = (dependencies: HostHttpEgressSessionDependencies): void => {
+  if (typeof dependencies.ids?.fresh !== "function"
+    || typeof dependencies.resolver?.resolve !== "function"
+    || typeof dependencies.evidence?.digest !== "function"
+    || typeof dependencies.evidence?.record !== "function") {throw rejected();}
+};
 const identityFields = ["operationId", "attemptId", "custodyId", "hostBootId", "liveProcessSessionIdentity"] as const;
 
 // Read only inert own data. In particular, identity validation cannot invoke a
@@ -65,6 +74,7 @@ const createSession = (dependencies: HostHttpEgressSessionDependencies,
   execute(operation: HttpEgressOperation): Promise<HttpEgressReceipt>;
   close(): void;
 }> => {
+  assertBrokerOwners(dependencies);
   const guard = createHostHttpAdmissionGuard({operationId: dependencies.identity.operationId,
     attemptId: dependencies.identity.attemptId, custodyId: dependencies.identity.custodyId,
     hostGeneration: dependencies.identity.hostBootId,
