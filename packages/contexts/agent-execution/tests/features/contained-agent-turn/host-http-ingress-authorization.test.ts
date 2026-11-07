@@ -68,6 +68,24 @@ test("broker owner inspection rejects accessors and proxies without invoking the
   noProviderEffects(f);
 });
 
+test("callable Proxy owner methods fail before ingress without invoking their traps", () => {
+  for (const [name, method] of [["ids", "fresh"], ["resolver", "resolve"],
+    ["evidence", "digest"], ["evidence", "record"]] as const) {
+    const f = createEgressFixture();
+    let calls = 0;
+    const proxiedMethod = new Proxy(() => {calls += 1; throw new Error("untrusted method called");}, {
+      apply() {calls += 1; throw new Error("untrusted method proxy invoked");},
+    });
+    const owner = name === "evidence" && method === "record"
+      ? {digest: f.ports.evidence.digest, record: proxiedMethod} : {[method]: proxiedMethod};
+    const dependencies = {...f.ports, [name]: owner} as never;
+    assert.throws(() => createHostHttpEgressSession(dependencies), /Host HTTP staged session rejected/u);
+    assert.throws(() => openAuthenticatedHostHttpEgressSession(dependencies), /Host HTTP staged session rejected/u);
+    assert.equal(calls, 0);
+    noProviderEffects(f);
+  }
+});
+
 test("raw broker session rejects a top-level identity getter before calling it", () => {
   const f = createEgressFixture();
   let reads = 0;
