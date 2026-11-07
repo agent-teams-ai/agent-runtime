@@ -217,6 +217,26 @@ test("real PostgreSQL race, ambiguous COMMIT and fresh-pool reload", {skip: !url
         requestId: executed.requestId};
       assert.deepEqual(await owner.read(selector), {kind: "found", receipt: executed});
       capturedBrokerReceipt = {selector, receipt: executed};
+      // The first Host is still live: its bearer must never authorize a
+      // different Host boot, even when both use the same real PostgreSQL owner.
+      const otherHost = openAuthenticatedHostHttpEgressSession({...fixture.ports, ids, resolver, evidence: owner,
+        identity: {...fixture.ports.identity, hostBootId: "boot-2", liveProcessSessionIdentity: {}}});
+      try {
+        const materializations = fixture.observations.materializationInputs.length;
+        const renders = fixture.observations.renders;
+        const rejected = await otherHost.execute({...fixture.operation,
+          expectedRequest: {...fixture.operation.expectedRequest, requestId: "other-host-request"},
+          connection: {...fixture.operation.connection, request: chunks([wire])}});
+        assert.equal(rejected.outcome, "denied", "a bearer cannot cross Host boot ownership");
+        assert.equal(rejected.anomalyCode, "inbound_authentication_denied");
+        assert.equal(fixture.observations.dispatches, 1, "foreign Host must not dispatch");
+        assert.equal(fixture.observations.materializationInputs.length, materializations,
+          "foreign Host must not request provider authority");
+        assert.equal(fixture.observations.renders, renders,
+          "foreign Host must not materialize credentials");
+        assert.deepEqual(await owner.read(selector), {kind: "found", receipt: executed},
+          "the original Host receipt remains immutable");
+      } finally {otherHost.close();}
       // These are real PostgreSQL reads through independently scoped owners,
       // not just synthetic map-key checks. No foreign scope can read the receipt.
       for (const dimension of ["tenantId", "projectId", "deploymentId"] as const) {
