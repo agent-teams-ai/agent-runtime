@@ -125,7 +125,7 @@ test("mutating checked broker owner methods after binding cannot replace their c
   resolver.resolve = replacement;
   evidence.digest = replacement;
   evidence.record = replacement;
-  const receipt = await session.execute(operation(f, wire(`Authorization: Bearer ${token}\\r\\n`)));
+  const receipt = await session.execute(operation(f, wire(`Authorization: Bearer ${token}\r\n`)));
   assert.equal(receipt.outcome, "completed");
   assert.equal(replacedCalls, 0);
   assert.equal(f.observations.dispatches, 1);
