@@ -67,16 +67,10 @@ const snapshotBrokerOwners = (dependencies: HostHttpEgressSessionDependencies): 
   if (!inertMethod(owners.ids, "fresh") || !inertMethod(owners.resolver, "resolve")
     || !inertMethod(owners.evidence, "digest") || !inertMethod(owners.evidence, "record")) {throw rejected();}
   const {ids, resolver, evidence} = dependencies;
-  const fresh = ids.fresh; const resolve = resolver.resolve;
-  const digest = evidence.digest; const record = evidence.record;
   return Object.freeze({
-    ids: Object.freeze({fresh: () => Reflect.apply(fresh, ids, []) as ReturnType<typeof fresh>}),
-    resolver: Object.freeze({resolve: (host: string) =>
-      Reflect.apply(resolve, resolver, [host]) as ReturnType<typeof resolve>}),
-    evidence: Object.freeze({
-      digest: (parts: readonly Uint8Array[]) => Reflect.apply(digest, evidence, [parts]) as ReturnType<typeof digest>,
-      record: (receipt: HttpEgressReceipt) => Reflect.apply(record, evidence, [receipt]) as ReturnType<typeof record>,
-    }),
+    ids: Object.freeze({fresh: ids.fresh.bind(ids)}),
+    resolver: Object.freeze({resolve: resolver.resolve.bind(resolver)}),
+    evidence: Object.freeze({digest: evidence.digest.bind(evidence), record: evidence.record.bind(evidence)}),
   });
 };
 
