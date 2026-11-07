@@ -58,12 +58,26 @@ const inertMethod = (owner: unknown, method: string): boolean => {
   return false;
 };
 
-/** A structural method bag is not a qualified owner. This check only refuses
- * missing/unsafe ports before native ingress, without invoking their methods. */
-const assertBrokerOwners = (dependencies: HostHttpEgressSessionDependencies): void => {
+/** A structural method bag is not a qualified owner. Refuse missing/unsafe
+ * ports and pin their callable identities before native ingress. Otherwise a
+ * mutable dependency bag could replace a checked method after admission. */
+const snapshotBrokerOwners = (dependencies: HostHttpEgressSessionDependencies): Pick<
+  HostHttpEgressSessionDependencies, "ids" | "resolver" | "evidence"> => {
   const owners = snapshotData(dependencies);
   if (!inertMethod(owners.ids, "fresh") || !inertMethod(owners.resolver, "resolve")
     || !inertMethod(owners.evidence, "digest") || !inertMethod(owners.evidence, "record")) {throw rejected();}
+  const {ids, resolver, evidence} = dependencies;
+  const fresh = ids.fresh; const resolve = resolver.resolve;
+  const digest = evidence.digest; const record = evidence.record;
+  return Object.freeze({
+    ids: Object.freeze({fresh: () => Reflect.apply(fresh, ids, []) as ReturnType<typeof fresh>}),
+    resolver: Object.freeze({resolve: (host: string) =>
+      Reflect.apply(resolve, resolver, [host]) as ReturnType<typeof resolve>}),
+    evidence: Object.freeze({
+      digest: (parts: readonly Uint8Array[]) => Reflect.apply(digest, evidence, [parts]) as ReturnType<typeof digest>,
+      record: (receipt: HttpEgressReceipt) => Reflect.apply(record, evidence, [receipt]) as ReturnType<typeof record>,
+    }),
+  });
 };
 
 const snapshotIdentity = (value: unknown): HostHttpSessionIdentity => {
@@ -94,13 +108,13 @@ const createSession = (dependencies: HostHttpEgressSessionDependencies,
   close(): void;
 }> => {
   const fixed = snapshotDependencies(dependencies);
-  assertBrokerOwners(fixed);
+  const owners = snapshotBrokerOwners(fixed);
   const guard = createHostHttpAdmissionGuard({operationId: fixed.identity.operationId,
     attemptId: fixed.identity.attemptId, custodyId: fixed.identity.custodyId,
     hostGeneration: fixed.identity.hostBootId,
     liveProcessSessionIdentity: fixed.identity.liveProcessSessionIdentity});
   try {
-    const broker = createStrictHttpEgressBroker(Object.freeze({...fixed, guard}), authenticateIngress);
+    const broker = createStrictHttpEgressBroker(Object.freeze({...fixed, ...owners, guard}), authenticateIngress);
     return Object.freeze({execute: broker.execute, close: guard.close});
   } catch (error) {guard.close(); throw error;}
 };
