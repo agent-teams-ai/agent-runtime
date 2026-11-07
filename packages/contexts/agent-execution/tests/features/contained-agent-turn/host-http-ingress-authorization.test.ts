@@ -109,6 +109,28 @@ test("broker owner inspection accepts concrete prototype methods", () => {
   noProviderEffects(f);
 });
 
+test("mutating checked broker owner methods after binding cannot replace their callable authority", async t => {
+  const f = createEgressFixture();
+  const ids = {fresh: () => f.ports.ids.fresh()};
+  const resolver = {resolve: (host: string) => f.ports.resolver.resolve(host)};
+  const evidence = {
+    digest: (parts: readonly Uint8Array[]) => f.ports.evidence.digest(parts),
+    record: (receipt: Parameters<typeof f.ports.evidence.record>[0]) => f.ports.evidence.record(receipt),
+  };
+  const session = openAuthenticatedHostHttpEgressSession({...f.ports, ids, resolver, evidence});
+  t.after(session.close);
+  const token = session.nativeBearerToken(); let replacedCalls = 0;
+  const replacement = () => {replacedCalls += 1; throw new Error("owner method replaced after admission");};
+  ids.fresh = replacement;
+  resolver.resolve = replacement;
+  evidence.digest = replacement;
+  evidence.record = replacement;
+  const receipt = await session.execute(operation(f, wire(`Authorization: Bearer ${token}\\r\\n`)));
+  assert.equal(receipt.outcome, "completed");
+  assert.equal(replacedCalls, 0);
+  assert.equal(f.observations.dispatches, 1);
+});
+
 test("authenticated ingress strips only its local bearer and retains raw byte accounting", async t => {
   const f = createEgressFixture(); const session = openAuthenticatedHostHttpEgressSession({...f.ports,
     materializer: {render: async () => [{name: "authorization", valueBytes: bytes(`Bearer ${SECRET_MARKER}`)}]},
