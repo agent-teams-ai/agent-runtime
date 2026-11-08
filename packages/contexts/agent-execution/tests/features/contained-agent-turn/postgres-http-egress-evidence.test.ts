@@ -320,18 +320,15 @@ test("real PostgreSQL race, ambiguous COMMIT and fresh-pool reload", {skip: !url
         assert.equal(uncertainFixture.observations.renders, renders,
           "foreign Host must not rematerialize credentials");
       } finally {foreignHost.close();}
-      // A fresh bearer is not an authorization to act as another captured
-      // operation owner. This does NOT prove same-identity cross-boot replay
-      // fencing; that needs a qualified durable owner/journal admission.
+      // Fresh foreign bearer cannot act for A; same-ID cross-boot replay is NOT qualified.
       const foreignOwner = openAuthenticatedHostHttpEgressSession({...uncertainFixture.ports,
         evidence: new PostgresHttpEgressEvidence(ambiguousPool, scope),
         identity: {...uncertainFixture.ports.identity, operationId: "foreign-operation-after-unknown",
           hostBootId: "foreign-owner-after-unknown", liveProcessSessionIdentity: {}}});
       try {
-        const ownToken = foreignOwner.nativeBearerToken();
-        const ownWire = `POST /invoke HTTP/1.1\r\nHost: broker.invalid\r\nContent-Type: application/json\r\nContent-Length: 2\r\nAuthorization: Bearer ${ownToken}\r\n\r\n{}`;
-        const beforeAuthority = uncertainFixture.observations.materializationInputs.length;
-        const beforeRenders = uncertainFixture.observations.renders;
+        const ownWire = `POST /invoke HTTP/1.1\r\nHost: broker.invalid\r\nContent-Type: application/json\r\nContent-Length: 2\r\nAuthorization: Bearer ${foreignOwner.nativeBearerToken()}\r\n\r\n{}`;
+        const beforeAuthority = uncertainFixture.observations.materializationInputs.length; const beforeRenders =
+          uncertainFixture.observations.renders;
         const attempted = await foreignOwner.execute({...uncertainOperation,
           expectedRequest: {...uncertainOperation.expectedRequest, requestId: "foreign-owner-replay"},
           connection: {...uncertainOperation.connection, request: chunks([ownWire])}});
