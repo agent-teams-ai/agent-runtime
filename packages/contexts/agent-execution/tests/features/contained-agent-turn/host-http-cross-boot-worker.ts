@@ -34,7 +34,7 @@ const replay = async ({databaseUrl, requestId}: ReplayCommand) => {
 
 process.once("message", (command: ReplayCommand) => {
   void replay(command).then(
-    report => {process.send?.(report, () => {process.disconnect?.();});},
-    () => {process.send?.({ok: false}, () => {process.disconnect?.();});},
+    report => process.send?.(report, () => {process.disconnect?.();}),
+    () => process.send?.({ok: false}, () => {process.disconnect?.();}),
   );
 });
