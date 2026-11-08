@@ -300,6 +300,19 @@ test("real PostgreSQL race, ambiguous COMMIT and fresh-pool reload", {skip: !url
       // its durability and tenant/project/deployment custody cannot rely on a live client.
       assert.deepEqual(await reloaded.read(capturedBrokerReceipt.selector),
         {kind: "found", receipt: capturedBrokerReceipt.receipt});
+      // A lost acknowledgement is still storage-only uncertainty after pool
+      // turnover: reopening must see the original COMMITTED broker outcome,
+      // and an idempotent evidence write cannot authorize provider replay.
+      const uncertainSelector = {operationId: uncertainResult.operationId,
+        attemptId: uncertainResult.attemptId, requestId: uncertainRequestId};
+      const retainedAfterReopen = await reloaded.read(uncertainSelector);
+      assert.equal(retainedAfterReopen.kind, "found");
+      if (retainedAfterReopen.kind === "found") {
+        assert.equal(retainedAfterReopen.receipt.outcome, "completed");
+        assert.equal(retainedAfterReopen.receipt.anomalyCode, "none");
+        assert.equal(await reloaded.record(retainedAfterReopen.receipt), "recorded");
+      }
+      assert.equal(uncertainFixture.observations.dispatches, 1, "readback and evidence replay never dispatch");
       for (const dimension of ["tenantId", "projectId", "deploymentId"] as const) {
         const foreign = new PostgresHttpEgressEvidence(fresh, {...scope, [dimension]: "foreign"});
         assert.deepEqual(await foreign.read(capturedBrokerReceipt.selector), {kind: "missing"}, dimension);
