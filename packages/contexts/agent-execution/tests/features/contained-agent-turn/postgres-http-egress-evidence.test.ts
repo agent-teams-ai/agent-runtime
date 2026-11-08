@@ -189,6 +189,13 @@ const requireCrossBootUnknownNoReplay = async (databaseUrl: string, requestId: s
   } finally {await poolB.end();}
 };
 
+const assertForeignScopeReadIsolation = async (pool: Pool, selector: {operationId: string; attemptId: string; requestId: string}) => {
+  for (const dimension of ["tenantId", "projectId", "deploymentId"] as const) {
+    const foreign = new PostgresHttpEgressEvidence(pool, {...scope, [dimension]: "foreign"});
+    assert.deepEqual(await foreign.read(selector), {kind: "missing"}, dimension);
+  }
+};
+
 // Explicit opt-in only. The root creates a new dedicated database; this test
 // never creates/drops databases or resets schemas and refuses any nonempty DB.
 const longId = () => randomBytes(256).toString("hex");
@@ -270,10 +277,7 @@ test("real PostgreSQL race, ambiguous COMMIT and fresh-pool reload", {skip: !url
       } finally {otherHost.close();}
       // These are real PostgreSQL reads through independently scoped owners,
       // not just synthetic map-key checks. No foreign scope can read the receipt.
-      for (const dimension of ["tenantId", "projectId", "deploymentId"] as const) {
-        const foreign = new PostgresHttpEgressEvidence(pool, {...scope, [dimension]: "foreign"});
-        assert.deepEqual(await foreign.read(selector), {kind: "missing"}, dimension);
-      }
+      await assertForeignScopeReadIsolation(pool, selector);
     } finally {session.close();}
     assert.deepEqual(await Promise.all(Array.from({length: 6}, () => owner.record(receipt()))), Array(6).fill("recorded"));
     const longScope = {tenantId: longId(), projectId: longId(), deploymentId: longId()};
@@ -399,10 +403,7 @@ test("real PostgreSQL race, ambiguous COMMIT and fresh-pool reload", {skip: !url
         assert.equal(await reloaded.record(retainedAfterReopen.receipt), "recorded");
       }
       assert.equal(uncertainFixture.observations.dispatches, 1, "readback and evidence replay never dispatch");
-      for (const dimension of ["tenantId", "projectId", "deploymentId"] as const) {
-        const foreign = new PostgresHttpEgressEvidence(fresh, {...scope, [dimension]: "foreign"});
-        assert.deepEqual(await foreign.read(capturedBrokerReceipt.selector), {kind: "missing"}, dimension);
-      }
+      await assertForeignScopeReadIsolation(fresh, capturedBrokerReceipt.selector);
       assert.equal(await reloaded.record(ambiguous), "recorded");
       assert.equal(await reloaded.record({...ambiguous, anomalyCode: "evidence_ack_lost"}), "conflict");
       // A damaged retained winner is UNKNOWN on real SQL readback, never
