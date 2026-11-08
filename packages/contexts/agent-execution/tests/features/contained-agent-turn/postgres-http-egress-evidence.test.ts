@@ -11,6 +11,7 @@ import {openAuthenticatedHostHttpEgressSession} from "../../../dist/features/con
 import {NodeHttpEgressBoundaryIds} from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/node-http-egress-boundary-ids.js";
 import {NodeHttpEgressTrustedResolver} from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/node-http-egress-trusted-resolver.js";
 import {chunks, createEgressFixture} from "./http-egress-test-fixture.ts";
+import {proveDisposablePostgresAdmissionSpike} from "./host-http-admission-postgres-spike.ts";
 
 const canonical = (value: unknown) => JSON.stringify(Object.fromEntries(Object.entries(value as object).toSorted(
   ([left], [right]) => left < right ? -1 : left > right ? 1 : 0)));
@@ -487,6 +488,9 @@ test("real PostgreSQL race, ambiguous COMMIT and fresh-pool reload", {skip: !url
         await assert.rejects(initializePostgresHttpEgressEvidence(fresh), /fence mismatch/);
       } finally {await fresh.query("UPDATE host_http_egress.version_fence SET version=1 WHERE singleton=true");}
     } finally {await fresh.end();}
+    // Native SQL-only CAS feasibility SPIKE runs before the still-RED Host replay oracle.
+    // This neither wires nor qualifies a production pre-effect admission owner.
+    await proveDisposablePostgresAdmissionSpike(url!);
     // RED oracle runs last, preserving the preceding native SQL regressions.
     await requireCrossBootUnknownNoReplay(url!, uncertainRequestId);
   } finally {if (!poolEnded) {await pool.end();}}
