@@ -192,11 +192,16 @@ const requireCrossBootUnknownNoReplay = async (databaseUrl: string, requestId: s
   assert.equal(result.ok, true, "independent Host process must return its actual observations");
   assert.notEqual(result.pid, process.pid, "Host B must run in a distinct OS process");
   assert.equal(result.originalKind, "found", "UNKNOWN in A left a committed receipt for B to reconcile");
-  assert.equal(result.dispatches, 0,
-    "M08 RED: independent Host process with valid own bearer must not dispatch the same UNKNOWN operation");
-  assert.notEqual(result.outcome, "completed", "M08 UNKNOWN cannot become a second provider success");
-  assert.equal(result.materializationInputs, 0, "M08 duplicate Host must not request provider authority");
+  // Storage immutability must be proved even while the security oracle stays
+  // deliberately RED. Report all provider effects together, not only the first
+  // failing assertion, so a future fix cannot hide a credential side effect.
   assert.equal(result.retainedSame, true, "retained PostgreSQL receipt must stay immutable");
+  assert.deepEqual({
+    duplicateDispatches: result.dispatches,
+    duplicateMaterializations: result.materializationInputs,
+    completedAgain: result.outcome === "completed",
+  }, {duplicateDispatches: 0, duplicateMaterializations: 0, completedAgain: false},
+  "M08 RED: independent Host must not dispatch, materialize or complete the same UNKNOWN intent");
 };
 
 const assertForeignScopeReadIsolation = async (pool: Pool, selector: {operationId: string; attemptId: string; requestId: string}) => {
