@@ -295,6 +295,25 @@ test("real PostgreSQL race, ambiguous COMMIT and fresh-pool reload", {skip: !url
       const damagedRows = await fresh.query("SELECT canonical_receipt FROM host_http_egress.receipt WHERE request_id=$1",
         [damaged.requestId]);
       assert.deepEqual(damagedRows.rows.map(row => row.canonical_receipt), ["{truncated"]);
+      // A mismatched physical format fence cannot authorize a read, a new
+      // durable receipt, or implicit repair; only the isolated TEST restores it.
+      assert.equal((await fresh.query("SELECT format FROM host_http_egress.version_fence")).rows[0]?.format,
+        HTTP_EVIDENCE_FENCE);
+      await fresh.query("UPDATE host_http_egress.version_fence SET format=$1 WHERE singleton=true",
+        ["unqualified-http-format"]);
+      const fencedNew = {...receipt(), requestId: "fenced-new"};
+      try {
+        assert.deepEqual(await reloaded.read(capturedBrokerReceipt.selector), {kind: "unknown"});
+        assert.equal(await reloaded.record(fencedNew), "unknown");
+        const notCommitted = await fresh.query("SELECT 1 FROM host_http_egress.receipt WHERE request_id=$1",
+          [fencedNew.requestId]);
+        assert.equal(notCommitted.rows.length, 0, "wrong fence cannot persist new evidence");
+      } finally {
+        await fresh.query("UPDATE host_http_egress.version_fence SET format=$1 WHERE singleton=true",
+          [HTTP_EVIDENCE_FENCE]);
+      }
+      assert.deepEqual(await reloaded.read(capturedBrokerReceipt.selector),
+        {kind: "found", receipt: capturedBrokerReceipt.receipt});
       const stored = await fresh.query("SELECT canonical_receipt FROM host_http_egress.receipt WHERE request_id='ambiguous'");
       assert.deepEqual(JSON.parse(stored.rows[0].canonical_receipt), ambiguous);
       const before = await fresh.query("SELECT * FROM host_http_egress.receipt ORDER BY receipt_key");
