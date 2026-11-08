@@ -79,5 +79,29 @@ export const proveDisposablePostgresAdmissionSpike = async (databaseUrl: string)
       // Connection-terminated is expected during disposal of this TEST Client.
       await crashed.end().catch(() => {});
     }
+    // A durable COMMIT must survive termination of the SQL backend that made
+    // the claim. A new process may observe it but cannot reserve it again.
+    // This remains SQL-only: no provider effect or Host admission is wired.
+    const committed = new Client({connectionString: databaseUrl, connectionTimeoutMillis: 5_000});
+    committed.on("error", () => {}); // Termination is deliberate in this disposable fixture.
+    await committed.connect();
+    try {
+      const durableKey = digest("tenant/project/deployment", "committed-before-crash", "attempt", "request");
+      await committed.query("BEGIN");
+      assert.equal((await committed.query(claim, [durableKey, "committed-owner"])).rowCount, 1);
+      await committed.query("COMMIT");
+      const backendPid = (await committed.query("SELECT pg_backend_pid() AS pid")).rows[0]?.pid;
+      assert.equal(typeof backendPid, "number");
+      const stopped = await second.query("SELECT pg_terminate_backend($1) AS stopped", [backendPid]);
+      assert.equal(stopped.rows[0]?.stopped, true, "committed SQL backend was killed");
+      assert.equal((await second.query(claim, [durableKey, "post-crash-owner"])).rowCount, 0,
+        "committed intent must not be reclaimed after backend termination");
+      const retained = await second.query(
+        "SELECT owner_id FROM host_http_egress.m08_admission_spike WHERE intent_key=$1", [durableKey]);
+      assert.deepEqual(retained.rows.map(row => row.owner_id), ["committed-owner"],
+        "actual post-crash readback must preserve the original durable winner");
+    } finally {
+      await committed.end().catch(() => {});
+    }
   } finally {await Promise.all([first.end(), second.end()]);}
 };
