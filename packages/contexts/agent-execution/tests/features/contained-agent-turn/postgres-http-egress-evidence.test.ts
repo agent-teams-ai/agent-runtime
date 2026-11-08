@@ -284,17 +284,24 @@ test("real PostgreSQL race, ambiguous COMMIT and fresh-pool reload", {skip: !url
     const uncertainWire = `POST /invoke HTTP/1.1\r\nHost: broker.invalid\r\nContent-Type: application/json\r\nContent-Length: 2\r\nAuthorization: Bearer ${uncertainBearer}\r\n\r\n{}`;
     const uncertainResult = await uncertainSession.execute({...uncertainOperation,
       connection: {...uncertainOperation.connection, request: chunks([uncertainWire])},
-    }).finally(() => uncertainSession.close());
-    assert.equal(uncertainResult.outcome, "reconcile_required");
-    assert.equal(uncertainResult.anomalyCode, "evidence_ack_lost");
-    assert.equal(lost, true, "the actual PostgreSQL COMMIT succeeded before its ACK was lost");
-    assert.equal(uncertainFixture.observations.dispatches, 1, "never redispatch after ambiguous commit");
-    // A second call to the same now-closed authenticated Host session may return
-    // only a rejection/uncertainty: it must not reenter Provider Access or dispatch.
-    const deniedReplay = await uncertainSession.execute({...uncertainOperation,
-      connection: {...uncertainOperation.connection, request: chunks([uncertainWire])}});
-    assert.notEqual(deniedReplay.outcome, "completed", "UNKNOWN must not become a second success");
-    assert.equal(uncertainFixture.observations.dispatches, 1, "closed Host cannot replay provider work");
+    });
+    try {
+      assert.equal(uncertainResult.outcome, "reconcile_required");
+      assert.equal(uncertainResult.anomalyCode, "evidence_ack_lost");
+      assert.equal(lost, true, "the actual PostgreSQL COMMIT succeeded before its ACK was lost");
+      assert.equal(uncertainFixture.observations.dispatches, 1, "never redispatch after ambiguous commit");
+      // No caller cleanup yet: the ambiguous result itself must revoke the
+      // private bearer. Otherwise the old test's explicit close masked a gap.
+      assert.throws(() => uncertainSession.nativeBearerToken(), /inbound_authentication_denied/u,
+        "UNKNOWN must revoke ingress without relying on caller close");
+      const materializations = uncertainFixture.observations.materializationInputs.length;
+      const deniedReplay = await uncertainSession.execute({...uncertainOperation,
+        connection: {...uncertainOperation.connection, request: chunks([uncertainWire])}});
+      assert.notEqual(deniedReplay.outcome, "completed", "UNKNOWN must not become a second success");
+      assert.equal(uncertainFixture.observations.dispatches, 1, "uncertain Host cannot replay provider work");
+      assert.equal(uncertainFixture.observations.materializationInputs.length, materializations,
+        "uncertain Host cannot rematerialize provider authority");
+    } finally {uncertainSession.close();}
     const retainedUncertain = await owner.read({operationId: uncertainResult.operationId,
       attemptId: uncertainResult.attemptId, requestId: uncertainRequestId});
     assert.equal(retainedUncertain.kind, "found");
