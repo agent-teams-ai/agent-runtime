@@ -2,7 +2,7 @@
 // This has no Host/Provider Access integration, public API or cutover authority.
 import assert from "node:assert/strict";
 import {createHash} from "node:crypto";
-import {Pool} from "pg";
+import {Client, Pool} from "pg";
 
 const digest = (scope: string, operation: string, attempt: string, request: string) =>
   createHash("sha256").update(JSON.stringify([scope, operation, attempt, request])).digest("hex");
@@ -12,6 +12,7 @@ const claim = `INSERT INTO host_http_egress.m08_admission_spike (intent_key, own
 /** Called only after the parent verifies a fresh, isolated disposable PG database.
  * An atomic pre-effect reservation has one winner, even under concurrent owners.
  * Post-COMMIT ACK loss must not yield a second claim or authorize replay.
+ * An uncommitted pre-effect claim is released by a real PostgreSQL backend crash.
  */
 export const proveDisposablePostgresAdmissionSpike = async (databaseUrl: string): Promise<void> => {
   const config = {connectionString: databaseUrl, connectionTimeoutMillis: 5_000, max: 2};
@@ -56,5 +57,27 @@ export const proveDisposablePostgresAdmissionSpike = async (databaseUrl: string)
       assert.equal((await b.query(claim, [foreignKey, "foreign-owner"])).rowCount, 1,
         "foreign scope must not alias the original durable identity");
     } finally {a.release(); b.release();}
+    // A claim in a transaction that dies BEFORE any provider effect must
+    // roll back. This is distinct from a committed UNKNOWN claim: only the
+    // demonstrably uncommitted reservation can be reacquired.
+    const crashed = new Client({connectionString: databaseUrl, connectionTimeoutMillis: 5_000});
+    crashed.on("error", () => {}); // The backend is deliberately terminated below.
+    await crashed.connect();
+    try {
+      const abortKey = digest("tenant/project/deployment", "aborted-before-effect", "attempt", "request");
+      await crashed.query("BEGIN");
+      assert.equal((await crashed.query(claim, [abortKey, "aborted-host"])).rowCount, 1);
+      const backendPid = (await crashed.query("SELECT pg_backend_pid() AS pid")).rows[0]?.pid;
+      assert.equal(typeof backendPid, "number");
+      const stopped = await second.query("SELECT pg_terminate_backend($1) AS stopped", [backendPid]);
+      assert.equal(stopped.rows[0]?.stopped, true, "disposable checked-out SQL backend was killed");
+      assert.equal((await second.query(claim, [abortKey, "verified-no-effect-recovery"])).rowCount, 1,
+        "uncommitted claim must be released by actual backend termination");
+      assert.equal((await second.query(claim, [abortKey, "second-recovery"])).rowCount, 0,
+        "recovery claim is durable and cannot be taken by another Host");
+    } finally {
+      // Connection-terminated is expected during disposal of this TEST Client.
+      await crashed.end().catch(() => undefined);
+    }
   } finally {await Promise.all([first.end(), second.end()]);}
 };
