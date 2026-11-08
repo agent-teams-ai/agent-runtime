@@ -295,6 +295,7 @@ test("real PostgreSQL race, ambiguous COMMIT and fresh-pool reload", {skip: !url
       assert.throws(() => uncertainSession.nativeBearerToken(), /inbound_authentication_denied/u,
         "UNKNOWN must revoke ingress without relying on caller close");
       const materializations = uncertainFixture.observations.materializationInputs.length;
+      const renders = uncertainFixture.observations.renders;
       const deniedReplay = await uncertainSession.execute({...uncertainOperation,
         connection: {...uncertainOperation.connection, request: chunks([uncertainWire])}});
       assert.notEqual(deniedReplay.outcome, "completed", "UNKNOWN must not become a second success");
@@ -308,7 +309,6 @@ test("real PostgreSQL race, ambiguous COMMIT and fresh-pool reload", {skip: !url
         identity: {...uncertainFixture.ports.identity, hostBootId: "boot-after-unknown",
           liveProcessSessionIdentity: {}}});
       try {
-        const renders = uncertainFixture.observations.renders;
         const foreignAttempt = await foreignHost.execute({...uncertainOperation,
           expectedRequest: {...uncertainOperation.expectedRequest, requestId: "foreign-after-unknown"},
           connection: {...uncertainOperation.connection, request: chunks([uncertainWire])}});
@@ -327,16 +327,14 @@ test("real PostgreSQL race, ambiguous COMMIT and fresh-pool reload", {skip: !url
           hostBootId: "foreign-owner-after-unknown", liveProcessSessionIdentity: {}}});
       try {
         const ownWire = `POST /invoke HTTP/1.1\r\nHost: broker.invalid\r\nContent-Type: application/json\r\nContent-Length: 2\r\nAuthorization: Bearer ${foreignOwner.nativeBearerToken()}\r\n\r\n{}`;
-        const beforeAuthority = uncertainFixture.observations.materializationInputs.length; const beforeRenders =
-          uncertainFixture.observations.renders;
         const attempted = await foreignOwner.execute({...uncertainOperation,
           expectedRequest: {...uncertainOperation.expectedRequest, requestId: "foreign-owner-replay"},
           connection: {...uncertainOperation.connection, request: chunks([ownWire])}});
         assert.notEqual(attempted.outcome, "completed", "valid foreign bearer cannot execute captured operation");
         assert.equal(uncertainFixture.observations.dispatches, 1, "foreign owner cannot redispatch");
-        assert.equal(uncertainFixture.observations.materializationInputs.length, beforeAuthority,
+        assert.equal(uncertainFixture.observations.materializationInputs.length, materializations,
           "foreign owner cannot request Provider Access for a captured operation");
-        assert.equal(uncertainFixture.observations.renders, beforeRenders,
+        assert.equal(uncertainFixture.observations.renders, renders,
           "foreign owner cannot render credentials for a captured operation");
       } finally {foreignOwner.close();}
     } finally {uncertainSession.close();}
