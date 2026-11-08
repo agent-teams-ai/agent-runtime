@@ -301,6 +301,25 @@ test("real PostgreSQL race, ambiguous COMMIT and fresh-pool reload", {skip: !url
       assert.equal(uncertainFixture.observations.dispatches, 1, "uncertain Host cannot replay provider work");
       assert.equal(uncertainFixture.observations.materializationInputs.length, materializations,
         "uncertain Host cannot rematerialize provider authority");
+      // After UNKNOWN, a distinct Host boot must also refuse the old bearer.
+      // This does not claim that a fresh bearer is authorized to replay the intent.
+      const foreignHost = openAuthenticatedHostHttpEgressSession({...uncertainFixture.ports,
+        evidence: new PostgresHttpEgressEvidence(ambiguousPool, scope),
+        identity: {...uncertainFixture.ports.identity, hostBootId: "boot-after-unknown",
+          liveProcessSessionIdentity: {}}});
+      try {
+        const renders = uncertainFixture.observations.renders;
+        const foreignAttempt = await foreignHost.execute({...uncertainOperation,
+          expectedRequest: {...uncertainOperation.expectedRequest, requestId: "foreign-after-unknown"},
+          connection: {...uncertainOperation.connection, request: chunks([uncertainWire])}});
+        assert.equal(foreignAttempt.outcome, "denied", "old bearer cannot authorize a new Host boot");
+        assert.equal(foreignAttempt.anomalyCode, "inbound_authentication_denied");
+        assert.equal(uncertainFixture.observations.dispatches, 1, "new Host must not replay provider work");
+        assert.equal(uncertainFixture.observations.materializationInputs.length, materializations,
+          "foreign Host must not request provider authority");
+        assert.equal(uncertainFixture.observations.renders, renders,
+          "foreign Host must not rematerialize credentials");
+      } finally {foreignHost.close();}
     } finally {uncertainSession.close();}
     const retainedUncertain = await owner.read({operationId: uncertainResult.operationId,
       attemptId: uncertainResult.attemptId, requestId: uncertainRequestId});
