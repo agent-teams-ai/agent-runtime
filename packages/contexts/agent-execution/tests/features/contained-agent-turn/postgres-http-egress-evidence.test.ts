@@ -469,14 +469,9 @@ test("real PostgreSQL race, ambiguous COMMIT and fresh-pool reload", {skip: !url
       try {
         assert.equal(await reloaded.record(receipt()), "unknown");
         await assert.rejects(initializePostgresHttpEgressEvidence(fresh), /fence mismatch/);
-      } finally {
-        // Restore only the disposable TEST database so the independent
-        // cross-boot oracle can inspect the same committed receipt afterward.
-        await fresh.query("UPDATE host_http_egress.version_fence SET version=1 WHERE singleton=true");
-      }
+      } finally {await fresh.query("UPDATE host_http_egress.version_fence SET version=1 WHERE singleton=true");}
     } finally {await fresh.end();}
-    // Intentionally RED: run after all existing PostgreSQL durability/fence
-    // assertions, so a missing cross-Host owner cannot mask their regressions.
+    // RED oracle runs last, preserving the preceding native SQL regressions.
     await requireCrossBootUnknownNoReplay(url!, uncertainRequestId);
   } finally {if (!poolEnded) {await pool.end();}}
 });
