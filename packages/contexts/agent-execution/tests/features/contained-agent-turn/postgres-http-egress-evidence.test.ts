@@ -369,7 +369,6 @@ test("real PostgreSQL race, ambiguous COMMIT and fresh-pool reload", {skip: !url
           "foreign owner cannot render credentials for a captured operation");
       } finally {foreignOwner.close();}
     } finally {uncertainSession.close();}
-    await requireCrossBootUnknownNoReplay(url!, uncertainRequestId);
     const retainedUncertain = await owner.read({operationId: uncertainResult.operationId,
       attemptId: uncertainResult.attemptId, requestId: uncertainRequestId});
     assert.equal(retainedUncertain.kind, "found");
@@ -467,9 +466,18 @@ test("real PostgreSQL race, ambiguous COMMIT and fresh-pool reload", {skip: !url
       await initializePostgresHttpEgressEvidence(fresh);
       assert.deepEqual((await fresh.query("SELECT * FROM host_http_egress.receipt ORDER BY receipt_key")).rows, before.rows);
       await fresh.query("UPDATE host_http_egress.version_fence SET version=2");
-      assert.equal(await reloaded.record(receipt()), "unknown");
-      await assert.rejects(initializePostgresHttpEgressEvidence(fresh), /fence mismatch/);
+      try {
+        assert.equal(await reloaded.record(receipt()), "unknown");
+        await assert.rejects(initializePostgresHttpEgressEvidence(fresh), /fence mismatch/);
+      } finally {
+        // Restore only the disposable TEST database so the independent
+        // cross-boot oracle can inspect the same committed receipt afterward.
+        await fresh.query("UPDATE host_http_egress.version_fence SET version=1 WHERE singleton=true");
+      }
     } finally {await fresh.end();}
+    // Intentionally RED: run after all existing PostgreSQL durability/fence
+    // assertions, so a missing cross-Host owner cannot mask their regressions.
+    await requireCrossBootUnknownNoReplay(url!, uncertainRequestId);
   } finally {if (!poolEnded) {await pool.end();}}
 });
 
