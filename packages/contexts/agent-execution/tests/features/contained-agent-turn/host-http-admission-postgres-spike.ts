@@ -77,7 +77,7 @@ export const proveDisposablePostgresAdmissionSpike = async (databaseUrl: string)
         "recovery claim is durable and cannot be taken by another Host");
     } finally {
       // Connection-terminated is expected during disposal of this TEST Client.
-      await crashed.end().catch(() => undefined);
+      await crashed.end().catch(() => {});
     }
   } finally {await Promise.all([first.end(), second.end()]);}
 };
