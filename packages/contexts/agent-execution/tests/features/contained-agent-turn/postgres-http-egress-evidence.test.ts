@@ -158,6 +158,37 @@ test("broker acknowledgement loss does not rewrite original or retry provider", 
   assert.equal(fixture.observations.dispatches, 1);
 });
 
+// S2.0/M08 intentionally RED qualification oracle: an independent Host boot
+// with a freshly minted valid bearer must not re-dispatch the UNKNOWN intent.
+// The production cross-process admission owner is not wired in this fixture.
+// Keep this test on a separate Draft stack until a real durable owner exists.
+const requireCrossBootUnknownNoReplay = async (databaseUrl: string, requestId: string): Promise<void> => {
+  const {Pool: PgPool} = await import("pg");
+  const poolB = new PgPool({connectionString: databaseUrl, connectionTimeoutMillis: 5_000, max: 2});
+  try {
+    const fixtureB = createEgressFixture();
+    const evidenceB = new PostgresHttpEgressEvidence(poolB, scope);
+    const selector = {operationId: fixtureB.operation.operationId, attemptId: fixtureB.operation.attemptId, requestId};
+    const original = await evidenceB.read(selector);
+    assert.equal(original.kind, "found", "UNKNOWN in A left a committed receipt for B to reconcile");
+    const hostB = openAuthenticatedHostHttpEgressSession({...fixtureB.ports, evidence: evidenceB,
+      identity: {...fixtureB.ports.identity, hostBootId: "boot-B-after-UNKNOWN", liveProcessSessionIdentity: {}}});
+    try {
+      const bearerB = hostB.nativeBearerToken();
+      const wireB = `POST /invoke HTTP/1.1\r\nHost: broker.invalid\r\nContent-Type: application/json\r\nContent-Length: 2\r\nAuthorization: Bearer ${bearerB}\r\n\r\n{}`;
+      const replay = await hostB.execute({...fixtureB.operation,
+        expectedRequest: {...fixtureB.operation.expectedRequest, requestId},
+        connection: {...fixtureB.operation.connection, request: chunks([wireB])}});
+      assert.equal(fixtureB.observations.dispatches, 0,
+        "M08 RED: separate Host boot with its own bearer must not dispatch the same UNKNOWN operation");
+      assert.notEqual(replay.outcome, "completed", "M08 UNKNOWN cannot become a second provider success");
+      assert.equal(fixtureB.observations.materializationInputs.length, 0,
+        "M08 duplicate Host must not reauthorize provider materialization");
+      assert.deepEqual(await evidenceB.read(selector), original, "retained SQL receipt must stay immutable");
+    } finally {hostB.close();}
+  } finally {await poolB.end();}
+};
+
 // Explicit opt-in only. The root creates a new dedicated database; this test
 // never creates/drops databases or resets schemas and refuses any nonempty DB.
 const longId = () => randomBytes(256).toString("hex");
@@ -338,6 +369,7 @@ test("real PostgreSQL race, ambiguous COMMIT and fresh-pool reload", {skip: !url
           "foreign owner cannot render credentials for a captured operation");
       } finally {foreignOwner.close();}
     } finally {uncertainSession.close();}
+    await requireCrossBootUnknownNoReplay(url!, uncertainRequestId);
     const retainedUncertain = await owner.read({operationId: uncertainResult.operationId,
       attemptId: uncertainResult.attemptId, requestId: uncertainRequestId});
     assert.equal(retainedUncertain.kind, "found");
