@@ -289,6 +289,12 @@ test("real PostgreSQL race, ambiguous COMMIT and fresh-pool reload", {skip: !url
     assert.equal(uncertainResult.anomalyCode, "evidence_ack_lost");
     assert.equal(lost, true, "the actual PostgreSQL COMMIT succeeded before its ACK was lost");
     assert.equal(uncertainFixture.observations.dispatches, 1, "never redispatch after ambiguous commit");
+    // A second call to the same now-closed authenticated Host session may return
+    // only a rejection/uncertainty: it must not reenter Provider Access or dispatch.
+    const deniedReplay = await uncertainSession.execute({...uncertainOperation,
+      connection: {...uncertainOperation.connection, request: chunks([uncertainWire])}});
+    assert.notEqual(deniedReplay.outcome, "completed", "UNKNOWN must not become a second success");
+    assert.equal(uncertainFixture.observations.dispatches, 1, "closed Host cannot replay provider work");
     const retainedUncertain = await owner.read({operationId: uncertainResult.operationId,
       attemptId: uncertainResult.attemptId, requestId: uncertainRequestId});
     assert.equal(retainedUncertain.kind, "found");
