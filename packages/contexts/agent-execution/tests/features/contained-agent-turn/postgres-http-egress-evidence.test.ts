@@ -276,9 +276,15 @@ test("real PostgreSQL race, ambiguous COMMIT and fresh-pool reload", {skip: !url
     const uncertainRequestId = "broker-ambiguous";
     const uncertainOperation = {...uncertainFixture.operation, expectedRequest:
       {...uncertainFixture.operation.expectedRequest, requestId: uncertainRequestId}};
-    const uncertainResult = await createStrictHttpEgressBroker({
-      ...uncertainFixture.ports, evidence: new PostgresHttpEgressEvidence(ambiguousPool, scope),
-    }).execute(uncertainOperation);
+    // Exercise lost-COMMIT acknowledgement through the actual authenticated
+    // Host session, not only the lower-level unbound broker facade.
+    const uncertainSession = openAuthenticatedHostHttpEgressSession({...uncertainFixture.ports,
+      evidence: new PostgresHttpEgressEvidence(ambiguousPool, scope)});
+    const uncertainBearer = uncertainSession.nativeBearerToken();
+    const uncertainWire = `POST /invoke HTTP/1.1\r\nHost: broker.invalid\r\nContent-Type: application/json\r\nContent-Length: 2\r\nAuthorization: Bearer ${uncertainBearer}\r\n\r\n{}`;
+    const uncertainResult = await uncertainSession.execute({...uncertainOperation,
+      connection: {...uncertainOperation.connection, request: chunks([uncertainWire])},
+    }).finally(() => uncertainSession.close());
     assert.equal(uncertainResult.outcome, "reconcile_required");
     assert.equal(uncertainResult.anomalyCode, "evidence_ack_lost");
     assert.equal(lost, true, "the actual PostgreSQL COMMIT succeeded before its ACK was lost");
