@@ -268,6 +268,29 @@ test("real PostgreSQL race, ambiguous COMMIT and fresh-pool reload", {skip: !url
     }} as unknown as Pool;
     const ambiguous = {...receipt(), requestId: "ambiguous"};
     assert.equal(await new PostgresHttpEgressEvidence(ambiguousPool, scope).record(ambiguous), "unknown");
+    // Prove the same post-COMMIT acknowledgement loss through the actual
+    // broker: provider dispatch happens once, the caller gets UNKNOWN, and
+    // PostgreSQL retains the original completed receipt (not a replay).
+    lost = false;
+    const uncertainFixture = createEgressFixture();
+    const uncertainRequestId = "broker-ambiguous";
+    const uncertainOperation = {...uncertainFixture.operation, expectedRequest:
+      {...uncertainFixture.operation.expectedRequest, requestId: uncertainRequestId}};
+    const uncertainResult = await createStrictHttpEgressBroker({
+      ...uncertainFixture.ports, evidence: new PostgresHttpEgressEvidence(ambiguousPool, scope),
+    }).execute(uncertainOperation);
+    assert.equal(uncertainResult.outcome, "reconcile_required");
+    assert.equal(uncertainResult.anomalyCode, "evidence_ack_lost");
+    assert.equal(lost, true, "the actual PostgreSQL COMMIT succeeded before its ACK was lost");
+    assert.equal(uncertainFixture.observations.dispatches, 1, "never redispatch after ambiguous commit");
+    const retainedUncertain = await owner.read({operationId: uncertainResult.operationId,
+      attemptId: uncertainResult.attemptId, requestId: uncertainRequestId});
+    assert.equal(retainedUncertain.kind, "found");
+    if (retainedUncertain.kind === "found") {
+      assert.equal(retainedUncertain.receipt.outcome, "completed");
+      assert.equal(retainedUncertain.receipt.anomalyCode, "none");
+    }
+    assert.equal(uncertainFixture.observations.dispatches, 1, "readback is storage-only");
     await pool.end(); poolEnded = true;
     const fresh = new PgPool(config);
     try {
