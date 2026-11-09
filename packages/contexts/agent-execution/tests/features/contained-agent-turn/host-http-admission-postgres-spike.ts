@@ -68,9 +68,21 @@ export const proveDisposablePostgresAdmissionSpike = async (databaseUrl: string)
       assert.equal((await b.query(claim, args(newOperation, "attempt", "request", "legitimate-owner"))).rowCount, 1,
         "an independent operation remains admissible; no false rejection");
 
-      const foreignKey = digest("foreign-tenant/project/deployment", "operation");
-      assert.equal((await b.query(claim, args(foreignKey, "attempt", "request", "foreign-owner"))).rowCount, 1,
-        "foreign scope must not alias the original durable identity");
+      // Scope separation here proves only collision-free operation identity,
+      // NOT tenant read isolation or RLS (this is a disposable SQL-only spike).
+      for (const foreignScope of [
+        "foreign-tenant/project/deployment", "tenant/foreign-project/deployment",
+        "tenant/project/foreign-deployment",
+      ] as const) {
+        const foreignKey = digest(foreignScope, "operation");
+        assert.notEqual(foreignKey, key, "different captured scope must have a different intent key");
+        assert.equal((await b.query(claim, args(foreignKey, "attempt", "request", "foreign-owner"))).rowCount, 1,
+          "a distinct scope can reserve the same operation ID independently");
+        assert.equal((await a.query(claim, args(foreignKey, "new-attempt", "changed-request", "intruder"))).rowCount, 0,
+          "a different attempt and payload cannot reclaim that scope's original intent");
+      }
+      assert.equal((await b.query(claim, args(key, "foreign-attempt", "request", "foreign-owner"))).rowCount, 0,
+        "foreign-scope claims must not disturb the original scope's reservation");
     } finally {a.release(); b.release();}
     // A claim in a transaction that dies BEFORE any provider effect must
     // roll back. This is distinct from a committed UNKNOWN claim: only the
