@@ -13,6 +13,11 @@ const claim = `INSERT INTO host_http_egress.m08_admission_spike
   VALUES ($1, $2, $3, $4) ON CONFLICT (intent_key) DO NOTHING RETURNING owner_id`;
 const args = (key: string, attempt: string, request: string, owner: string): string[] =>
   [key, attempt, digest(request), owner];
+// Hash each scope component separately; slash-joined strings can alias distinct scopes.
+type Scope = Readonly<{tenantId: string; projectId: string; deploymentId: string}>;
+const scope: Scope = {tenantId: "tenant", projectId: "project", deploymentId: "deployment"};
+const operationKey = (ownerScope: Scope, operation: string) =>
+  digest(ownerScope.tenantId, ownerScope.projectId, ownerScope.deploymentId, operation);
 
 /** Called only after the parent verifies a fresh, isolated disposable PG database.
  * An atomic pre-effect reservation has one winner, even under concurrent owners.
@@ -33,7 +38,7 @@ export const proveDisposablePostgresAdmissionSpike = async (databaseUrl: string)
       const [pidA, pidB] = await Promise.all([a.query("SELECT pg_backend_pid() AS pid"),
         b.query("SELECT pg_backend_pid() AS pid")]);
       assert.notEqual(pidA.rows[0]?.pid, pidB.rows[0]?.pid, "distinct PostgreSQL server backends");
-      const key = digest("tenant/project/deployment", "operation");
+      const key = operationKey(scope, "operation");
       const raced = await Promise.all([a.query(claim, args(key, "attempt", "request", "host-A")), b.query(claim, args(key, "attempt", "request", "host-B"))]);
       assert.deepEqual(raced.map(result => result.rowCount).toSorted(), [0, 1],
         "concurrent SQL claims must have exactly one durable winner");
@@ -44,7 +49,7 @@ export const proveDisposablePostgresAdmissionSpike = async (databaseUrl: string)
       assert.equal((await a.query(claim, args(key, "new-attempt", "request", "restarted-host"))).rowCount, 0,
         "restarted Host cannot reacquire previously claimed intent");
 
-      const unknownKey = digest("tenant/project/deployment", "operation-unknown");
+      const unknownKey = operationKey(scope, "operation-unknown");
       await a.query("BEGIN");
       assert.equal((await a.query(claim, args(unknownKey, "attempt", "request", "host-A-before-ack-loss"))).rowCount, 1);
       await a.query("COMMIT");
@@ -64,17 +69,17 @@ export const proveDisposablePostgresAdmissionSpike = async (databaseUrl: string)
       assert.deepEqual(retained.rows.map(row => [row.owner_id, row.first_attempt_id, row.request_fingerprint]),
         [["host-A-before-ack-loss", "attempt", digest("request")]],
         "readback must preserve original owner, attempt and request fingerprint");
-      const newOperation = digest("tenant/project/deployment", "genuinely-new-operation");
+      const newOperation = operationKey(scope, "genuinely-new-operation");
       assert.equal((await b.query(claim, args(newOperation, "attempt", "request", "legitimate-owner"))).rowCount, 1,
         "an independent operation remains admissible; no false rejection");
 
       // Scope separation here proves only collision-free operation identity,
       // NOT tenant read isolation or RLS (this is a disposable SQL-only spike).
       for (const foreignScope of [
-        "foreign-tenant/project/deployment", "tenant/foreign-project/deployment",
-        "tenant/project/foreign-deployment",
-      ] as const) {
-        const foreignKey = digest(foreignScope, "operation");
+        {...scope, tenantId: "foreign-tenant"}, {...scope, projectId: "foreign-project"},
+        {...scope, deploymentId: "foreign-deployment"},
+      ]) {
+        const foreignKey = operationKey(foreignScope, "operation");
         assert.notEqual(foreignKey, key, "different captured scope must have a different intent key");
         assert.equal((await b.query(claim, args(foreignKey, "attempt", "request", "foreign-owner"))).rowCount, 1,
           "a distinct scope can reserve the same operation ID independently");
@@ -83,6 +88,15 @@ export const proveDisposablePostgresAdmissionSpike = async (databaseUrl: string)
       }
       assert.equal((await b.query(claim, args(key, "foreign-attempt", "request", "foreign-owner"))).rowCount, 0,
         "foreign-scope claims must not disturb the original scope's reservation");
+      const slashA = {tenantId: "tenant/project", projectId: "deployment", deploymentId: "x"};
+      const slashB = {tenantId: "tenant", projectId: "project/deployment", deploymentId: "x"};
+      assert.equal(Object.values(slashA).join("/"), Object.values(slashB).join("/"),
+        "adversarial scope tuples must collide under unsafe slash concatenation");
+      const keyA = operationKey(slashA, "operation"); const keyB = operationKey(slashB, "operation");
+      assert.notEqual(keyA, keyB, "component-framed scope identity must not alias");
+      assert.equal((await a.query(claim, args(keyA, "attempt", "request", "slash-A"))).rowCount, 1);
+      assert.equal((await b.query(claim, args(keyB, "attempt", "request", "slash-B"))).rowCount, 1,
+        "distinct tenant/project tuples must not suppress each other's valid operation");
     } finally {a.release(); b.release();}
     // A claim in a transaction that dies BEFORE any provider effect must
     // roll back. This is distinct from a committed UNKNOWN claim: only the
@@ -91,7 +105,7 @@ export const proveDisposablePostgresAdmissionSpike = async (databaseUrl: string)
     crashed.on("error", () => {}); // The backend is deliberately terminated below.
     await crashed.connect();
     try {
-      const abortKey = digest("tenant/project/deployment", "aborted-before-effect");
+      const abortKey = operationKey(scope, "aborted-before-effect");
       await crashed.query("BEGIN");
       assert.equal((await crashed.query(claim, args(abortKey, "attempt", "request", "aborted-host"))).rowCount, 1);
       const backendPid = (await crashed.query("SELECT pg_backend_pid() AS pid")).rows[0]?.pid;
@@ -113,7 +127,7 @@ export const proveDisposablePostgresAdmissionSpike = async (databaseUrl: string)
     committed.on("error", () => {}); // Termination is deliberate in this disposable fixture.
     await committed.connect();
     try {
-      const durableKey = digest("tenant/project/deployment", "committed-before-crash");
+      const durableKey = operationKey(scope, "committed-before-crash");
       await committed.query("BEGIN");
       assert.equal((await committed.query(claim, args(durableKey, "attempt", "request", "committed-owner"))).rowCount, 1);
       await committed.query("COMMIT");
