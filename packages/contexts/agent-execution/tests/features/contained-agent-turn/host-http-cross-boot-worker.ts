@@ -5,16 +5,17 @@ import {PostgresHttpEgressEvidence} from "../../../dist/features/contained-agent
 import {openAuthenticatedHostHttpEgressSession} from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/host-http-egress-session.js";
 import {chunks, createEgressFixture} from "./http-egress-test-fixture.ts";
 
-type ReplayCommand = Readonly<{databaseUrl: string; requestId: string}>;
+type ReplayCommand = Readonly<{databaseUrl: string; originalRequestId: string; requestId: string}>;
 const scope = {tenantId: "tenant-1", projectId: "project-1", deploymentId: "deployment-1"};
 
-const replay = async ({databaseUrl, requestId}: ReplayCommand) => {
+const replay = async ({databaseUrl, originalRequestId, requestId}: ReplayCommand) => {
   const pool = new Pool({connectionString: databaseUrl, connectionTimeoutMillis: 5_000, max: 2});
   try {
     const fixture = createEgressFixture();
     const evidence = new PostgresHttpEgressEvidence(pool, scope);
     const selector = {operationId: fixture.operation.operationId, attemptId: fixture.operation.attemptId, requestId};
-    const original = await evidence.read(selector);
+    const originalSelector = {...selector, requestId: originalRequestId};
+    const original = await evidence.read(originalSelector);
     const host = openAuthenticatedHostHttpEgressSession({...fixture.ports, evidence,
       identity: {...fixture.ports.identity, hostBootId: "boot-B-after-UNKNOWN", liveProcessSessionIdentity: {}}});
     try {
@@ -23,12 +24,14 @@ const replay = async ({databaseUrl, requestId}: ReplayCommand) => {
       const receipt = await host.execute({...fixture.operation,
         expectedRequest: {...fixture.operation.expectedRequest, requestId},
         connection: {...fixture.operation.connection, request: chunks([wire])}});
-      const after = await evidence.read(selector);
+      const after = await evidence.read(originalSelector);
+      const replayReceipt = await evidence.read(selector);
       return {ok: true, pid: process.pid, originalKind: original.kind,
         dispatches: fixture.observations.dispatches, outcome: receipt.outcome,
         materializationInputs: fixture.observations.materializationInputs.length,
         credentialRenders: fixture.observations.renders,
-        retainedSame: JSON.stringify(after) === JSON.stringify(original)};
+        retainedSame: JSON.stringify(after) === JSON.stringify(original),
+        replayReceiptKind: replayReceipt.kind};
     } finally {host.close();}
   } finally {await pool.end();}
 };

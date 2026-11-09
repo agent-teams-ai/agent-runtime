@@ -166,16 +166,18 @@ test("broker acknowledgement loss does not rewrite original or retry provider", 
 // Keep this test on a separate Draft stack until a real durable owner exists.
 type CrossBootReport = Readonly<{
   ok: boolean; pid?: number; originalKind?: string; dispatches?: number;
-  outcome?: string; materializationInputs?: number; credentialRenders?: number; retainedSame?: boolean;
+  outcome?: string; materializationInputs?: number; credentialRenders?: number;
+  retainedSame?: boolean; replayReceiptKind?: string;
 }>;
 
-// Unlike an independent Host session in one JS heap, fork guarantees a second
-// process/boot and an independently constructed pg Pool. No shared memory
-// lease can accidentally satisfy this deliberately RED cross-process oracle.
-const requireCrossBootUnknownNoReplay = async (databaseUrl: string, requestId: string): Promise<void> => {
+// Each replay uses a separate OS process, boot identity and PostgreSQL Pool.
+// The second replay changes only the request handle: the captured operation
+// remains UNKNOWN and must not acquire new Provider Access or dispatch again.
+const launchCrossBoot = async (databaseUrl: string, originalRequestId: string,
+  requestId: string): Promise<CrossBootReport> => {
   const worker = fork(new URL("./host-http-cross-boot-worker.ts", import.meta.url), [],
     {execArgv: [], stdio: ["ignore", "ignore", "ignore", "ipc"]});
-  const result = await new Promise<CrossBootReport>((resolve, reject) => {
+  return await new Promise<CrossBootReport>((resolve, reject) => {
     let message: CrossBootReport | undefined;
     const timeout = setTimeout(() => {worker.kill(); reject(new Error("cross-boot replay worker timed out"));}, 20_000);
     worker.once("message", (reply: CrossBootReport) => {message = reply;});
@@ -186,24 +188,43 @@ const requireCrossBootUnknownNoReplay = async (databaseUrl: string, requestId: s
         reject(new Error("cross-boot worker exited " + String(code ?? signal) + " without evidence"));
       } else {resolve(message);}
     });
-    worker.send({databaseUrl, requestId}, error => {
+    worker.send({databaseUrl, originalRequestId, requestId}, error => {
       if (error) {clearTimeout(timeout); worker.kill(); reject(error);}
     });
   });
-  assert.equal(result.ok, true, "independent Host process must return its actual observations");
-  assert.notEqual(result.pid, process.pid, "Host B must run in a distinct OS process");
-  assert.equal(result.originalKind, "found", "UNKNOWN in A left a committed receipt for B to reconcile");
-  // Storage immutability must be proved even while the security oracle stays
-  // deliberately RED. Report all provider effects together, not only the first
-  // failing assertion, so a future fix cannot hide a credential side effect.
-  assert.equal(result.retainedSame, true, "retained PostgreSQL receipt must stay immutable");
-  assert.deepEqual({
-    duplicateDispatches: result.dispatches,
-    duplicateMaterializations: result.materializationInputs,
-    duplicateCredentialRenders: result.credentialRenders,
-    completedAgain: result.outcome === "completed",
-  }, {duplicateDispatches: 0, duplicateMaterializations: 0, duplicateCredentialRenders: 0, completedAgain: false},
-  "M08 RED: independent Host must not dispatch, authorize, render credentials or complete UNKNOWN");
+};
+
+const requireCrossBootUnknownNoReplay = async (databaseUrl: string, originalRequestId: string): Promise<void> => {
+  const observed: Array<Readonly<{
+    variant: string; duplicateDispatches?: number; duplicateMaterializations?: number;
+    duplicateCredentialRenders?: number; completedAgain: boolean; replayReceiptKind?: string;
+  }>> = [];
+  for (const variant of [
+    {name: "same-request", requestId: originalRequestId},
+    {name: "changed-request", requestId: originalRequestId + "-new-host-handle"},
+  ]) {
+    const result = await launchCrossBoot(databaseUrl, originalRequestId, variant.requestId);
+    assert.equal(result.ok, true, "independent Host process must return its actual observations");
+    assert.notEqual(result.pid, process.pid, "Host B must run in a distinct OS process");
+    assert.equal(result.originalKind, "found", "UNKNOWN in A left a committed receipt for B to reconcile");
+    assert.equal(result.retainedSame, true, "original PostgreSQL receipt must stay immutable");
+    observed.push({
+      variant: variant.name,
+      duplicateDispatches: result.dispatches,
+      duplicateMaterializations: result.materializationInputs,
+      duplicateCredentialRenders: result.credentialRenders,
+      completedAgain: result.outcome === "completed",
+      replayReceiptKind: result.replayReceiptKind,
+    });
+  }
+  // Both runs complete before the deliberate RED assertion so neither a
+  // different requestId nor a first assertion can conceal provider effects.
+  assert.deepEqual(observed, [
+    {variant: "same-request", duplicateDispatches: 0, duplicateMaterializations: 0,
+      duplicateCredentialRenders: 0, completedAgain: false, replayReceiptKind: "found"},
+    {variant: "changed-request", duplicateDispatches: 0, duplicateMaterializations: 0,
+      duplicateCredentialRenders: 0, completedAgain: false, replayReceiptKind: "missing"},
+  ], "M08 RED: no cross-Host UNKNOWN replay, including changed request handles");
 };
 
 const assertForeignScopeReadIsolation = async (pool: Pool, selector: {operationId: string; attemptId: string; requestId: string}) => {
