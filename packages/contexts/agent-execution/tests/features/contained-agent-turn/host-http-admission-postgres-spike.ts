@@ -112,10 +112,19 @@ export const proveDisposablePostgresAdmissionSpike = async (databaseUrl: string)
       assert.equal(typeof backendPid, "number");
       const stopped = await second.query("SELECT pg_terminate_backend($1) AS stopped", [backendPid]);
       assert.equal(stopped.rows[0]?.stopped, true, "disposable checked-out SQL backend was killed");
-      assert.equal((await second.query(claim, args(abortKey, "new-attempt", "request", "verified-no-effect-recovery"))).rowCount, 1,
-        "uncommitted claim must be released by actual backend termination");
-      assert.equal((await second.query(claim, args(abortKey, "another-attempt", "request", "second-recovery"))).rowCount, 0,
-        "recovery claim is durable and cannot be taken by another Host");
+      const recovery = await Promise.all([
+        first.query(claim, args(abortKey, "new-attempt-A", "request", "recovery-host-A")),
+        second.query(claim, args(abortKey, "new-attempt-B", "request", "recovery-host-B")),
+      ]);
+      assert.deepEqual(recovery.map(result => result.rowCount).toSorted(), [0, 1],
+        "after a verified pre-effect rollback, concurrent recovery admits exactly one owner");
+      const recovered = await second.query(
+        "SELECT owner_id FROM host_http_egress.m08_admission_spike WHERE intent_key=$1", [abortKey]);
+      assert.equal(recovered.rowCount, 1);
+      assert.ok(["recovery-host-A", "recovery-host-B"].includes(recovered.rows[0]?.owner_id),
+        "recovery must preserve the one committed owner");
+      assert.equal((await first.query(claim, args(abortKey, "another-attempt", "request", "second-recovery"))).rowCount, 0,
+        "a durable recovery winner must deny further attempts");
     } finally {
       // Connection-terminated is expected during disposal of this TEST Client.
       await crashed.end().catch(() => {});
@@ -135,8 +144,12 @@ export const proveDisposablePostgresAdmissionSpike = async (databaseUrl: string)
       assert.equal(typeof backendPid, "number");
       const stopped = await second.query("SELECT pg_terminate_backend($1) AS stopped", [backendPid]);
       assert.equal(stopped.rows[0]?.stopped, true, "committed SQL backend was killed");
-      assert.equal((await second.query(claim, args(durableKey, "new-attempt", "request", "post-crash-owner"))).rowCount, 0,
-        "committed intent must not be reclaimed after backend termination");
+      const blocked = await Promise.all([
+        first.query(claim, args(durableKey, "new-attempt", "request", "post-crash-owner-A")),
+        second.query(claim, args(durableKey, "drifted-attempt", "changed-request", "post-crash-owner-B")),
+      ]);
+      assert.deepEqual(blocked.map(result => result.rowCount), [0, 0],
+        "both same-request and drifted concurrent retries must reject a committed UNKNOWN intent");
       const retained = await second.query(
         "SELECT owner_id FROM host_http_egress.m08_admission_spike WHERE intent_key=$1", [durableKey]);
       assert.deepEqual(retained.rows.map(row => row.owner_id), ["committed-owner"],
