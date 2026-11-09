@@ -171,7 +171,7 @@ type CrossBootReport = Readonly<{
 }>;
 
 // Each replay uses a separate OS process, boot identity and PostgreSQL Pool.
-// The second replay changes only the request handle: the captured operation
+// One replay changes only the request handle: the captured operation
 // remains UNKNOWN and must not acquire new Provider Access or dispatch again.
 const launchCrossBoot = async (databaseUrl: string, originalRequestId: string,
   requestId: string): Promise<CrossBootReport> => {
@@ -199,11 +199,18 @@ const requireCrossBootUnknownNoReplay = async (databaseUrl: string, originalRequ
     variant: string; duplicateDispatches?: number; duplicateMaterializations?: number;
     duplicateCredentialRenders?: number; completedAgain: boolean; replayReceiptKind?: string;
   }>> = [];
-  for (const variant of [
+  // Race both independent Host boots against the same retained UNKNOWN
+  // operation; a changed request handle must not bypass pre-effect admission.
+  const variants = [
     {name: "same-request", requestId: originalRequestId},
     {name: "changed-request", requestId: originalRequestId + "-new-host-handle"},
-  ]) {
-    const result = await launchCrossBoot(databaseUrl, originalRequestId, variant.requestId);
+  ] as const;
+  const reports = await Promise.all(variants.map(variant =>
+    launchCrossBoot(databaseUrl, originalRequestId, variant.requestId)));
+  assert.notEqual(reports[0]?.pid, reports[1]?.pid,
+    "simultaneous replay attempts must use distinct Host OS processes");
+  for (const [index, variant] of variants.entries()) {
+    const result = reports[index]!;
     assert.equal(result.ok, true, "independent Host process must return its actual observations");
     assert.notEqual(result.pid, process.pid, "Host B must run in a distinct OS process");
     assert.equal(result.originalKind, "found", "UNKNOWN in A left a committed receipt for B to reconcile");
