@@ -49,6 +49,30 @@ export const proveDisposablePostgresAdmissionSpike = async (databaseUrl: string)
       assert.equal((await a.query(claim, args(key, "new-attempt", "request", "restarted-host"))).rowCount, 0,
         "restarted Host cannot reacquire previously claimed intent");
 
+      // A second SQL backend cannot win while the first owner holds an
+      // uncommitted pre-effect claim. Lock contention is not an approval to
+      // bypass admission; after the first COMMIT the rival still loses.
+      const pendingKey = operationKey(scope, "pending-pre-effect");
+      await a.query("BEGIN");
+      try {
+        assert.equal((await a.query(claim, args(pendingKey, "attempt", "request", "pending-host-A"))).rowCount, 1);
+        await b.query("SET lock_timeout = '250ms'");
+        try {
+          await assert.rejects(b.query(claim, args(pendingKey, "attempt", "request", "racing-host-B")),
+            (error: unknown) => error instanceof Error && "code" in error && error.code === "55P03",
+            "competing pre-effect claim must not bypass an uncommitted owner");
+        } finally {await b.query("RESET lock_timeout");}
+        await a.query("COMMIT");
+      } catch (error) {
+        await a.query("ROLLBACK").catch(() => {});
+        throw error;
+      }
+      assert.equal((await b.query(claim, args(pendingKey, "retry", "changed-request", "racing-host-B"))).rowCount, 0,
+        "once the pending owner commits, neither retry nor request drift may reclaim the intent");
+      const pendingWinner = await b.query(
+        "SELECT owner_id FROM host_http_egress.m08_admission_spike WHERE intent_key=$1", [pendingKey]);
+      assert.deepEqual(pendingWinner.rows.map(row => row.owner_id), ["pending-host-A"]);
+
       const unknownKey = operationKey(scope, "operation-unknown");
       await a.query("BEGIN");
       assert.equal((await a.query(claim, args(unknownKey, "attempt", "request", "host-A-before-ack-loss"))).rowCount, 1);
