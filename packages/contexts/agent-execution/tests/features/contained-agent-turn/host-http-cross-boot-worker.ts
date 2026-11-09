@@ -27,6 +27,7 @@ const replay = async ({databaseUrl, requestId}: ReplayCommand) => {
       return {ok: true, pid: process.pid, originalKind: original.kind,
         dispatches: fixture.observations.dispatches, outcome: receipt.outcome,
         materializationInputs: fixture.observations.materializationInputs.length,
+        credentialRenders: fixture.observations.renders,
         retainedSame: JSON.stringify(after) === JSON.stringify(original)};
     } finally {host.close();}
   } finally {await pool.end();}

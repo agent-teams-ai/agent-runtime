@@ -166,7 +166,7 @@ test("broker acknowledgement loss does not rewrite original or retry provider", 
 // Keep this test on a separate Draft stack until a real durable owner exists.
 type CrossBootReport = Readonly<{
   ok: boolean; pid?: number; originalKind?: string; dispatches?: number;
-  outcome?: string; materializationInputs?: number; retainedSame?: boolean;
+  outcome?: string; materializationInputs?: number; credentialRenders?: number; retainedSame?: boolean;
 }>;
 
 // Unlike an independent Host session in one JS heap, fork guarantees a second
@@ -200,9 +200,10 @@ const requireCrossBootUnknownNoReplay = async (databaseUrl: string, requestId: s
   assert.deepEqual({
     duplicateDispatches: result.dispatches,
     duplicateMaterializations: result.materializationInputs,
+    duplicateCredentialRenders: result.credentialRenders,
     completedAgain: result.outcome === "completed",
-  }, {duplicateDispatches: 0, duplicateMaterializations: 0, completedAgain: false},
-  "M08 RED: independent Host must not dispatch, materialize or complete the same UNKNOWN intent");
+  }, {duplicateDispatches: 0, duplicateMaterializations: 0, duplicateCredentialRenders: 0, completedAgain: false},
+  "M08 RED: independent Host must not dispatch, authorize, render credentials or complete UNKNOWN");
 };
 
 const assertForeignScopeReadIsolation = async (pool: Pool, selector: {operationId: string; attemptId: string; requestId: string}) => {
