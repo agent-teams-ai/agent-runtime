@@ -205,8 +205,17 @@ const requireCrossBootUnknownNoReplay = async (databaseUrl: string, originalRequ
     {name: "same-request", requestId: originalRequestId},
     {name: "changed-request", requestId: originalRequestId + "-new-host-handle"},
   ] as const;
-  const reports = await Promise.all(variants.map(variant =>
+  // Wait for both OS processes even if one fails: the sibling's effects
+  // must remain visible in diagnostics, never hidden by fail-fast Promise.all.
+  const settled = await Promise.allSettled(variants.map(variant =>
     launchCrossBoot(databaseUrl, originalRequestId, variant.requestId)));
+  const reports = settled.map(result => result.status === "fulfilled" ? result.value : undefined);
+  const failures = settled.flatMap((result, index) =>
+    result.status === "rejected" ? [variants[index]!.name + ": " + String(result.reason)]
+      : result.value.ok ? [] : [variants[index]!.name + ": no worker evidence"]);
+  assert.deepEqual(failures, [],
+    "both replay worker outcomes: " + JSON.stringify(reports.map((report, index) =>
+      ({variant: variants[index]!.name, report}))));
   assert.notEqual(reports[0]?.pid, reports[1]?.pid,
     "simultaneous replay attempts must use distinct Host OS processes");
   for (const [index, variant] of variants.entries()) {
