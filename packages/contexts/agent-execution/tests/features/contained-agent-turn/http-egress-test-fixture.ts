@@ -130,7 +130,7 @@ export const createEgressFixture = (options: FixtureOptions = {}): EgressFixture
       runtimeAuthorizationId: `rs-${ids}`, boundaryUseId: `boundary-${ids}`, connectionAttemptId: `connection-${ids}`,
       streamId: `stream-${ids}`});}}), providerAccessSnapshot: snapshot, route,
     providerAccess: Object.freeze({createRequestDigest: createMaterializationRequestDigest,
-      authorize: async input => {observations.order.push("authorize-materialization");
+      authorize: async (input: Parameters<HttpEgressBrokerPorts['providerAccess']['authorize']>[0]) => {observations.order.push("authorize-materialization");
       observations.materializationInputs.push(input);
       const {requestDigest, ...unsigned} = input;
       if (requestDigest !== await createMaterializationRequestDigest(unsigned)) {
@@ -138,7 +138,7 @@ export const createEgressFixture = (options: FixtureOptions = {}): EgressFixture
       }
       materializationReceipt = Object.freeze({...input, decision: "authorized" as const, rejectionReason: null,
         ...options.paReceiptChange}) as HostHttpMaterializationReceipt;
-      return Object.freeze({kind: "authorized" as const, receipt: materializationReceipt});}, observe: async input => {
+      return Object.freeze({kind: "authorized" as const, receipt: materializationReceipt});}, observe: async (input: Parameters<HttpEgressBrokerPorts['providerAccess']['observe']>[0]) => {
       observations.order.push("observe-materialization");
       observationCount += 1;
       if ((observationCount === 1 && options.firstObserveDenied)
@@ -152,7 +152,7 @@ export const createEgressFixture = (options: FixtureOptions = {}): EgressFixture
     materializer: Object.freeze({render: async () => {observations.order.push("render-credential"); observations.renders += 1;
       if (options.renderThrows || credentialUsed) {throw new Error("synthetic credential failure");} credentialUsed = true;
       return Object.freeze([Object.freeze({name: "authorization", valueBytes: bytes(`Bearer ${SECRET_MARKER}`)})]);}}),
-    runtimeSecurity: Object.freeze({requestProvisional: async input => {observations.order.push("provisional");
+    runtimeSecurity: Object.freeze({requestProvisional: async (input: Parameters<HttpEgressBrokerPorts['runtimeSecurity']['requestProvisional']>[0]) => {observations.order.push("provisional");
       observations.provisionalInputs.push(input);
       if (provisionalOption === "timeout") {throw new Error("synthetic timeout");}
       if (provisionalOption.decision === "deny") {return Object.freeze({status: "denied" as const});}
@@ -167,7 +167,7 @@ export const createEgressFixture = (options: FixtureOptions = {}): EgressFixture
         decisionDigest: String(provisionalOption.receiptDigest), signature});
       provisionalDecision = options.mutateProvisional?.(provisionalDecision) ?? provisionalDecision;
       return Object.freeze({status: "authorized" as const, decision: provisionalDecision});},
-      authorizeFirstApplicationByte: async input => {observations.order.push("final");
+      authorizeFirstApplicationByte: async (input: Parameters<HttpEgressBrokerPorts['runtimeSecurity']['authorizeFirstApplicationByte']>[0]) => {observations.order.push("final");
         observations.finalAuthorizationInputs.push(input); if (finalOption === "timeout") {throw new Error("synthetic timeout");}
         if (typeof finalOption === "function") {const legacy = finalOption(input); if (legacy?.decision === "deny") {
           return Object.freeze({status: "denied" as const});}}
@@ -193,6 +193,7 @@ export const createEgressFixture = (options: FixtureOptions = {}): EgressFixture
         grant = options.mutateGrant?.(grant) ?? grant;
         return Object.freeze({status: "authorized" as const, grant});}}),
     verifier: Object.freeze({signingKey: key, verifyProvisionalDecision: () => (options.provisionalVerifier ?? true)
+      && provisionalOption !== "timeout"
       && typeof provisionalOption.receiptDigest === "string"
       && provisionalOption.policyGeneration === defaultRoute.policyGeneration
       && provisionalOption.keyGeneration === defaultRoute.keyGeneration
@@ -235,7 +236,7 @@ export const createEgressFixture = (options: FixtureOptions = {}): EgressFixture
           options.upstreamClosure ?? "closed", receiptDigest: "upstream-closure-digest"});})(); return closeResult;}});}}),
     clock: Object.freeze({now: () => options.deadlineNow ?? 0, within: async <T>(_deadline: number,
       operation: () => Promise<T>, signal?: AbortSignal): Promise<T> => {signal?.throwIfAborted(); return await operation();}}),
-    evidence: Object.freeze({digest, record: async receipt => {observations.order.push("record-evidence");
+    evidence: Object.freeze({digest, record: async (receipt: HttpEgressReceipt) => {observations.order.push("record-evidence");
       observations.receipts.push(receipt); if (options.evidence === "throw") {throw new Error("synthetic lost ack");}
       return options.evidence ?? "recorded";}}),
   };

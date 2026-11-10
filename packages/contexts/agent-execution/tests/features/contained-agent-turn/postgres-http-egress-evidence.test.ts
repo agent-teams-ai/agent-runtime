@@ -198,8 +198,8 @@ const launchCrossBoot = async (databaseUrl: string, originalAttemptId: string, o
 const requireCrossBootUnknownNoReplay = async (databaseUrl: string, originalAttemptId: string,
   originalRequestId: string): Promise<void> => {
   const observed: Array<Readonly<{
-    variant: string; duplicateDispatches?: number; duplicateMaterializations?: number;
-    duplicateCredentialRenders?: number; completedAgain: boolean; replayReceiptKind?: string;
+    variant: string; duplicateDispatches?: number | undefined; duplicateMaterializations?: number | undefined;
+    duplicateCredentialRenders?: number | undefined; completedAgain: boolean; replayReceiptKind?: string | undefined;
   }>> = [];
   // Race three independent Host boots against the same retained UNKNOWN
   // operation; changing a request handle OR attempt must not bypass admission.
