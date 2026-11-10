@@ -193,8 +193,7 @@ export const createEgressFixture = (options: FixtureOptions = {}): EgressFixture
         grant = options.mutateGrant?.(grant) ?? grant;
         return Object.freeze({status: "authorized" as const, grant});}}),
     verifier: Object.freeze({signingKey: key, verifyProvisionalDecision: () => (options.provisionalVerifier ?? true)
-      && provisionalOption !== "timeout"
-      && typeof provisionalOption.receiptDigest === "string"
+      && provisionalOption !== "timeout" && typeof provisionalOption.receiptDigest === "string"
       && provisionalOption.policyGeneration === defaultRoute.policyGeneration
       && provisionalOption.keyGeneration === defaultRoute.keyGeneration
       && provisionalOption.routeGeneration === defaultRoute.routeGeneration
