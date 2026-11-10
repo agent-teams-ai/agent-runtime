@@ -5,6 +5,10 @@ on:
     paths:
       - ".github/workflows/host-http-evidence-native-pg.yml"
       - "packages/contexts/agent-execution/tests/features/contained-agent-turn/postgres-http-egress-evidence.test.ts"
+      - "packages/contexts/agent-execution/tests/features/contained-agent-turn/host-http-cross-boot-worker.ts"
+      - "packages/contexts/agent-execution/tests/features/contained-agent-turn/host-http-admission-postgres-spike.ts"
+      - "packages/contexts/agent-execution/tests/features/contained-agent-turn/http-egress-test-fixture.ts"
+      - "tsconfig.json"
       - "packages/contexts/agent-execution/src/features/contained-agent-turn/**"
 
 permissions:
