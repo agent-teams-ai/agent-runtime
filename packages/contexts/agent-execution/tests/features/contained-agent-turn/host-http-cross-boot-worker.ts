@@ -19,7 +19,8 @@ const replay = async ({databaseUrl, originalAttemptId, originalRequestId, attemp
     const selector = {...originalSelector, attemptId, requestId};
     const original = await evidence.read(originalSelector);
     const host = openAuthenticatedHostHttpEgressSession({...fixture.ports, evidence,
-      identity: {...fixture.ports.identity, attemptId, hostBootId: "boot-B-after-UNKNOWN",
+      // Distinct concurrent OS processes must not reuse a synthetic Host boot ID.
+      identity: {...fixture.ports.identity, attemptId, hostBootId: `boot-B-after-UNKNOWN-${process.pid}`,
         liveProcessSessionIdentity: {}}});
     try {
       const bearer = host.nativeBearerToken();
