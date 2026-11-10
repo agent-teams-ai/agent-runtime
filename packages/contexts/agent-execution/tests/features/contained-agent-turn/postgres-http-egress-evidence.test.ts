@@ -171,10 +171,10 @@ type CrossBootReport = Readonly<{
 }>;
 
 // Each replay uses a separate OS process, boot identity and PostgreSQL Pool.
-// One replay changes only the request handle: the captured operation
-// remains UNKNOWN and must not acquire new Provider Access or dispatch again.
-const launchCrossBoot = async (databaseUrl: string, originalRequestId: string,
-  requestId: string): Promise<CrossBootReport> => {
+// Changing either a request handle or an attempt identity cannot escape a
+// captured UNKNOWN operation and acquire fresh Provider Access or dispatch.
+const launchCrossBoot = async (databaseUrl: string, originalAttemptId: string, originalRequestId: string,
+  variant: Readonly<{attemptId: string; requestId: string}>): Promise<CrossBootReport> => {
   const worker = fork(new URL("./host-http-cross-boot-worker.ts", import.meta.url), [],
     {execArgv: [], stdio: ["ignore", "ignore", "ignore", "ipc"]});
   return await new Promise<CrossBootReport>((resolve, reject) => {
@@ -188,35 +188,40 @@ const launchCrossBoot = async (databaseUrl: string, originalRequestId: string,
         reject(new Error("cross-boot worker exited " + String(code ?? signal) + " without evidence"));
       } else {resolve(message);}
     });
-    worker.send({databaseUrl, originalRequestId, requestId}, error => {
+    worker.send({databaseUrl, originalAttemptId, originalRequestId,
+      attemptId: variant.attemptId, requestId: variant.requestId}, error => {
       if (error) {clearTimeout(timeout); worker.kill(); reject(error);}
     });
   });
 };
 
-const requireCrossBootUnknownNoReplay = async (databaseUrl: string, originalRequestId: string): Promise<void> => {
+const requireCrossBootUnknownNoReplay = async (databaseUrl: string, originalAttemptId: string,
+  originalRequestId: string): Promise<void> => {
   const observed: Array<Readonly<{
     variant: string; duplicateDispatches?: number; duplicateMaterializations?: number;
     duplicateCredentialRenders?: number; completedAgain: boolean; replayReceiptKind?: string;
   }>> = [];
-  // Race both independent Host boots against the same retained UNKNOWN
-  // operation; a changed request handle must not bypass pre-effect admission.
+  // Race three independent Host boots against the same retained UNKNOWN
+  // operation; changing a request handle OR attempt must not bypass admission.
   const variants = [
-    {name: "same-request", requestId: originalRequestId},
-    {name: "changed-request", requestId: originalRequestId + "-new-host-handle"},
+    {name: "same-request", attemptId: originalAttemptId, requestId: originalRequestId},
+    {name: "changed-request", attemptId: originalAttemptId,
+      requestId: originalRequestId + "-new-host-handle"},
+    {name: "changed-attempt", attemptId: originalAttemptId + "-new-host-attempt",
+      requestId: originalRequestId},
   ] as const;
-  // Wait for both OS processes even if one fails: the sibling's effects
+  // Wait for all OS processes even if one fails: a sibling's effects
   // must remain visible in diagnostics, never hidden by fail-fast Promise.all.
   const settled = await Promise.allSettled(variants.map(variant =>
-    launchCrossBoot(databaseUrl, originalRequestId, variant.requestId)));
+    launchCrossBoot(databaseUrl, originalAttemptId, originalRequestId, variant)));
   const reports = settled.map(result => result.status === "fulfilled" ? result.value : undefined);
   const failures = settled.flatMap((result, index) =>
     result.status === "rejected" ? [variants[index]!.name + ": " + String(result.reason)]
       : result.value.ok ? [] : [variants[index]!.name + ": no worker evidence"]);
   assert.deepEqual(failures, [],
-    "both replay worker outcomes: " + JSON.stringify(reports.map((report, index) =>
+    "all replay worker outcomes: " + JSON.stringify(reports.map((report, index) =>
       ({variant: variants[index]!.name, report}))));
-  assert.notEqual(reports[0]?.pid, reports[1]?.pid,
+  assert.equal(new Set(reports.map(report => report?.pid)).size, variants.length,
     "simultaneous replay attempts must use distinct Host OS processes");
   for (const [index, variant] of variants.entries()) {
     const result = reports[index]!;
@@ -233,14 +238,16 @@ const requireCrossBootUnknownNoReplay = async (databaseUrl: string, originalRequ
       replayReceiptKind: result.replayReceiptKind,
     });
   }
-  // Both runs complete before the deliberate RED assertion so neither a
-  // different requestId nor a first assertion can conceal provider effects.
+  // All runs complete before the deliberate RED assertion so neither a
+  // changed handle, changed attempt nor early failure can conceal effects.
   assert.deepEqual(observed, [
     {variant: "same-request", duplicateDispatches: 0, duplicateMaterializations: 0,
       duplicateCredentialRenders: 0, completedAgain: false, replayReceiptKind: "found"},
     {variant: "changed-request", duplicateDispatches: 0, duplicateMaterializations: 0,
       duplicateCredentialRenders: 0, completedAgain: false, replayReceiptKind: "missing"},
-  ], "M08 RED: no cross-Host UNKNOWN replay, including changed request handles");
+    {variant: "changed-attempt", duplicateDispatches: 0, duplicateMaterializations: 0,
+      duplicateCredentialRenders: 0, completedAgain: false, replayReceiptKind: "missing"},
+  ], "M08 RED: no cross-Host UNKNOWN replay, including changed request and attempt identities");
 };
 
 const assertForeignScopeReadIsolation = async (pool: Pool, selector: {operationId: string; attemptId: string; requestId: string}) => {
@@ -530,7 +537,7 @@ test("real PostgreSQL race, ambiguous COMMIT and fresh-pool reload", {skip: !url
     // This neither wires nor qualifies a production pre-effect admission owner.
     await proveDisposablePostgresAdmissionSpike(url!);
     // RED oracle runs last, preserving the preceding native SQL regressions.
-    await requireCrossBootUnknownNoReplay(url!, uncertainRequestId);
+    await requireCrossBootUnknownNoReplay(url!, uncertainResult.attemptId, uncertainRequestId);
   } finally {if (!poolEnded) {await pool.end();}}
 });
 

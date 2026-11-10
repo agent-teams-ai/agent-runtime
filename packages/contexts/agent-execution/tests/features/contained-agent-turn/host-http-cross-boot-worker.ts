@@ -5,23 +5,26 @@ import {PostgresHttpEgressEvidence} from "../../../dist/features/contained-agent
 import {openAuthenticatedHostHttpEgressSession} from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/host-http-egress-session.js";
 import {chunks, createEgressFixture} from "./http-egress-test-fixture.ts";
 
-type ReplayCommand = Readonly<{databaseUrl: string; originalRequestId: string; requestId: string}>;
+type ReplayCommand = Readonly<{databaseUrl: string; originalAttemptId: string; originalRequestId: string;
+  attemptId: string; requestId: string}>;
 const scope = {tenantId: "tenant-1", projectId: "project-1", deploymentId: "deployment-1"};
 
-const replay = async ({databaseUrl, originalRequestId, requestId}: ReplayCommand) => {
+const replay = async ({databaseUrl, originalAttemptId, originalRequestId, attemptId, requestId}: ReplayCommand) => {
   const pool = new Pool({connectionString: databaseUrl, connectionTimeoutMillis: 5_000, max: 2});
   try {
     const fixture = createEgressFixture();
     const evidence = new PostgresHttpEgressEvidence(pool, scope);
-    const selector = {operationId: fixture.operation.operationId, attemptId: fixture.operation.attemptId, requestId};
-    const originalSelector = {...selector, requestId: originalRequestId};
+    const originalSelector = {operationId: fixture.operation.operationId, attemptId: originalAttemptId,
+      requestId: originalRequestId};
+    const selector = {...originalSelector, attemptId, requestId};
     const original = await evidence.read(originalSelector);
     const host = openAuthenticatedHostHttpEgressSession({...fixture.ports, evidence,
-      identity: {...fixture.ports.identity, hostBootId: "boot-B-after-UNKNOWN", liveProcessSessionIdentity: {}}});
+      identity: {...fixture.ports.identity, attemptId, hostBootId: "boot-B-after-UNKNOWN",
+        liveProcessSessionIdentity: {}}});
     try {
       const bearer = host.nativeBearerToken();
       const wire = "POST /invoke HTTP/1.1\r\nHost: broker.invalid\r\nContent-Type: application/json\r\nContent-Length: 2\r\nAuthorization: Bearer " + bearer + "\r\n\r\n{}";
-      const receipt = await host.execute({...fixture.operation,
+      const receipt = await host.execute({...fixture.operation, attemptId,
         expectedRequest: {...fixture.operation.expectedRequest, requestId},
         connection: {...fixture.operation.connection, request: chunks([wire])}});
       const after = await evidence.read(originalSelector);
