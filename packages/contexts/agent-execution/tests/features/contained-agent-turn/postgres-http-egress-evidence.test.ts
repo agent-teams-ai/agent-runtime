@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {createHash, randomBytes} from "node:crypto";
+import {fork} from "node:child_process";
 import {test} from "node:test";
 import type {Pool} from "pg";
 import {PostgresHttpEgressEvidence, initializePostgresHttpEgressEvidence} from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/postgres-http-egress-evidence.js";
@@ -10,6 +11,7 @@ import {openAuthenticatedHostHttpEgressSession} from "../../../dist/features/con
 import {NodeHttpEgressBoundaryIds} from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/node-http-egress-boundary-ids.js";
 import {NodeHttpEgressTrustedResolver} from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/node-http-egress-trusted-resolver.js";
 import {chunks, createEgressFixture} from "./http-egress-test-fixture.ts";
+import {proveDisposablePostgresAdmissionSpike} from "./host-http-admission-postgres-spike.ts";
 
 const canonical = (value: unknown) => JSON.stringify(Object.fromEntries(Object.entries(value as object).toSorted(
   ([left], [right]) => left < right ? -1 : left > right ? 1 : 0)));
@@ -158,6 +160,103 @@ test("broker acknowledgement loss does not rewrite original or retry provider", 
   assert.equal(fixture.observations.dispatches, 1);
 });
 
+// S2.0/M08 intentionally RED qualification oracle: an independent Host boot
+// with a freshly minted valid bearer must not re-dispatch the UNKNOWN intent.
+// The production cross-process admission owner is not wired in this fixture.
+// Keep this test on a separate Draft stack until a real durable owner exists.
+type CrossBootReport = Readonly<{
+  ok: boolean; pid?: number; originalKind?: string; dispatches?: number;
+  outcome?: string; materializationInputs?: number; credentialRenders?: number;
+  retainedSame?: boolean; replayReceiptKind?: string;
+}>;
+
+// Each replay uses a separate OS process, boot identity and PostgreSQL Pool.
+// Changing either a request handle or an attempt identity cannot escape a
+// captured UNKNOWN operation and acquire fresh Provider Access or dispatch.
+const launchCrossBoot = async (databaseUrl: string, originalAttemptId: string, originalRequestId: string,
+  variant: Readonly<{attemptId: string; requestId: string}>): Promise<CrossBootReport> => {
+  const worker = fork(new URL("./host-http-cross-boot-worker.ts", import.meta.url), [],
+    {execArgv: [], stdio: ["ignore", "ignore", "ignore", "ipc"]});
+  return await new Promise<CrossBootReport>((resolve, reject) => {
+    let message: CrossBootReport | undefined;
+    const timeout = setTimeout(() => {worker.kill(); reject(new Error("cross-boot replay worker timed out"));}, 20_000);
+    worker.once("message", (reply: CrossBootReport) => {message = reply;});
+    worker.once("error", error => {clearTimeout(timeout); reject(error);});
+    worker.once("exit", (code, signal) => {
+      clearTimeout(timeout);
+      if (code !== 0 || message === undefined) {
+        reject(new Error("cross-boot worker exited " + String(code ?? signal) + " without evidence"));
+      } else {resolve(message);}
+    });
+    worker.send({databaseUrl, originalAttemptId, originalRequestId,
+      attemptId: variant.attemptId, requestId: variant.requestId}, error => {
+      if (error) {clearTimeout(timeout); worker.kill(); reject(error);}
+    });
+  });
+};
+
+const requireCrossBootUnknownNoReplay = async (databaseUrl: string, originalAttemptId: string,
+  originalRequestId: string): Promise<void> => {
+  const observed: Array<Readonly<{
+    variant: string; duplicateDispatches?: number | undefined; duplicateMaterializations?: number | undefined;
+    duplicateCredentialRenders?: number | undefined; completedAgain: boolean; replayReceiptKind?: string | undefined;
+  }>> = [];
+  // Race three independent Host boots against the same retained UNKNOWN
+  // operation; changing a request handle OR attempt must not bypass admission.
+  const variants = [
+    {name: "same-request", attemptId: originalAttemptId, requestId: originalRequestId},
+    {name: "changed-request", attemptId: originalAttemptId,
+      requestId: originalRequestId + "-new-host-handle"},
+    {name: "changed-attempt", attemptId: originalAttemptId + "-new-host-attempt",
+      requestId: originalRequestId},
+  ] as const;
+  // Wait for all OS processes even if one fails: a sibling's effects
+  // must remain visible in diagnostics, never hidden by fail-fast Promise.all.
+  const settled = await Promise.allSettled(variants.map(variant =>
+    launchCrossBoot(databaseUrl, originalAttemptId, originalRequestId, variant)));
+  const reports = settled.map(result => result.status === "fulfilled" ? result.value : undefined);
+  const failures = settled.flatMap((result, index) =>
+    result.status === "rejected" ? [variants[index]!.name + ": " + String(result.reason)]
+      : result.value.ok ? [] : [variants[index]!.name + ": no worker evidence"]);
+  assert.deepEqual(failures, [],
+    "all replay worker outcomes: " + JSON.stringify(reports.map((report, index) =>
+      ({variant: variants[index]!.name, report}))));
+  assert.equal(new Set(reports.map(report => report?.pid)).size, variants.length,
+    "simultaneous replay attempts must use distinct Host OS processes");
+  for (const [index, variant] of variants.entries()) {
+    const result = reports[index]!;
+    assert.equal(result.ok, true, "independent Host process must return its actual observations");
+    assert.notEqual(result.pid, process.pid, "Host B must run in a distinct OS process");
+    assert.equal(result.originalKind, "found", "UNKNOWN in A left a committed receipt for B to reconcile");
+    assert.equal(result.retainedSame, true, "original PostgreSQL receipt must stay immutable");
+    observed.push({
+      variant: variant.name,
+      duplicateDispatches: result.dispatches,
+      duplicateMaterializations: result.materializationInputs,
+      duplicateCredentialRenders: result.credentialRenders,
+      completedAgain: result.outcome === "completed",
+      replayReceiptKind: result.replayReceiptKind,
+    });
+  }
+  // All runs complete before the deliberate RED assertion so neither a
+  // changed handle, changed attempt nor early failure can conceal effects.
+  assert.deepEqual(observed, [
+    {variant: "same-request", duplicateDispatches: 0, duplicateMaterializations: 0,
+      duplicateCredentialRenders: 0, completedAgain: false, replayReceiptKind: "found"},
+    {variant: "changed-request", duplicateDispatches: 0, duplicateMaterializations: 0,
+      duplicateCredentialRenders: 0, completedAgain: false, replayReceiptKind: "missing"},
+    {variant: "changed-attempt", duplicateDispatches: 0, duplicateMaterializations: 0,
+      duplicateCredentialRenders: 0, completedAgain: false, replayReceiptKind: "missing"},
+  ], "M08 RED: no cross-Host UNKNOWN replay, including changed request and attempt identities");
+};
+
+const assertForeignScopeReadIsolation = async (pool: Pool, selector: {operationId: string; attemptId: string; requestId: string}) => {
+  for (const dimension of ["tenantId", "projectId", "deploymentId"] as const) {
+    const foreign = new PostgresHttpEgressEvidence(pool, {...scope, [dimension]: "foreign"});
+    assert.deepEqual(await foreign.read(selector), {kind: "missing"}, dimension);
+  }
+};
+
 // Explicit opt-in only. The root creates a new dedicated database; this test
 // never creates/drops databases or resets schemas and refuses any nonempty DB.
 const longId = () => randomBytes(256).toString("hex");
@@ -239,10 +338,7 @@ test("real PostgreSQL race, ambiguous COMMIT and fresh-pool reload", {skip: !url
       } finally {otherHost.close();}
       // These are real PostgreSQL reads through independently scoped owners,
       // not just synthetic map-key checks. No foreign scope can read the receipt.
-      for (const dimension of ["tenantId", "projectId", "deploymentId"] as const) {
-        const foreign = new PostgresHttpEgressEvidence(pool, {...scope, [dimension]: "foreign"});
-        assert.deepEqual(await foreign.read(selector), {kind: "missing"}, dimension);
-      }
+      await assertForeignScopeReadIsolation(pool, selector);
     } finally {session.close();}
     assert.deepEqual(await Promise.all(Array.from({length: 6}, () => owner.record(receipt()))), Array(6).fill("recorded"));
     const longScope = {tenantId: longId(), projectId: longId(), deploymentId: longId()};
@@ -368,10 +464,7 @@ test("real PostgreSQL race, ambiguous COMMIT and fresh-pool reload", {skip: !url
         assert.equal(await reloaded.record(retainedAfterReopen.receipt), "recorded");
       }
       assert.equal(uncertainFixture.observations.dispatches, 1, "readback and evidence replay never dispatch");
-      for (const dimension of ["tenantId", "projectId", "deploymentId"] as const) {
-        const foreign = new PostgresHttpEgressEvidence(fresh, {...scope, [dimension]: "foreign"});
-        assert.deepEqual(await foreign.read(capturedBrokerReceipt.selector), {kind: "missing"}, dimension);
-      }
+      await assertForeignScopeReadIsolation(fresh, capturedBrokerReceipt.selector);
       assert.equal(await reloaded.record(ambiguous), "recorded");
       assert.equal(await reloaded.record({...ambiguous, anomalyCode: "evidence_ack_lost"}), "conflict");
       // A damaged retained winner is UNKNOWN on real SQL readback, never
@@ -435,9 +528,16 @@ test("real PostgreSQL race, ambiguous COMMIT and fresh-pool reload", {skip: !url
       await initializePostgresHttpEgressEvidence(fresh);
       assert.deepEqual((await fresh.query("SELECT * FROM host_http_egress.receipt ORDER BY receipt_key")).rows, before.rows);
       await fresh.query("UPDATE host_http_egress.version_fence SET version=2");
-      assert.equal(await reloaded.record(receipt()), "unknown");
-      await assert.rejects(initializePostgresHttpEgressEvidence(fresh), /fence mismatch/);
+      try {
+        assert.equal(await reloaded.record(receipt()), "unknown");
+        await assert.rejects(initializePostgresHttpEgressEvidence(fresh), /fence mismatch/);
+      } finally {await fresh.query("UPDATE host_http_egress.version_fence SET version=1 WHERE singleton=true");}
     } finally {await fresh.end();}
+    // Native SQL-only CAS feasibility SPIKE runs before the still-RED Host replay oracle.
+    // This neither wires nor qualifies a production pre-effect admission owner.
+    await proveDisposablePostgresAdmissionSpike(url!);
+    // RED oracle runs last, preserving the preceding native SQL regressions.
+    await requireCrossBootUnknownNoReplay(url!, uncertainResult.attemptId, uncertainRequestId);
   } finally {if (!poolEnded) {await pool.end();}}
 });
 
