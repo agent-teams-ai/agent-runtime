@@ -12,8 +12,10 @@ permissions:
   contents: read
 
 concurrency:
-  group: node-26-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Cancel stale PR heads only. A new main commit must not erase prior
+  # exact-SHA compatibility evidence while it is queued or in progress.
+  group: node-26-${{ github.workflow }}-${{ github.event_name }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   qualify:
