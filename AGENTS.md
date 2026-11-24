@@ -1,5 +1,9 @@
 # Agent Navigation
 
+For greenfield v3 planning, read the [organization Foundation-first vision](https://github.com/agent-teams-ai/.github/blob/bb7b1c00f18a8c532681f286afa51dda954469b4/docs/architecture/ecosystem-vision.md).
+The current implementation is historical evidence and a behavioral oracle, not
+the v3 implementation baseline. Follow existing scoped adoption and owner gates.
+
 This repository owns provider-neutral technical runtime execution. It does not
 own teams, tasks, business workflows, or other orchestrator domain semantics.
 

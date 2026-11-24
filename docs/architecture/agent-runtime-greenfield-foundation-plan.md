@@ -25,6 +25,27 @@ summary: Research-backed greenfield vision, library boundaries, execution guaran
 
 **Порядок авторитетности:** принятые ADR и закреплённые стандарты → действующие профили → принятый контракт конкретного среза → этот план и исследовательские рекомендации. При конфликте требуется явный successor соответствующего решения. Этот документ не меняет frozen contained-turn, не принимает динамические плагины и не передаёт native-custody другой команде. Будущий fleet, sessions и новые harness рассматриваются здесь заранее, но их реализация имеет собственные завершённые срезы.
 
+## Foundation-first: уточнение владельца от 2026-11-24
+
+[Общее видение экосистемы](https://github.com/agent-teams-ai/.github/blob/bb7b1c00f18a8c532681f286afa51dda954469b4/docs/architecture/ecosystem-vision.md) фиксирует порядок: целевая архитектура, согласованные shared libraries и module/plugin foundation, квалификация применимого фундамента, затем основная greenfield реализация. Runtime v3 проектируется как новый продукт; текущий Runtime не является целью массового рефакторинга. Поведенческие оракулы, совместимые библиотеки и native механизмы можно переиспользовать после проверки их контрактов.
+
+До зависимой реализации S1–S5 сверить существующие решения с модульной командой, текущим Get Modular, Extension Foundation и Live Module Updates; использовать их квалифицированные контракты, а не добавлять собственный DI, loader или lifecycle manager. Обычные reusable libraries не требуют plugin packaging. Существующие статические и frozen contained-turn границы не меняются этим уточнением. C0–C3 остаётся отдельным owning планом; будущее fleet-размещение учитывается в контрактах без преждевременной реализации всей инфраструктуры.
+
+### Предварительный пакет решений для v3
+
+Следующие вопросы — уточнения к F01–F18 и существующим owning cards, не новые параллельные state machines или новые принятые ADR.
+
+| Вопрос | Проверяемый результат перед зависимым кодом | Owner route |
+| --- | --- | --- |
+| S2 ownership | Feature-owned schemas/adapters/migrations и общий поставляемый bundle без циклов, leakage pg/Drizzle и второго владельца | [#245](https://github.com/agent-teams-ai/agent-runtime/issues/245), S2 |
+| Fully Local storage | Согласовать уже выбранный продуктом native PostgreSQL и Supervisor handoff; переносимые libraries остаются независимы от DB | [#246](https://github.com/agent-teams-ai/agent-runtime/issues/246), scoped successor |
+| Durable effects and recovery | Независимая от попытки identity, неизвестный outcome не разрешает повтор, receiver fencing, restore ниже уже совершённого эффекта | F03/F04/F12/F14, S2, native integration |
+| Fleet placement and budgets | Scope-aware routing, versioned placement, stable identity, scoped reservations and transfer; центральная реализация допустима до измеренной необходимости delegation | F05–F07/F15, C0–C3 |
+| Modular growth and compatibility | Отдельные compilation, assembly и execution scopes, актуальная qualified descriptor-union recipe, packed consumer и recovery horizon | F13/F18, Get Modular adoption |
+| External extension compatibility | Narrow headless capabilities и profile-specific replacement boundaries, без обязательного общего plugin host в S1–S5 | Get Modular/Extension Foundation/Live Module Updates owners |
+
+Выбор вариантов и дополнительные fixtures отражаются в соответствующем существующем плане или successor ADR. Сначала спроектировать и согласовать общую картину, затем квалифицировать foundation для нужного envelope. Не переписывать уже принятую историю, не считать исследования доказательством production-ready и не блокировать отдельную разрешённую qualification работу из-за ещё не выбранной будущей fleet-топологии.
+
 ## 1. Проверяемые преимущества
 
 «Лучше других» — цель развития, а не установленный результат исследования. Сравнивать нужно одинаковые гарантии, workload и deployment. Число пакетов, Rust, диаграммы и количество агентов сами по себе не доказывают качество.
