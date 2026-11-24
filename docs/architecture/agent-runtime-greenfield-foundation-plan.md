@@ -12,7 +12,7 @@ summary: Research-backed greenfield vision, library boundaries, execution guaran
 
 **Цель: с нуля построить модульный runtime технического исполнения агентов, который можно встроить как библиотеку, собрать из независимых компонентов и развернуть от одного исполнителя до квалифицированного fleet с десятками тысяч одновременно активных операций.** Рост функций и команд разработки не должен превращать ядро в общий менеджер всех подсистем.
 
-Это проект целевой архитектуры и последовательности доставки. `active` в метаданных означает поддерживаемый план, а не принятие новых ADR, завершение реализации или подтверждение производительности. Базовый исследованный HEAD: `518f1449acf6dda793662783ec9d918d4007c563`; дата исследования — 26 октября 2026 года. Работа ведётся в draft PR #235. Новая реализация создаётся сразу в целевых границах; полезные контракты, поведенческие тесты и неизменяемые решения сохраняются.
+Это проект целевой архитектуры и последовательности доставки. `active` в метаданных означает поддерживаемый план, а не принятие новых ADR, завершение реализации или подтверждение производительности. Базовый исследованный HEAD: `518f1449acf6dda793662783ec9d918d4007c563`; дата исследования — 26 октября 2026 года. Первоначальный draft PR [#235](https://github.com/agent-teams-ai/agent-runtime/pull/235) закрыт 27.10.2026 без merge как superseded; полный план был интегрирован и смержен в `main` через [PR #243](https://github.com/agent-teams-ai/agent-runtime/pull/243), merge commit `4bdc93a43b58469f60ca10c0dca512824650c8ac`. Новая реализация создаётся сразу в целевых границах; полезные контракты, поведенческие тесты и неизменяемые решения сохраняются.
 
 Документ читается вместе с:
 
@@ -27,7 +27,7 @@ summary: Research-backed greenfield vision, library boundaries, execution guaran
 
 ## Foundation-first: уточнение владельца от 2026-11-24
 
-[Общее видение экосистемы](https://github.com/agent-teams-ai/.github/blob/bb7b1c00f18a8c532681f286afa51dda954469b4/docs/architecture/ecosystem-vision.md) фиксирует порядок: целевая архитектура, согласованные shared libraries и module/plugin foundation, квалификация применимого фундамента, затем основная greenfield реализация. Runtime v3 проектируется как новый продукт; текущий Runtime не является целью массового рефакторинга. Поведенческие оракулы, совместимые библиотеки и native механизмы можно переиспользовать после проверки их контрактов.
+[Общее видение экосистемы](https://github.com/agent-teams-ai/.github/blob/main/docs/architecture/ecosystem-vision.md) фиксирует порядок: целевая архитектура, согласованные shared libraries и module/plugin foundation, квалификация применимого фундамента, затем основная greenfield реализация. Runtime v3 проектируется как новый продукт; текущий Runtime не является целью массового рефакторинга. Поведенческие оракулы, совместимые библиотеки и native механизмы можно переиспользовать после проверки их контрактов.
 
 До зависимой реализации S1–S5 сверить существующие решения с модульной командой, текущим Get Modular, Extension Foundation и Live Module Updates; использовать их квалифицированные контракты, а не добавлять собственный DI, loader или lifecycle manager. Обычные reusable libraries не требуют plugin packaging. Существующие статические и frozen contained-turn границы не меняются этим уточнением. C0–C3 остаётся отдельным owning планом; будущее fleet-размещение учитывается в контрактах без преждевременной реализации всей инфраструктуры.
 
@@ -96,7 +96,7 @@ summary: Research-backed greenfield vision, library boundaries, execution guaran
 | Runtime Security | Authorization, workspace/trust/capability/egress decisions, recorded grant limits | Provider token refresh, process cleanup | S3; hostile tenancy имеет отдельный профиль |
 | Runtime Configuration | Нечувствительные immutable profile definitions, revisions, provenance | Secret store и runtime mutable service bag | Сохраняем текущую владельческую границу |
 | Host | Выбор проверенных releases, одна composition, local admission, lifetime/readiness/retirement | SQL, протокольный интерпретатор, domain workflow, второй resolver | S5 |
-| Storage adapter | IO, locks/CAS, transaction outcomes, schema/migration verification | Решения домена, скрытые retries, закрытие borrowed pool | Первый ordinary S2 — PostgreSQL; broader foundation сохраняет SQLite local/desktop + PostgreSQL hosted |
+| Storage adapter | IO, locks/CAS, transaction outcomes, schema/migration verification | Решения домена, скрытые retries, закрытие borrowed pool | Ordinary S2 — PostgreSQL. Более ранний accepted AR Foundation ещё содержит SQLite local; продуктовые [Orchestrator ADR-0114](https://github.com/agent-teams-ai/agent-teams-orchestrator/blob/main/docs/decisions/0114-canonical-backend-stack-and-distributed-role-adoption.md)/0115 уже приняли native PostgreSQL и для Fully Local V1. Требуется scoped AR adoption/successor и qualified Local Supervisor handoff, не новый выбор SQL engine |
 | Native lane | Физическая custody keeper/init, native protocol/client/artifacts, autonomous deadlines | Продуктовые PA/RS решения и второй operation journal | Отдельный владелец по NATIVE-INTEGRATION |
 | Capacity/fleet capability | Resource-pool truth, placement/fairness, worker membership и rollout coordination | Право игнорировать operation claim, cancel, PA/RS или повторять unknown effect | C0–C3; отдельный context только при независимом lifecycle/ownership |
 | Observation/projections | Rebuildable read models, lag/freshness, bounded subscriptions | Authority, canonical output acceptance, permission decisions | OBS-ADOPT и конкретные readers |
@@ -142,6 +142,8 @@ flowchart TD
 ## 4. Библиотеки как независимые компоненты
 
 **Библиотечная форма выбирается сразу, когда известна повторно используемая ответственность.** Не требуется сначала размножить реализацию в двух продуктах. Вместе с первым релизом нужны один реальный consumer, disposable external project и доказательство отсутствия скрытой зависимости от нашей организации.
+
+До готовности зависимого продукта foundation design, spikes и qualification проверяются реалистичными disposable consumers/fixtures с независимыми ожидаемыми результатами. Для claim о переиспользовании одного built artifact этот artifact проверяется в независимо собранных test Hosts заявленных environments. Если targets требуют разных сборок, квалифицируются общий контракт и каждый фактический artifact; это не доказывает взаимозаменяемость одного binary. Bounded single-Host profile проверяется в своём envelope. Это не заменяет требования первого релиза, stable/public SPI и последующего product adoption под их owning contracts.
 
 | Компонент | Самостоятельная польза | Что остаётся вне него | Решение |
 | --- | --- | --- | --- |
@@ -408,9 +410,9 @@ Baseline 250 ms polling при 10 000 быстрых running flights даёт н
 
 G1/G2 — результаты доставки, а не запрет работать над prerequisites следующего крупного этапа. По выбранному S2 publication graph сначала выпускаются dependency-complete S1/S2-B, затем требуемые owner packages, затем полный store и public consumers. Fresh S3 RS/PA surfaces и необходимый bounded S5 public-export cleanup входят в согласованный train до store publication. Execution-only placeholder не выдаётся за полный store; ранние S1/S2-B releases не ждут весь S3/S5, Host/native activation или fleet.
 
-Параллельно можно вести pure S1/S2, native delivery, evidence/contract review и конкретные adapters, если их входы зафиксированы. Зависимый activation ждёт реального upstream artifact и qualification; независимая library работа не ждёт весь fleet. На каждом этапе есть полезный внешний consumer, а не только scaffolding.
+В рамках явно порученной реализации можно параллельно вести pure S1/S2, native delivery, evidence/contract review и конкретные adapters, если их входы зафиксированы. Зависимый activation ждёт реального upstream artifact и qualification; независимая library работа не ждёт весь fleet. Каждый этап подтверждает полезное поведение конкретного consumer seam; ранняя foundation qualification использует описанные выше реалистичные fixtures, не требует готового зависимого продукта и не заменяет его release/adoption gates.
 
-**Сразу реализовать:** narrow semantic ports, single owners, real public library boundaries, exact identities/version separation, local bounds, truthful uncertainty/custody, tests и migration envelope выбранного первого профиля.
+**В рамках порученной реализации сразу обеспечить:** narrow semantic ports, single owners, real public library boundaries, exact identities/version separation, local bounds, truthful uncertainty/custody, tests и migration envelope выбранного первого профиля.
 
 **Сразу спроектировать, материализовать в соответствующем срезе:** remote receiver authorization/fencing, session continuity/approval binding, queue/account scopes, shared budgets, artifact/cursor/retention contracts, fleet HA и hostile tenancy. Их владельцы и критерии уже названы; API не заполняется неработающими optional methods.
 
@@ -437,4 +439,4 @@ G1/G2 — результаты доставки, а не запрет работ
 
 Технические defaults, сравнённые варианты и действительно зависящие от владельца вопросы вынесены в [решения и review](agent-runtime-foundation-decisions-and-review.md). Оценки надёжности/уверенности/сложности — инженерные суждения в одинаковом scope; LOC — диапазоны собственного incremental production/integration кода и tests, без third-party/generated bytes. Они не заменяют implementation inventory или benchmark.
 
-Два самостоятельных содержательных пересмотра выполнены до шести независимых критиков. Девять material уточнений приняты; три дополнительных независимых delta-review на `b7f9705c1290210fc50088146acc9479b10d7f6c` подтвердили закрытие исходных контрпримеров без новых существенных findings в проверенном scope. Docs gates проходят, remote draft HEAD проверен; full local/hosted CI имеет конкретные ограничения, сохранённые в linked review record. Реальные runtime/provider/fleet результаты от этой documentation delivery не заявляются.
+Два самостоятельных содержательных пересмотра выполнены до шести независимых критиков. Девять material уточнений приняты; три дополнительных независимых delta-review на `b7f9705c1290210fc50088146acc9479b10d7f6c` подтвердили закрытие исходных контрпримеров без новых существенных findings в проверенном scope. Это историческая запись первоначального draft: результаты docs gates и ограничения того local/hosted CI сохранены в linked review record и не являются текущим статусом `main`. Реальные runtime/provider/fleet результаты от этой documentation delivery не заявляются.
