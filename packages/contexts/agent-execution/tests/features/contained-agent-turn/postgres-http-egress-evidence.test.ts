@@ -6,7 +6,10 @@ import {PostgresHttpEgressEvidence, initializePostgresHttpEgressEvidence} from "
 import {HTTP_EVIDENCE_FENCE} from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/postgres-http-egress-evidence-transactions.js";
 import {initialHttpEgressState} from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/http-egress-settlement.js";
 import {createStrictHttpEgressBroker} from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/strict-http-egress-broker.js";
-import {createEgressFixture} from "./http-egress-test-fixture.ts";
+import {openAuthenticatedHostHttpEgressSession} from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/host-http-egress-session.js";
+import {NodeHttpEgressBoundaryIds} from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/node-http-egress-boundary-ids.js";
+import {NodeHttpEgressTrustedResolver} from "../../../dist/features/contained-agent-turn/adapters/outbound/host-custody/egress/node-http-egress-trusted-resolver.js";
+import {chunks, createEgressFixture} from "./http-egress-test-fixture.ts";
 
 const canonical = (value: unknown) => JSON.stringify(Object.fromEntries(Object.entries(value as object).toSorted(
   ([left], [right]) => left < right ? -1 : left > right ? 1 : 0)));
@@ -180,9 +183,67 @@ test("real PostgreSQL race, ambiguous COMMIT and fresh-pool reload", {skip: !url
     const schemas = await pool.query("SELECT 1 FROM pg_namespace WHERE nspname = 'host_http_egress'");
     assert.equal(schemas.rows.length, 0);
     const owner = new PostgresHttpEgressEvidence(pool, scope);
+    let capturedBrokerReceipt: {selector: {operationId: string; attemptId: string; requestId: string}; receipt: unknown}
+      | undefined;
     assert.equal(await owner.record(receipt()), "unknown", "no automatic initialization");
     await initializePostgresHttpEgressEvidence(pool);
     await initializePostgresHttpEgressEvidence(pool);
+    // Disposable private Host HTTP composition: all three real owned port
+    // implementations, authenticated ingress and a PostgreSQL receipt readback.
+    // DNS answers and provider transport remain deterministic TEST boundaries.
+    const fixture = createEgressFixture();
+    let dnsCancelled = 0;
+    const ids = new NodeHttpEgressBoundaryIds(() => "12345678-1234-4123-8123-123456789abc");
+    const resolver = new NodeHttpEgressTrustedResolver(
+      {resolverIdentity: "pg-test-dns", resolverEpoch: "pg-test-epoch", timeoutMs: 100},
+      fixture.ports.clock, () => ({
+        resolve4: async host => {
+          assert.equal(host, "provider.example");
+          return ["93.184.216.34"];
+        },
+        resolve6: async () => {throw Object.assign(new Error("no AAAA"), {code: "ENODATA"});},
+        cancel: () => {dnsCancelled += 1;},
+      }));
+    const session = openAuthenticatedHostHttpEgressSession({...fixture.ports, ids, resolver, evidence: owner});
+    try {
+      const token = session.nativeBearerToken();
+      const wire = `POST /invoke HTTP/1.1\r\nHost: broker.invalid\r\nContent-Type: application/json\r\nContent-Length: 2\r\nAuthorization: Bearer ${token}\r\n\r\n{}`;
+      const executed = await session.execute({...fixture.operation,
+        connection: {...fixture.operation.connection, request: chunks([wire])}});
+      assert.equal(executed.outcome, "completed");
+      assert.equal(fixture.observations.dispatches, 1);
+      assert.equal(dnsCancelled, 1);
+      const selector = {operationId: executed.operationId, attemptId: executed.attemptId,
+        requestId: executed.requestId};
+      assert.deepEqual(await owner.read(selector), {kind: "found", receipt: executed});
+      capturedBrokerReceipt = {selector, receipt: executed};
+      // The first Host is still live: its bearer must never authorize a
+      // different Host boot, even when both use the same real PostgreSQL owner.
+      const otherHost = openAuthenticatedHostHttpEgressSession({...fixture.ports, ids, resolver, evidence: owner,
+        identity: {...fixture.ports.identity, hostBootId: "boot-2", liveProcessSessionIdentity: {}}});
+      try {
+        const materializations = fixture.observations.materializationInputs.length;
+        const renders = fixture.observations.renders;
+        const rejected = await otherHost.execute({...fixture.operation,
+          expectedRequest: {...fixture.operation.expectedRequest, requestId: "other-host-request"},
+          connection: {...fixture.operation.connection, request: chunks([wire])}});
+        assert.equal(rejected.outcome, "denied", "a bearer cannot cross Host boot ownership");
+        assert.equal(rejected.anomalyCode, "inbound_authentication_denied");
+        assert.equal(fixture.observations.dispatches, 1, "foreign Host must not dispatch");
+        assert.equal(fixture.observations.materializationInputs.length, materializations,
+          "foreign Host must not request provider authority");
+        assert.equal(fixture.observations.renders, renders,
+          "foreign Host must not materialize credentials");
+        assert.deepEqual(await owner.read(selector), {kind: "found", receipt: executed},
+          "the original Host receipt remains immutable");
+      } finally {otherHost.close();}
+      // These are real PostgreSQL reads through independently scoped owners,
+      // not just synthetic map-key checks. No foreign scope can read the receipt.
+      for (const dimension of ["tenantId", "projectId", "deploymentId"] as const) {
+        const foreign = new PostgresHttpEgressEvidence(pool, {...scope, [dimension]: "foreign"});
+        assert.deepEqual(await foreign.read(selector), {kind: "missing"}, dimension);
+      }
+    } finally {session.close();}
     assert.deepEqual(await Promise.all(Array.from({length: 6}, () => owner.record(receipt()))), Array(6).fill("recorded"));
     const longScope = {tenantId: longId(), projectId: longId(), deploymentId: longId()};
     const longReceipt = {...receipt(), operationId: longId(), attemptId: longId(), requestId: longId()};
@@ -207,12 +268,143 @@ test("real PostgreSQL race, ambiguous COMMIT and fresh-pool reload", {skip: !url
     }} as unknown as Pool;
     const ambiguous = {...receipt(), requestId: "ambiguous"};
     assert.equal(await new PostgresHttpEgressEvidence(ambiguousPool, scope).record(ambiguous), "unknown");
+    // Prove the same post-COMMIT acknowledgement loss through the actual
+    // broker: provider dispatch happens once, the caller gets UNKNOWN, and
+    // PostgreSQL retains the original completed receipt (not a replay).
+    lost = false;
+    const uncertainFixture = createEgressFixture();
+    const uncertainRequestId = "broker-ambiguous";
+    const uncertainOperation = {...uncertainFixture.operation, expectedRequest:
+      {...uncertainFixture.operation.expectedRequest, requestId: uncertainRequestId}};
+    // Exercise lost-COMMIT acknowledgement through the actual authenticated
+    // Host session, not only the lower-level unbound broker facade.
+    const uncertainSession = openAuthenticatedHostHttpEgressSession({...uncertainFixture.ports,
+      evidence: new PostgresHttpEgressEvidence(ambiguousPool, scope)});
+    const uncertainBearer = uncertainSession.nativeBearerToken();
+    const uncertainWire = `POST /invoke HTTP/1.1\r\nHost: broker.invalid\r\nContent-Type: application/json\r\nContent-Length: 2\r\nAuthorization: Bearer ${uncertainBearer}\r\n\r\n{}`;
+    const uncertainResult = await uncertainSession.execute({...uncertainOperation,
+      connection: {...uncertainOperation.connection, request: chunks([uncertainWire])},
+    });
+    try {
+      assert.equal(uncertainResult.outcome, "reconcile_required");
+      assert.equal(uncertainResult.anomalyCode, "evidence_ack_lost");
+      assert.equal(lost, true, "the actual PostgreSQL COMMIT succeeded before its ACK was lost");
+      assert.equal(uncertainFixture.observations.dispatches, 1, "never redispatch after ambiguous commit");
+      // No caller cleanup yet: the ambiguous result itself must revoke the
+      // private bearer. Otherwise the old test's explicit close masked a gap.
+      assert.throws(() => uncertainSession.nativeBearerToken(), /inbound_authentication_denied/u,
+        "UNKNOWN must revoke ingress without relying on caller close");
+      const materializations = uncertainFixture.observations.materializationInputs.length;
+      const renders = uncertainFixture.observations.renders;
+      const deniedReplay = await uncertainSession.execute({...uncertainOperation,
+        connection: {...uncertainOperation.connection, request: chunks([uncertainWire])}});
+      assert.notEqual(deniedReplay.outcome, "completed", "UNKNOWN must not become a second success");
+      assert.equal(uncertainFixture.observations.dispatches, 1, "uncertain Host cannot replay provider work");
+      assert.equal(uncertainFixture.observations.materializationInputs.length, materializations,
+        "uncertain Host cannot rematerialize provider authority");
+      // After UNKNOWN, a distinct Host boot must also refuse the old bearer.
+      // This does not claim that a fresh bearer is authorized to replay the intent.
+      const foreignHost = openAuthenticatedHostHttpEgressSession({...uncertainFixture.ports,
+        evidence: new PostgresHttpEgressEvidence(ambiguousPool, scope),
+        identity: {...uncertainFixture.ports.identity, hostBootId: "boot-after-unknown",
+          liveProcessSessionIdentity: {}}});
+      try {
+        const foreignAttempt = await foreignHost.execute({...uncertainOperation,
+          expectedRequest: {...uncertainOperation.expectedRequest, requestId: "foreign-after-unknown"},
+          connection: {...uncertainOperation.connection, request: chunks([uncertainWire])}});
+        assert.equal(foreignAttempt.outcome, "denied", "old bearer cannot authorize a new Host boot");
+        assert.equal(foreignAttempt.anomalyCode, "inbound_authentication_denied");
+        assert.equal(uncertainFixture.observations.dispatches, 1, "new Host must not replay provider work");
+        assert.equal(uncertainFixture.observations.materializationInputs.length, materializations,
+          "foreign Host must not request provider authority");
+        assert.equal(uncertainFixture.observations.renders, renders,
+          "foreign Host must not rematerialize credentials");
+      } finally {foreignHost.close();}
+      // Fresh foreign bearer cannot act for A; same-ID cross-boot replay is NOT qualified.
+      const foreignOwner = openAuthenticatedHostHttpEgressSession({...uncertainFixture.ports,
+        evidence: new PostgresHttpEgressEvidence(ambiguousPool, scope),
+        identity: {...uncertainFixture.ports.identity, operationId: "foreign-operation-after-unknown",
+          hostBootId: "foreign-owner-after-unknown", liveProcessSessionIdentity: {}}});
+      try {
+        const ownWire = `POST /invoke HTTP/1.1\r\nHost: broker.invalid\r\nContent-Type: application/json\r\nContent-Length: 2\r\nAuthorization: Bearer ${foreignOwner.nativeBearerToken()}\r\n\r\n{}`;
+        const attempted = await foreignOwner.execute({...uncertainOperation,
+          expectedRequest: {...uncertainOperation.expectedRequest, requestId: "foreign-owner-replay"},
+          connection: {...uncertainOperation.connection, request: chunks([ownWire])}});
+        assert.notEqual(attempted.outcome, "completed", "valid foreign bearer cannot execute captured operation");
+        assert.equal(uncertainFixture.observations.dispatches, 1, "foreign owner cannot redispatch");
+        assert.equal(uncertainFixture.observations.materializationInputs.length, materializations,
+          "foreign owner cannot request Provider Access for a captured operation");
+        assert.equal(uncertainFixture.observations.renders, renders,
+          "foreign owner cannot render credentials for a captured operation");
+      } finally {foreignOwner.close();}
+    } finally {uncertainSession.close();}
+    const retainedUncertain = await owner.read({operationId: uncertainResult.operationId,
+      attemptId: uncertainResult.attemptId, requestId: uncertainRequestId});
+    assert.equal(retainedUncertain.kind, "found");
+    if (retainedUncertain.kind === "found") {
+      assert.equal(retainedUncertain.receipt.outcome, "completed");
+      assert.equal(retainedUncertain.receipt.anomalyCode, "none");
+    }
+    assert.equal(uncertainFixture.observations.dispatches, 1, "readback is storage-only");
     await pool.end(); poolEnded = true;
     const fresh = new PgPool(config);
     try {
       const reloaded = new PostgresHttpEgressEvidence(fresh, scope);
+      assert.ok(capturedBrokerReceipt);
+      // Read the actual authenticated broker receipt through a new SQL pool;
+      // its durability and tenant/project/deployment custody cannot rely on a live client.
+      assert.deepEqual(await reloaded.read(capturedBrokerReceipt.selector),
+        {kind: "found", receipt: capturedBrokerReceipt.receipt});
+      // A lost acknowledgement is still storage-only uncertainty after pool
+      // turnover: reopening must see the original COMMITTED broker outcome,
+      // and an idempotent evidence write cannot authorize provider replay.
+      const uncertainSelector = {operationId: uncertainResult.operationId,
+        attemptId: uncertainResult.attemptId, requestId: uncertainRequestId};
+      const retainedAfterReopen = await reloaded.read(uncertainSelector);
+      assert.equal(retainedAfterReopen.kind, "found");
+      if (retainedAfterReopen.kind === "found") {
+        assert.equal(retainedAfterReopen.receipt.outcome, "completed");
+        assert.equal(retainedAfterReopen.receipt.anomalyCode, "none");
+        assert.equal(await reloaded.record(retainedAfterReopen.receipt), "recorded");
+      }
+      assert.equal(uncertainFixture.observations.dispatches, 1, "readback and evidence replay never dispatch");
+      for (const dimension of ["tenantId", "projectId", "deploymentId"] as const) {
+        const foreign = new PostgresHttpEgressEvidence(fresh, {...scope, [dimension]: "foreign"});
+        assert.deepEqual(await foreign.read(capturedBrokerReceipt.selector), {kind: "missing"}, dimension);
+      }
       assert.equal(await reloaded.record(ambiguous), "recorded");
       assert.equal(await reloaded.record({...ambiguous, anomalyCode: "evidence_ack_lost"}), "conflict");
+      // A damaged retained winner is UNKNOWN on real SQL readback, never
+      // missing/success or eligible for automatic write-side repair.
+      const damaged = {...receipt(), requestId: "damaged-retained"};
+      assert.equal(await reloaded.record(damaged), "recorded");
+      await fresh.query("UPDATE host_http_egress.receipt SET canonical_receipt=$1 WHERE request_id=$2",
+        ["{truncated", damaged.requestId]);
+      assert.deepEqual(await reloaded.read({operationId: damaged.operationId, attemptId: damaged.attemptId,
+        requestId: damaged.requestId}), {kind: "unknown"});
+      assert.equal(await reloaded.record(damaged), "unknown", "never overwrite retained evidence");
+      const damagedRows = await fresh.query("SELECT canonical_receipt FROM host_http_egress.receipt WHERE request_id=$1",
+        [damaged.requestId]);
+      assert.deepEqual(damagedRows.rows.map(row => row.canonical_receipt), ["{truncated"]);
+      // A mismatched physical format fence cannot authorize a read, a new
+      // durable receipt, or implicit repair; only the isolated TEST restores it.
+      assert.equal((await fresh.query("SELECT format FROM host_http_egress.version_fence")).rows[0]?.format,
+        HTTP_EVIDENCE_FENCE);
+      await fresh.query("UPDATE host_http_egress.version_fence SET format=$1 WHERE singleton=true",
+        ["unqualified-http-format"]);
+      const fencedNew = {...receipt(), requestId: "fenced-new"};
+      try {
+        assert.deepEqual(await reloaded.read(capturedBrokerReceipt.selector), {kind: "unknown"});
+        assert.equal(await reloaded.record(fencedNew), "unknown");
+        const notCommitted = await fresh.query("SELECT 1 FROM host_http_egress.receipt WHERE request_id=$1",
+          [fencedNew.requestId]);
+        assert.equal(notCommitted.rows.length, 0, "wrong fence cannot persist new evidence");
+      } finally {
+        await fresh.query("UPDATE host_http_egress.version_fence SET format=$1 WHERE singleton=true",
+          [HTTP_EVIDENCE_FENCE]);
+      }
+      assert.deepEqual(await reloaded.read(capturedBrokerReceipt.selector),
+        {kind: "found", receipt: capturedBrokerReceipt.receipt});
       const stored = await fresh.query("SELECT canonical_receipt FROM host_http_egress.receipt WHERE request_id='ambiguous'");
       assert.deepEqual(JSON.parse(stored.rows[0].canonical_receipt), ambiguous);
       const before = await fresh.query("SELECT * FROM host_http_egress.receipt ORDER BY receipt_key");
