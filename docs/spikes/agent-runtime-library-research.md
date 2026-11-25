@@ -10,12 +10,13 @@ summary: Pinned AI SDK, Mastra, PydanticAI and OpenHands modularity evidence and
 
 <!-- shared-research-route:start -->
 **Shared research route, 2026-11-04:** the [maintained central study](https://github.com/agent-teams-ai/engineering-research/blob/12c40892e805944719d6fbec14d2c26874803b2c/docs/studies/agent-runtime-library-research.md)
-is published in [Engineering Research draft PR #1](https://github.com/agent-teams-ai/engineering-research/pull/1). The
+was published in [Engineering Research PR #1](https://github.com/agent-teams-ai/engineering-research/pull/1), merged to
+`main` on 2026-11-05. The
 [import provenance manifest](https://github.com/agent-teams-ai/engineering-research/blob/12c40892e805944719d6fbec14d2c26874803b2c/data/import-provenance.json) records the
 original source identity, hash and unchanged snapshot. This local report retains
 its original metadata, dates, body, lesson IDs and heading anchors. Runtime
 applicability, decisions and qualification remain owned here; central publication
-is not a new upstream review or adoption. Use the [shared research index](https://github.com/agent-teams-ai/engineering-research/blob/docs/shared-research-2026-11-04/docs/README.md)
+is not a new upstream review or adoption. Use the [shared research index](https://github.com/agent-teams-ai/engineering-research/blob/main/docs/README.md)
 for maintained discovery; cite the pinned study for this reviewed version.
 <!-- shared-research-route:end -->
 

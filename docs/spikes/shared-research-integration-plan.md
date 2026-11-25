@@ -21,13 +21,14 @@ comparing its intended guarantees. Completion of ordinary execution does not
 qualify thousands of simultaneously active agents.
 
 The shared [Paperclip source dossier](https://github.com/agent-teams-ai/engineering-research/blob/12c40892e805944719d6fbec14d2c26874803b2c/docs/competitors/paperclip.md)
-is published in [Engineering Research draft PR #1](https://github.com/agent-teams-ai/engineering-research/pull/1) at commit
+was published in [Engineering Research PR #1](https://github.com/agent-teams-ai/engineering-research/pull/1) at commit
 `12c40892e805944719d6fbec14d2c26874803b2c`. Its [evaluation method](https://github.com/agent-teams-ai/engineering-research/blob/12c40892e805944719d6fbec14d2c26874803b2c/docs/methodology/evaluation-methodology.md)
 and [decision cards](https://github.com/agent-teams-ai/engineering-research/blob/12c40892e805944719d6fbec14d2c26874803b2c/docs/lessons/preimplementation-decisions.md)
-retain shared evidence and proposed alternatives. The [shared research index](https://github.com/agent-teams-ai/engineering-research/blob/docs/shared-research-2026-11-04/docs/README.md)
+retain shared evidence and proposed alternatives. The [shared research index](https://github.com/agent-teams-ai/engineering-research/blob/main/docs/README.md)
 is the maintained discovery route. This document owns only proposed Runtime
-applicability and routes to existing acceptance owners. Central publication is
-still a draft; it does not accept product policy or qualify a deployment.
+applicability and routes to existing acceptance owners. The central corpus
+merged to `main` on 2026-11-05; publication does not accept product policy or
+qualify a deployment.
 
 The source review inspected Paperclip at
 [`61e8d5c7eb097664958e00c30ccd88bb51359043`](https://github.com/paperclipai/paperclip/tree/61e8d5c7eb097664958e00c30ccd88bb51359043).

@@ -42,6 +42,9 @@ function ownClient(client: InteractivePostgresClient): OwnedClient {
       // release has not proved transfer, so retain the nonthrowing error guard.
       client.release(discard === true || health.failed);
       client.removeListener("error", onError);
+      // A synchronous socket fault during release must not confirm a read or
+      // SQL write. Custody has already transferred; never release twice.
+      if (health.failed) {throw new Error("interactive_store_connection_failed");}
     },
   };
 }
@@ -72,6 +75,16 @@ export async function verifyInteractiveSessionStore(pool: InteractivePostgresPoo
     if (columns.rows.length !== expected.length || columns.rows.some((row, index) => row.name !== expected[index]![0] || row.type !== expected[index]![1] || row.required !== true)) {throw new TypeError("interactive_schema_columns_invalid");}
     const primary = await client.query(query(`SELECT pg_get_constraintdef(oid) AS definition FROM pg_constraint WHERE conrelid=to_regclass('interactive_session_v1') AND contype='p'`));
     if (primary.rows.length !== 1 || primary.rows[0]!.definition !== "PRIMARY KEY (tenant_id, project_id, session_id)") {throw new TypeError("interactive_schema_primary_key_invalid");}
+    // An identically shaped preexisting table may still permit invalid session
+    // generations/revisions. Verification must not silently adopt that schema.
+    const checks = await client.query(query(`SELECT pg_get_expr(conbin, conrelid) AS expression, pg_get_constraintdef(oid) AS definition, convalidated AS validated
+      FROM pg_constraint WHERE conrelid=to_regclass('interactive_session_v1') AND contype='c'`));
+    const expectedChecks = new Set(["generation>0", "revision>=0"]);
+    if (checks.rows.length !== expectedChecks.size || checks.rows.some(row =>
+      row.validated !== true || typeof row.expression !== "string" || typeof row.definition !== "string" || row.definition.includes("NOT ENFORCED")
+      || !expectedChecks.delete(row.expression.replace(/[\s()]/gu, ""))) || expectedChecks.size !== 0) {
+      throw new TypeError("interactive_schema_checks_invalid");
+    }
   } finally {client.release();}
 }
 export class PostgresInteractiveSessionStore implements InteractiveSessionStore {
@@ -80,20 +93,30 @@ export class PostgresInteractiveSessionStore implements InteractiveSessionStore 
 
   async #write(body: (client: OwnedClient) => Promise<StoreWrite>): Promise<StoreWrite> {
     const client = await acquire(this.#pool);
-    let committing = false; let discard = false;
+    let committing = false; let discard = false; let outcome: StoreWrite = "unknown";
+    let originalFailure: unknown; let failedBeforeCommit = false;
     try {
       await client.query(query("BEGIN"));
       await client.query(query("SET LOCAL statement_timeout = '5000ms'"));
       await client.query(query("SET LOCAL lock_timeout = '3000ms'"));
-      const result = await body(client);
+      outcome = await body(client);
       committing = true;
       await client.query(query("COMMIT"));
-      return result;
     } catch (error) {
-      if (committing) {discard = true; return "unknown";}
-      try {await client.query(query("ROLLBACK"));} catch {discard = true;}
-      throw error;
-    } finally {client.release(discard);}
+      if (committing) {discard = true; outcome = "unknown";}
+      else {
+        failedBeforeCommit = true; originalFailure = error;
+        try {await client.query(query("ROLLBACK"));} catch {discard = true;}
+      }
+    }
+    try {client.release(discard);} catch (releaseError) {
+      // A release-time failure after the COMMIT boundary cannot authorize
+      // retry, even if the preceding query returned a successful receipt.
+      if (committing) {return "unknown";}
+      if (!failedBeforeCommit) {throw releaseError;}
+    }
+    if (failedBeforeCommit) {throw originalFailure;}
+    return outcome;
   }
   create(record: SessionRecord): Promise<StoreWrite> {
     validateRecord(record);
