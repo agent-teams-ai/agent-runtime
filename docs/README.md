@@ -8,6 +8,8 @@ summary: Canonical reading order for Agent Runtime architecture and evidence.
 
 # Agent Runtime architecture
 
+- [Shared Research Integration Plan](spikes/shared-research-integration-plan.md)
+
 Read documents in this order:
 
 1. `decisions/0001-runtime-profile-and-activation-boundaries.md` - canonical
