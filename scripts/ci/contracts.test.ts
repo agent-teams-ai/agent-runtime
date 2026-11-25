@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -10,7 +10,7 @@ import { commandInventory, routedScripts } from './script-routing.ts';
 import type { Scripts } from './script-routing.ts';
 import { readScripts } from './inventory.ts';
 import { assertCmsComposite, captureCmsComposite, cmsBinding, cmsContract, cmsFile, inputPaths, assertPhaseTestExecution, createTestResultCollector, mandatoryRunnerSummary, tapResult, toolchainKeys } from './measure.ts';
-import { object as workflowObject, schedulingForEvent, validateBenchmark, validateWorkflow } from './conformance.ts';
+import { assertIdentityCallerSuccessor, object as workflowObject, schedulingForEvent, validateBenchmark, validateWorkflow } from './conformance.ts';
 import type { SchedulingEvent } from './conformance.ts';
 import { compare } from './compare.ts';
 import type { Receipt } from './compare.ts';
@@ -566,4 +566,25 @@ test('strict retained C0 retrieval restores an unreachable object before source 
   assert.equal(git('cat-file', '-e', `${object}^1^{commit}`).status, 0, 'retained parent history');
   assert.equal(git('fsck', '--connectivity-only', '--no-reflogs', object).status, 0, 'retained tree/blob connectivity');
   assert.equal(run().status, 0, 'present object needs no fetch');
+});
+
+// A permission/trigger change or any unreviewed revision must not ride the alias upgrade.
+test('identity successor accepts only the reviewed immutable pin with authenticated predecessor', async () => {
+  const path = '.github/workflows/commit-author-identity.yml';
+  const predecessor = execFileSync('git', ['show', `73c771f254858db430d01d13c3cb433ef18b757d:${path}`], { encoding: 'utf8' });
+  const oldPlatform: Record<string, string> = JSON.parse(execFileSync('git', ['show', '73c771f254858db430d01d13c3cb433ef18b757d:scripts/ci/platform-contract.json'], { encoding: 'utf8' }));
+  const platform: Record<string, string> = JSON.parse(await readFile(new URL('./platform-contract.json', import.meta.url), 'utf8'));
+  const current = await readFile(path, 'utf8');
+  const validate = (before: string, after: string) =>
+    assertIdentityCallerSuccessor(before, after, oldPlatform[path]!, platform[path]!);
+  validate(predecessor, current);
+  for (const changed of [predecessor, current.replace('77a0f46cbfc7688cbabbe12ee819e50ba6f64234', 'main'),
+    current.replace('77a0f46cbfc7688cbabbe12ee819e50ba6f64234', 'a'.repeat(40)),
+    current.replace('pull_request_target:', 'pull_request:'), current.replace('statuses: write', 'statuses: read'),
+    `${current}    if: false\n`]) {
+    assert.throws(() => validate(predecessor, changed));
+  }
+  assert.throws(() => validate(`${predecessor}\n`, current));
+  assert.throws(() => assertIdentityCallerSuccessor(predecessor, current, 'a'.repeat(64), platform[path]!));
+  assert.throws(() => assertIdentityCallerSuccessor(predecessor, current, oldPlatform[path]!, 'a'.repeat(64)));
 });

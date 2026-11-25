@@ -212,7 +212,7 @@ Provider implementer не получает доступ к Runtime stores, priva
 
 ## 12. Review: независимые направления критики и исправления
 
-Этот раздел — **внутренние проверочные проходы автора**, не выдаётся за отчёт реально запущенных удалённых AI-критиков. Для независимого агентного ревью нужны отдельные исполнители с актуальным repo head и read-only review assignment. Каждый должен получить этот документ, v3 план/briefs S1–S5, принятые ADR, `AGENTS.md`, FMS/CMS pins, текущие PR #235/#239 и ограничения native keeper/init.
+Этот раздел сохраняет **внутренние проверочные проходы автора от 1 ноября 2026**, не выдаётся за отчёт реально запущенных удалённых AI-критиков. Для независимого агентного ревью нужны отдельные исполнители с актуальным repo head и read-only review assignment. Каждый должен получить этот документ, v3 план/briefs S1–S5, принятые ADR, `AGENTS.md`, FMS/CMS pins, опубликованную основу #243 и отдельные provider PR #239/#242, ограничения native keeper/init. Актуальная доставка — [ledger §11](v3-embeddability-review-ledger.md#11-возобновление-документационной-доставки-26-ноября-2026).
 
 ### Проход A — DDD/FMS/SOLID
 
@@ -235,7 +235,7 @@ Provider implementer не получает доступ к Runtime stores, priva
 ### Финальный integration review — проверка непротиворечивости
 
 - **Проверено на уровне документа:** каждое требование имеет конкретного semantic owner и карточку v3 либо explicit future trigger; не введены новая authority/DI/kernel/сервис; frozen contained и existing Provider Access materialization сохранены; native/Linux+Docker квалификация не объявлена готовой; не заморожены `.proto`/plugin/Wasm без реализации.
-- **Не выполнено этим документом:** независимый multi-model agent review; запуск CI, root conformance или реальный Docker E2E; изменения исходников/ADR. Эквивалентность существующих production contracts новой реализации подтверждается только при их фактической поставке, а не этим review. Следующий delivery должен проверять exact head, выделенные contract deltas и реальных consumer/adapters. Новое GitHub review на PR #244 было **incomplete (0/3 reviewed)**, поэтому независимая оценка именно этого addendum остаётся открытой; прежние внешние критики v3/#243 не заменяют review изменённых документов.
+- **Не выполнено исходной self-review записью:** независимый multi-model agent review; запуск CI, root conformance или реальный Docker E2E; изменения исходников/ADR. Эквивалентность существующих production contracts новой реализации подтверждается только при их фактической поставке, а не этим review. Тогда GitHub review на PR #244 было **incomplete (0/3 reviewed)**; этот результат остаётся историческим отказом, не одобрением. Последующие exact-head review и проверки учитываются отдельно в ledger §11 и PR #244; прежние внешние критики v3/#243 не заменяют review изменённых документов.
 
 ## Источники
 

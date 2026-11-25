@@ -27,6 +27,19 @@ export function object(value: unknown): Record<string, unknown> {
 }
 const digest = (value: unknown) => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 
+// Reviewed central alias successor (organization PR #386). Only the immutable
+// implementation pin changes; authenticate the complete predecessor bytes before
+// accepting the successor. No event, permission or job-shape edits are admitted.
+export function assertIdentityCallerSuccessor(predecessor: string, current: string, predecessorDigest: string, currentDigest: string): void {
+  const before = '6d843f3a2c3f616aa2f4b902a866b1ff1a18f9c6';
+  const after = '77a0f46cbfc7688cbabbe12ee819e50ba6f64234';
+  const oldCall = `uses: agent-teams-ai/.github/.github/workflows/commit-author-identity-check.yml@${before}`;
+  assert.equal(predecessor.split(oldCall).length, 2, 'exact predecessor identity pin');
+  assert.equal(createHash('sha256').update(predecessor).digest('hex'), predecessorDigest, 'retained identity predecessor bytes');
+  assert.equal(current, predecessor.replace(oldCall, oldCall.replace(before, after)), 'only reviewed identity implementation pin may change');
+  assert.equal(createHash('sha256').update(current).digest('hex'), currentDigest, 'identity successor contract digest');
+}
+
 function steps(value: unknown): Record<string, unknown>[] {
   assert.ok(Array.isArray(value));
   return value.map(object);
@@ -305,7 +318,10 @@ export async function conformance(root: string): Promise<void> {
   const platform: Record<string, string> = JSON.parse(await read('scripts/ci/platform-contract.json'));
   assert.equal(createHash('sha256').update(await read('scripts/ci/platform-contract.predecessor.json')).digest('hex'), platform['scripts/ci/platform-contract.predecessor.json'], 'retained platform evidence bytes');
   const oldPlatform: Record<string, string> = JSON.parse(execFileSync('git', ['show', '73c771f254858db430d01d13c3cb433ef18b757d:scripts/ci/platform-contract.json'], { cwd: root, encoding: 'utf8' }));
-  for (const [key, value] of Object.entries(oldPlatform)) { if (!['runtime-macos', 'postgres-durability', '.github/workflows/node-26-compatibility.yml', 'scripts/ci/audit-node-engine-compatibility.mjs', 'scripts/ci/node-engine-compatibility.test.mjs', 'scripts/ci/node-runtime-compatibility.test.mjs'].includes(key)) { assert.equal(platform[key], value, 'unrelated platform contract preserved'); } }
+  for (const [key, value] of Object.entries(oldPlatform)) { if (!['runtime-macos', 'postgres-durability', '.github/workflows/node-26-compatibility.yml', 'scripts/ci/audit-node-engine-compatibility.mjs', 'scripts/ci/node-engine-compatibility.test.mjs', 'scripts/ci/node-runtime-compatibility.test.mjs', '.github/workflows/commit-author-identity.yml'].includes(key)) { assert.equal(platform[key], value, 'unrelated platform contract preserved'); } }
+  const identityPath = '.github/workflows/commit-author-identity.yml';
+  const predecessorIdentity = execFileSync('git', ['show', `73c771f254858db430d01d13c3cb433ef18b757d:${identityPath}`], { cwd: root, encoding: 'utf8' });
+  assertIdentityCallerSuccessor(predecessorIdentity, await read(identityPath), oldPlatform[identityPath]!, platform[identityPath]!);
   const runtime: unknown = parse(await read('.github/workflows/ci.yml'));
   // The Node migration changes bootstrap only; retain the original PostgreSQL
   // job contract after reversing those exact toolchain steps.

@@ -15,6 +15,7 @@ const packageRoot = fileURLToPath(new URL("../../", import.meta.url));
 const repositoryRoot = fileURLToPath(new URL("../../../../../", import.meta.url));
 const qualificationCommand = join(packageRoot, "scripts/run-postgres-qualification.mjs");
 const containedTurnTestRoot = join(packageRoot, "tests/features/contained-agent-turn");
+const interactiveStorePostgresTest = join(packageRoot, "tests/features/interactive-agent-session/postgres-store.test.ts");
 const qualificationDatabaseUrl =
   "postgresql://qualification-user:qualification-secret@db.internal:5432/qualification";
 const postgresTests = [
@@ -181,6 +182,7 @@ test("PostgreSQL qualification uses exact argv for every focused PostgreSQL test
   assert.deepEqual(invocationArguments, [
     "--test",
     "--test-concurrency=1",
+    interactiveStorePostgresTest,
     ...postgresTests,
   ]);
   assert.deepEqual(postgresTests.toSorted(), discoveredTests);

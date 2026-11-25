@@ -25,6 +25,27 @@ summary: Research-backed greenfield vision, library boundaries, execution guaran
 
 **Порядок авторитетности:** принятые ADR и закреплённые стандарты → действующие профили → принятый контракт конкретного среза → этот план и исследовательские рекомендации. При конфликте требуется явный successor соответствующего решения. Этот документ не меняет frozen contained-turn, не принимает динамические плагины и не передаёт native-custody другой команде. Будущий fleet, sessions и новые harness рассматриваются здесь заранее, но их реализация имеет собственные завершённые срезы.
 
+## Foundation-first: уточнение владельца от 2026-11-24
+
+[Общее видение экосистемы](https://github.com/agent-teams-ai/.github/blob/main/docs/architecture/ecosystem-vision.md) фиксирует порядок: целевая архитектура, согласованные shared libraries и module/plugin foundation, квалификация применимого фундамента, затем основная greenfield реализация. Runtime v3 проектируется как новый продукт; текущий Runtime не является целью массового рефакторинга. Поведенческие оракулы, совместимые библиотеки и native механизмы можно переиспользовать после проверки их контрактов.
+
+До зависимой реализации S1–S5 сверить существующие решения с модульной командой, текущим Get Modular, Extension Foundation и Live Module Updates; использовать их квалифицированные контракты, а не добавлять собственный DI, loader или lifecycle manager. Обычные reusable libraries не требуют plugin packaging. Существующие статические и frozen contained-turn границы не меняются этим уточнением. C0–C3 остаётся отдельным owning планом; будущее fleet-размещение учитывается в контрактах без преждевременной реализации всей инфраструктуры.
+
+### Предварительный пакет решений для v3
+
+Следующие вопросы — уточнения к F01–F18 и существующим owning cards, не новые параллельные state machines или новые принятые ADR.
+
+| Вопрос | Проверяемый результат перед зависимым кодом | Owner route |
+| --- | --- | --- |
+| S2 ownership | Feature-owned schemas/adapters/migrations и общий поставляемый bundle без циклов, leakage pg/Drizzle и второго владельца | [#245](https://github.com/agent-teams-ai/agent-runtime/issues/245), S2 |
+| Fully Local storage | Согласовать уже выбранный продуктом native PostgreSQL и Supervisor handoff; переносимые libraries остаются независимы от DB | [#246](https://github.com/agent-teams-ai/agent-runtime/issues/246), scoped successor |
+| Durable effects and recovery | Независимая от попытки identity, неизвестный outcome не разрешает повтор, receiver fencing, restore ниже уже совершённого эффекта | F03/F04/F12/F14, S2, native integration |
+| Fleet placement and budgets | Scope-aware routing, versioned placement, stable identity, scoped reservations and transfer; центральная реализация допустима до измеренной необходимости delegation | F05–F07/F15, C0–C3 |
+| Modular growth and compatibility | Отдельные compilation, assembly и execution scopes, актуальная qualified descriptor-union recipe, packed consumer и recovery horizon | F13/F18, Get Modular adoption |
+| External extension compatibility | Narrow headless capabilities и profile-specific replacement boundaries, без обязательного общего plugin host в S1–S5 | Get Modular/Extension Foundation/Live Module Updates owners |
+
+Выбор вариантов и дополнительные fixtures отражаются в соответствующем существующем плане или successor ADR. Сначала спроектировать и согласовать общую картину, затем квалифицировать foundation для нужного envelope. Не переписывать уже принятую историю, не считать исследования доказательством production-ready и не блокировать отдельную разрешённую qualification работу из-за ещё не выбранной будущей fleet-топологии.
+
 ## 1. Проверяемые преимущества
 
 «Лучше других» — цель развития, а не установленный результат исследования. Сравнивать нужно одинаковые гарантии, workload и deployment. Число пакетов, Rust, диаграммы и количество агентов сами по себе не доказывают качество.
@@ -60,6 +81,14 @@ summary: Research-backed greenfield vision, library boundaries, execution guaran
 Основание терминологии: [принятая модель](execution-generation-model.md) и [границы коммуникации](communication-boundaries.md). Bounded ordinary-профиль не превращается в многочасовой session runtime простым увеличением timeout. Для session continuity нужны отдельные binding, authority, compatibility и recovery contracts.
 
 Каждый capacity claim указывает, что именно посчитано: например, 10 000 dormant sessions, 10 000 принятых queued operations или 10 000 одновременно работающих изолированных процессов. У одного агента может не быть resident process; один квалифицированный runtime может обслуживать несколько последовательных операций. Совместное размещение tenant/session/credential generations допускается только выбранным квалифицированным профилем, а не ради красивой плотности.
+
+Для интеграции Agent Teams действует продуктовая
+[цель масштаба исполнения](https://github.com/agent-teams-ai/agent-teams-orchestrator/blob/main/docs/architecture/deployment-profiles.md#concurrent-execution-target).
+AR владеет доказательствами фактического технического исполнения, provider/resource
+admission, custody, cancellation и capacity. Эта ссылка не расширяет первый
+ограниченный v3-срез, не выбирает storage или hosting stack для всех consumers и
+не квалифицирует fleet по моделируемому трафику Orchestrator. Владельцем доставки
+capacity остаётся [план C0–C3](capacity-admission-delivery-plan.md).
 
 ## Ownership boundary
 
@@ -121,6 +150,8 @@ flowchart TD
 ## 4. Библиотеки как независимые компоненты
 
 **Библиотечная форма выбирается сразу, когда известна повторно используемая ответственность.** Не требуется сначала размножить реализацию в двух продуктах. Вместе с первым релизом нужны один реальный consumer, disposable external project и доказательство отсутствия скрытой зависимости от нашей организации.
+
+До готовности зависимого продукта foundation design, spikes и qualification проверяются реалистичными disposable consumers/fixtures с независимыми ожидаемыми результатами. Для claim о переиспользовании одного built artifact этот artifact проверяется в независимо собранных test Hosts заявленных environments. Если targets требуют разных сборок, квалифицируются общий контракт и каждый фактический artifact; это не доказывает взаимозаменяемость одного binary. Bounded single-Host profile проверяется в своём envelope. Это не заменяет требования первого релиза, stable/public SPI и последующего product adoption под их owning contracts.
 
 | Компонент | Самостоятельная польза | Что остаётся вне него | Решение |
 | --- | --- | --- | --- |
@@ -387,9 +418,9 @@ Baseline 250 ms polling при 10 000 быстрых running flights даёт н
 
 G1/G2 — результаты доставки, а не запрет работать над prerequisites следующего крупного этапа. По выбранному S2 publication graph сначала выпускаются dependency-complete S1/S2-B, затем требуемые owner packages, затем полный store и public consumers. Fresh S3 RS/PA surfaces и необходимый bounded S5 public-export cleanup входят в согласованный train до store publication. Execution-only placeholder не выдаётся за полный store; ранние S1/S2-B releases не ждут весь S3/S5, Host/native activation или fleet.
 
-Параллельно можно вести pure S1/S2, native delivery, evidence/contract review и конкретные adapters, если их входы зафиксированы. Зависимый activation ждёт реального upstream artifact и qualification; независимая library работа не ждёт весь fleet. На каждом этапе есть полезный внешний consumer, а не только scaffolding.
+В рамках явно порученной реализации можно параллельно вести pure S1/S2, native delivery, evidence/contract review и конкретные adapters, если их входы зафиксированы. Зависимый activation ждёт реального upstream artifact и qualification; независимая library работа не ждёт весь fleet. Каждый этап подтверждает полезное поведение конкретного consumer seam; ранняя foundation qualification использует описанные выше реалистичные fixtures, не требует готового зависимого продукта и не заменяет его release/adoption gates.
 
-**Сразу реализовать:** narrow semantic ports, single owners, real public library boundaries, exact identities/version separation, local bounds, truthful uncertainty/custody, tests и migration envelope выбранного первого профиля.
+**В рамках порученной реализации сразу обеспечить:** narrow semantic ports, single owners, real public library boundaries, exact identities/version separation, local bounds, truthful uncertainty/custody, tests и migration envelope выбранного первого профиля.
 
 **Сразу спроектировать, материализовать в соответствующем срезе:** remote receiver authorization/fencing, session continuity/approval binding, queue/account scopes, shared budgets, artifact/cursor/retention contracts, fleet HA и hostile tenancy. Их владельцы и критерии уже названы; API не заполняется неработающими optional methods.
 
@@ -416,4 +447,4 @@ G1/G2 — результаты доставки, а не запрет работ
 
 Технические defaults, сравнённые варианты и действительно зависящие от владельца вопросы вынесены в [решения и review](agent-runtime-foundation-decisions-and-review.md). Оценки надёжности/уверенности/сложности — инженерные суждения в одинаковом scope; LOC — диапазоны собственного incremental production/integration кода и tests, без third-party/generated bytes. Они не заменяют implementation inventory или benchmark.
 
-Два самостоятельных содержательных пересмотра выполнены до шести независимых критиков. Девять material уточнений приняты; три дополнительных независимых delta-review на `b7f9705c1290210fc50088146acc9479b10d7f6c` подтвердили закрытие исходных контрпримеров без новых существенных findings в проверенном scope. Docs gates проходят, remote draft HEAD проверен; full local/hosted CI имеет конкретные ограничения, сохранённые в linked review record. Реальные runtime/provider/fleet результаты от этой documentation delivery не заявляются.
+Два самостоятельных содержательных пересмотра выполнены до шести независимых критиков. Девять material уточнений приняты; три дополнительных независимых delta-review на `b7f9705c1290210fc50088146acc9479b10d7f6c` подтвердили закрытие исходных контрпримеров без новых существенных findings в проверенном scope. Это историческая запись первоначального draft: результаты docs gates и ограничения того local/hosted CI сохранены в linked review record и не являются текущим статусом `main`. Реальные runtime/provider/fleet результаты от этой documentation delivery не заявляются.

@@ -76,13 +76,13 @@ summary: Review handoff, vision, source-of-truth crosswalk, findings and qualifi
 
 **Ожидаемый результат каждой критики:** severity (blocker/major/minor), точный source path + SHA + строки, минимальный воспроизводимый counterexample или contradiction, affected owner/ADR, конкретное исправление, проверка его эффекта и цена предлагаемой альтернативы. Отдельно перечислить отвергнутые улучшения и причины. Не объявлять «zero findings» без явного полного file coverage.
 
-## 5. Независимая критика — фактический статус
+## 5. Исторический статус критики, 1–2 ноября 2026
 
 - Предыдущие six xhigh reviews и delta reviews относились к исходным документам #235/#243, **не к November addendum**. Их результаты сохранены в foundation review; они не переносимы как автоматический approve.
-- Для PR [#244](https://github.com/agent-teams-ai/agent-runtime/pull/244) актуальный reviewer — **review-router-ai[bot]**. Workflow `reviewrouter-codex.yml` — старый автоматический маршрут *того же ReviewRouter* через Codex OAuth; его бот сообщил incomplete 0/3, затем 0/4 files reviewed. Повторный run [#41333747773 attempt 2](https://github.com/agent-teams-ai/agent-runtime/actions/runs/41333747773) завершился на `codex_oauth_control_plane_error:503:codex_rotating_oauth_unavailable`, **не по содержанию PR**. Новый `reviewrouter-review.yml` принимает `workflow_dispatch` с настоящим `review_request_id`, PR и exact SHA от ReviewRouter; придумывать ID или считать старую попытку новым review нельзя.
-- В этой сессии отдельные subagent/model reviews не доступны. Выполнены **внутренние**, а не независимые, проходы по пяти направлениям из §4. Нельзя писать «эксперты подтвердили» или «максимальный effort выполнен» без фактического model/run evidence.
+- В исходной работе PR [#244](https://github.com/agent-teams-ai/agent-runtime/pull/244) reviewer — **review-router-ai[bot]**. Workflow `reviewrouter-codex.yml` был автоматическим маршрутом *того же ReviewRouter* через Codex OAuth; его бот сообщил incomplete 0/3, затем 0/4 files reviewed. Повторный run [#41333747773 attempt 2](https://github.com/agent-teams-ai/agent-runtime/actions/runs/41333747773) завершился на `codex_oauth_control_plane_error:503:codex_rotating_oauth_unavailable`, **не по содержанию PR**. Request-driven `reviewrouter-review.yml` принимает `workflow_dispatch` с настоящим `review_request_id`, PR и exact SHA от ReviewRouter; придумывать ID или считать старую попытку новым review нельзя. Эти наблюдения не являются текущим одобрением.
+- В исходной сессии отдельные subagent/model reviews были недоступны. Тогда выполнены **внутренние**, а не независимые, проходы по пяти направлениям из §4. Нельзя писать «эксперты подтвердили» или «максимальный effort выполнен» без фактического model/run evidence. Актуальная доставка учитывается отдельно в §11.
 - Для HEAD `58d4baa1bdc903393e5c242f5494c4f64d5d5fb8` CI [#41333747127](https://github.com/agent-teams-ai/agent-runtime/actions/runs/41333747127) прошёл **success на attempt 2**: первоначальный macOS failure был вызван Corepack timeout при загрузке pnpm из npm. Docs/Node compatibility были green; owner identity и отдельный ReviewRouter OAuth workflow остались failed. Эта правка создаёт новый HEAD: прежние CI не подменяют проверок новых bytes.
-- GitHub connector пишет raw author/committer **Илия <iliyazelenkog@gmail.com>**, но актуальная [политика](https://github.com/agent-teams-ai/.github/blob/main/governance/commit-author-identity.json) требует exact **iliya <iliyazelenkog@gmail.com>** для Git author и committer; **777genius — GitHub login**, не требуемое raw Git-имя. `name_aliases: ["Илия"]` не удовлетворяет pinned exact-name guard для owner source commits. Нельзя обходить gate; необходим аутентифицированный Git write route с явным author и committer. GitHub connector не даёт author override.
+- Исторический pinned verifier отказал source commits с raw author/committer **Илия <iliyazelenkog@gmail.com>**: наличие `name_aliases` в политике само по себе не обновляло его exact-name implementation. Этот отказ сохранён как факт прежней проверки. Он не доказывает, что сегодня нужно переписать Git history: текущая canonical policy и actual выполнение alias-aware verifier проверяются раздельно, см. §11. **777genius — GitHub login**, не raw Git-имя.
 
 ## 6. Self-review: замечания, решение, статус
 
@@ -103,7 +103,7 @@ summary: Review handoff, vision, source-of-truth crosswalk, findings and qualifi
 | E-13 | Исследование Agent Runtime ошибочно считало выбор SQLite vs PG открытым, не проверив Orchestrator ADR-0114/0115 (accepted 22.10.2026) | **Product choice already accepted: native PostgreSQL for local and hosted.** Open только scoped AR foundation/adoption reconciliation и Local Supervisor→AR runtime handoff; не менять immutable AR source и не объявлять native package квалифицированным |
 | E-14 | В ревью-контексте не была явно указана связка TS 7.0.2/.ts-only и запрет случайных feature flags | **Accepted/fixed:** добавлено в vision; следовать фактическому pinned toolchain/adoption и scope, никаких побочных upgrades |
 | E-15 | Library-first можно ошибочно прочесть как право выделить пакет с одним потребителем без readiness/экстракционного основания | **Accepted/fixed:** отделить стратегию early library design от FMS extraction gate; целевой FMS v1.1 требует READY и конкретный hard boundary/reuse/public provider/dependency lifecycle; применить принятую версию или scoped successor |
-| E-16 | GitHub login `777genius` неверно приняли за canonical raw author name | **Fixed in handoff:** exact author/committer `iliya <iliyazelenkog@gmail.com>`; исправление самих Git commits всё ещё blocked |
+| E-16 | GitHub login `777genius` неверно приняли за canonical raw author name | **Factual correction, 2026-11-26:** текущая policy допускает точные `iliya` и `Илия` с canonical email. Десять исходных source commits соответствуют ей; прежний verifier failure не переписывается как PASS. Проверить actual current verifier на новом HEAD, без ненужного rewrite history |
 | E-17 | Красный macOS CI выглядел дефектом Runtime | **Verified external outage:** Corepack npm connect timeout; workflow #41333747127 attempt 2 прошёл без изменения кода |
 | E-18 | Старый автоматический Codex OAuth route приняли за отдельный устаревший reviewer | **Fixed in handoff:** актуальный `review-router-ai[bot]`; новый workflow_dispatch требует действительный upstream request ID; независимое ревью не завершено |
 | E-19 | FMS v1 требует, чтобы feature-specific repositories/schemas/migrations принадлежали owning feature; S2 размещает AE/RS/PA SQL и миграции в отдельном `runtime-store-postgres` package | **Material, open for owner/architectural review:** сохранить выбранную S2 поставку только если явно доказано feature ownership через owned schema contributions/adapter mapping; иначе scoped FMS deviation/successor с rationale и tested boundaries. Не переносить бизнес-решения в store и не дробить пакеты без доказанной пользы |
@@ -112,9 +112,9 @@ summary: Review handoff, vision, source-of-truth crosswalk, findings and qualifi
 
 ## 7. Следующие реальные блокирующие действия
 
-1. Исправить commit identity в PR #244 через аутентифицированный Git с canonical author/committer (не подменять пользователей и не ослаблять policy).
+1. Сверить полный source commit list PR #244 с текущей canonical policy и выполнить действующий verifier на новом HEAD. Сохранять уже допустимые owner identities; не переписывать history и не ослаблять policy ради устаревшего отказа.
 2. Проверить точный новый HEAD: docs protocol, проверку ссылок, source/architecture gates, необходимые CI. Не повторять провайдера или effectful E2E по причине одного отсутствующего review signal.
-3. Запустить независимые ревью по §4 в среде, где реально доступны отдельные умные модели/агенты; зафиксировать модели/effort, ревизии, file coverage, findings и ответы по каждому. На текущем доступном toolset их запуск не подтверждён.
+3. Выполнить независимый review точной новой дельты по направлениям §4; зафиксировать фактических исполнителей, ревизии, file coverage, findings и ответы. Не подменять его прежними self-review или incomplete ReviewRouter. Текущий checkpoint — §11.
 4. Исправить принятые source-backed findings, затем выполнить delta review и полный финальный coverage review. Держать PR draft пока нет обязательного CI и reviewed source head.
 5. Не менять accepted ADR bytes, не мержить PR #239/#242 вместе с этой документационной задачей и не активировать providers/native/fleet только потому, что research записан.
 
@@ -141,7 +141,7 @@ summary: Review handoff, vision, source-of-truth crosswalk, findings and qualifi
 
 ## 9. Итоговые границы текущего review
 
-Только документация и архитектурное исследование. Изменения provider/native/SQL/SDK/Wasm не активируются. Независимый review через новый request-driven workflow не подтверждён; старый OAuth rerun не считается заключением. Авторство исправляется **Git commit graph** с canonical `iliya` и required checks, а не смягчением политики. Scope S1–S5 не расширен.
+Только документация и архитектурное исследование. Изменения provider/native/SQL/SDK/Wasm не активируются. Независимое агентное review и результат внешнего request-driven workflow учитываются отдельно; старый OAuth rerun не считается заключением. Source identity сверяется с текущей canonical policy и actual verifier, а не исправляется обязательным rewrite уже допустимой истории. Scope S1–S5 не расширен.
 ## 10. E-19: FMS ownership vs S2 PostgreSQL packaging
 
 **Источник обязательства:** принятый [FMS v1, Adapters](https://github.com/agent-teams-ai/.github/blob/main/docs/architecture/feature-module-standard/v1.md#adapters) прямо требует, чтобы feature-specific mappings, repositories, schemas, tables, indexes и migrations **оставались у owning feature**. Migration assembly может только упорядочивать owner-owned contributions, не менять содержимое. [FMS v1.1](https://github.com/agent-teams-ai/.github/blob/main/docs/architecture/feature-module-standard/v1.1.md#adapters) сохраняет эту норму. При этом scoped [S2](../../docs/architecture/agent-runtime-architecture-program-s2-operations-storage.md#package-graph-and-public-surfaces) предполагает один platform package `runtime-store-postgres` с `adapters/outbound/{operations,security,provider-access}` и `migrations/{execution,security,provider-access}`.
@@ -157,3 +157,35 @@ summary: Review handoff, vision, source-of-truth crosswalk, findings and qualifi
 **Предварительная рекомендация:** предпочесть №1, если он реализуем с выбранной dependency closure без новых циклов и без второго миграционного runner. №2 — только при явном одобрении архитектурной девиации. №3 — после подтверждённого independent consumer/release need. Во всех случаях сохранить S2 atomic claim/CAS/unknown commit и Provider Access existing shared `pa-m1` migration ownership. Этот research PR **не выбирает новый layout** и не меняет принятый S2 package graph.
 
 **Проверки для выбранного решения:** owner-specific migration source mapping, packed tarball with immutable migrations, a cross-context import violation fixture, migration hash/lock/concurrency cases, change of PA schema without modifying AE-owned content, no raw pool leaking into Host. До принятия successor пометить E-19 как unresolved material finding.
+
+## 11. Возобновление документационной доставки, 26 ноября 2026
+
+Владелец поручил завершить существующий аудит документации end to end.
+Исходный HEAD этого исследования — `d2bd6098f38d561a692337bad5e9aa5d8755683f`;
+обновлённый main после публикации research navigation через [#248](https://github.com/agent-teams-ai/agent-runtime/pull/248) —
+`d75e4f85b4848e086f35e5e1fe5f5135c54a18c5`. Его Foundation-first,
+execution-scale и shared-research маршруты сохраняются. Исходные даты,
+research pins и результаты §5 остаются историческими наблюдениями.
+
+Readback [canonical identity policy](https://github.com/agent-teams-ai/.github/blob/6a33853123378ef8ea69868da8ecb550cd53c906/governance/commit-author-identity.json)
+допускает ровно `iliya` или `Илия` и `iliyazelenkog@gmail.com` для owner source
+author/committer. Все десять исходных commits PR соответствуют этим байтам.
+Текущий Runtime caller закреплён на [alias-aware verifier `77a0f46c`](https://github.com/agent-teams-ai/.github/blob/77a0f46cbfc7688cbabbe12ee819e50ba6f64234/.github/workflows/commit-author-identity-check.yml):
+он проверяет author/committer по `identity.name` и `identity.name_aliases`.
+Это проверка metadata/policy и source implementation, **не** результат
+execution текущего verifier на обновлённом PR HEAD.
+Старые failed identity/macOS jobs и incomplete reviews не становятся успешными.
+
+Короткий план этой актуализации прошёл self-review и отдельное независимое
+review до правок. Final source review, проверяемый HEAD, findings и фактические
+hosted docs/identity/full-CI results фиксируются в [существующем PR #244](https://github.com/agent-teams-ai/agent-runtime/pull/244).
+Публикация этого checkpoint сама по себе не утверждает их завершение и не
+требует нового hosted AI inference gate. После обычного merge отдельно
+проверяются реальные main tree, attribution и postmerge CI.
+
+E-19 и [#245](https://github.com/agent-teams-ai/agent-runtime/issues/245) остаются
+открытым решением перед зависимой реализацией S2-C/D; SQL ownership/layout не
+выбран. [#246](https://github.com/agent-teams-ai/agent-runtime/issues/246) сохраняет
+уже выбранный native PostgreSQL и отдельный Runtime adoption/handoff debt.
+Оба research-документа остаются `proposed`. Их публикация не принимает новый
+контракт и не запускает реализацию соседних provider/native/capacity работ.

@@ -37,7 +37,7 @@ The [embeddability and provider SPI review](../../research/architecture-critique
 records concrete package-install, public implementer, adapter bridge and SDK
 semantics risks against the merged greenfield baseline.
 The [review handoff and coverage ledger](../../research/architecture-critique-2026-11/v3-embeddability-review-ledger.md)
-records the existing authority references, unresolved independent review and
+records the existing authority references, dated review evidence and open
 scoped dispositions without creating another program. It is proposed research,
 not an additional S1–S5 delivery, accepted contract or new CI gate.
 
