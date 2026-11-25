@@ -191,7 +191,15 @@ test("pending journal closure retains its deadline while a later call can read d
   await new Promise<void>(resolve => {setImmediate(resolve);});
   assert.equal(writes, 1);
   release.resolve();
-  assert.equal(await otherWaiter, undefined);
+  // A second waiter may still be live when the shared journal append settles.
+  // It may return no token or the genuine durable token; neither can bypass
+  // the first expired call's deadline or start a duplicate journal mutation.
+  const sharedOutcome = await otherWaiter;
+  if (sharedOutcome !== undefined) {
+    const proof = f.lifecycle.removalObservation.readNoCreationObservation(sharedOutcome);
+    assert.ok(proof, "only an authenticated durable closure may resolve a live waiter");
+    assert.deepEqual(proof.attemptKey, f.subject.attempt);
+  }
   await new Promise<void>(resolve => {setImmediate(resolve);});
   assert.ok(await observe(f), "a fresh bounded call can read the late durable closure without another write");
   assert.equal(writes, 1);
