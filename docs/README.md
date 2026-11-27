@@ -23,7 +23,7 @@ affected architecture; the task map does not waive required reading or gates.
 | Plan greenfield interactive sessions | [Ordinary user-session Codex](decisions/0090-ordinary-user-session-codex-execution-profile.md), [interactive session slice](decisions/0091-interactive-agent-session-synthetic-vertical-slice.md), [first-slice qualification](spikes/interactive-session-c-first-slice-qualification.md) |
 | Check whether a target is qualified | [Readiness](architecture/readiness.md), [exact target registry](architecture/qualification-registry.json), [traceability](architecture/evidence-traceability.md) |
 | Change feature boundaries or composition | [Feature Module Standard](architecture/feature-module-standard-v1-candidate.md#new-production-features), [Get Modular adoption](architecture/get-modular-adoption.md), [Foundation adoption](architecture/foundation-adoption.md) |
-| Review provider, platform, storage or recovery evidence | Use the relevant campaign in the canonical reading order and the [spikes collection](spikes/); reconcile historical evidence with current readiness |
+| Review provider, platform, storage or recovery evidence | Use the relevant campaign in the [canonical reading order](#canonical-reading-order); reconcile historical evidence with current readiness |
 | Research a future architecture | [Shared research integration plan](spikes/shared-research-integration-plan.md), [greenfield foundation research](#greenfield-foundation-research); proposals and experiments are not production authority |
 | Change documentation | [Deterministic documentation governance](decisions/0007-deterministic-documentation-governance.md) |
 
