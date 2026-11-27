@@ -10,6 +10,25 @@ summary: Canonical reading order for Agent Runtime architecture and evidence.
 
 - [Shared Research Integration Plan](spikes/shared-research-integration-plan.md)
 
+## Choose a task
+
+Use these routes to locate the owning authority or the exact evidence first.
+The canonical reading order and status vocabulary below still govern the
+affected architecture; the task map does not waive required reading or gates.
+
+| Task | Start here |
+| --- | --- |
+| Establish runtime scope and authority | [Runtime profile and activation](decisions/0001-runtime-profile-and-activation-boundaries.md), then the canonical reading order |
+| Change contained-turn execution or private access | [Contained Agent Turn V1](decisions/0010-contained-agent-turn-v1-operation-authority.md), [private access and shutdown](decisions/0009-contained-turn-private-access-and-host-shutdown-boundary.md), [executable oracle](../experiments/runtime-profile-behavior/spec/runtime-operation-oracle/README.md) |
+| Plan greenfield interactive sessions | [Ordinary user-session Codex](decisions/0090-ordinary-user-session-codex-execution-profile.md), [interactive session slice](decisions/0091-interactive-agent-session-synthetic-vertical-slice.md), [first-slice qualification](spikes/interactive-session-c-first-slice-qualification.md) |
+| Check whether a target is qualified | [Readiness](architecture/readiness.md), [exact target registry](architecture/qualification-registry.json), [traceability](architecture/evidence-traceability.md) |
+| Change feature boundaries or composition | [Feature Module Standard](architecture/feature-module-standard-v1-candidate.md#new-production-features), [Get Modular adoption](architecture/get-modular-adoption.md), [Foundation adoption](architecture/foundation-adoption.md) |
+| Review provider, platform, storage or recovery evidence | Use the relevant campaign in the canonical reading order and the [spikes collection](spikes/); reconcile historical evidence with current readiness |
+| Research a future architecture | [Shared research integration plan](spikes/shared-research-integration-plan.md), [greenfield foundation research](#greenfield-foundation-research); proposals and experiments are not production authority |
+| Change documentation | [Deterministic documentation governance](decisions/0007-deterministic-documentation-governance.md) |
+
+## Canonical reading order
+
 Read documents in this order:
 
 1. `decisions/0001-runtime-profile-and-activation-boundaries.md` - canonical
