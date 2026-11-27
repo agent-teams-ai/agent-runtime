@@ -269,6 +269,40 @@ queued intents retain identity. Preserve compatible durable rows and receipts,
 or require an explicit migration/recovery path. A feature flag cannot bypass
 fencing or make an old binary safe to consume a new state shape.
 
+## Fleet acceptance refinement, 2026-11-27
+
+The [consolidated research](https://github.com/agent-teams-ai/engineering-research/blob/e2a5f6c47e008f93094dc88ed39ea9618722f28d/docs/lessons/preimplementation-decisions.md)
+routes these details into C0-C3's existing admission and recovery acceptance.
+C0 records one row per applicable quota: authoritative owner, unit and scope,
+transaction or finite share, policy revision, charged resource, and the exact
+release receipt. Include unresolved effects and compact terminal guards in the
+accounting and retention inventory. Preserve the first selected pool and no
+automatic movement; separately selected independent pools must prove that two
+partitions cannot spend the last shared allowance. Commercial reservations
+remain with Consumption Governance.
+
+For cancel, renew and reclaim, name actual reserved capacity at ingress,
+dispatcher, PostgreSQL connections/transactions, disk/journal, transport/RPC
+and the provider enforcement boundary. Record count, byte and deadline bounds,
+the saturation outcome, and the witness that control still progresses when
+ordinary work exhausts its allocation. Reuse the existing control and fairness
+scenarios; a separate queue alone does not establish downstream capacity.
+
+For the selected provider profile, link each protected mutation to its actual
+receiver fence and physical disposition receipt. Extend existing
+[generation conformance](execution-generation-model.md#concurrency-and-crash-tests)
+only where coverage is missing: lost acknowledgement after dispatch, restore
+with an old receipt, a late old-owner release after successor admission, and
+lease expiry while the original process remains alive. Reconcile the original
+operation identity before retry or quota reuse; retain unresolved obligations.
+A provider offering only leases cannot claim receiver-enforced side-effect
+safety without the separately qualified enforcement boundary.
+
+Reuse existing owner fixtures and exact capability evidence. These refinements
+do not add a port, allocator, package, production capacity claim or independent
+S1-S5 prerequisite. C0's scope inventory remains the basis for implementation
+sizing; C1-C3 and ordinary runtime work are counted once.
+
 ## Sources and limits
 
 OpenClaw source review at `ed5937fbd9819634bf9a315daa5996c86a5c712f` found an
